@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  web:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: intellicampus-web
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    networks:
+      - campus-network
+
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: intellicampus-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_NAME=intellicampus_db
+      - DB_USER=campus_admin
+      - DB_PASSWORD=SecureCampusPassword2026!
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - AI_SERVICE_URL=http://ai:8000
+      - JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      ai:
+        condition: service_started
+    networks:
+      - campus-network
+
+  ai:
+    build:
+      context: ./ai-service
+      dockerfile: Dockerfile
+    container_name: intellicampus-ai
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    networks:
+      - campus-network
+
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: intellicampus-db
+    restart: unless-stopped
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: intellicampus_db
+      POSTGRES_USER: campus_admin
+      POSTGRES_PASSWORD: SecureCampusPassword2026!
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campus_admin -d intellicampus_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - campus-network
+
+  redis:
+    image: redis:7-alpine
+    container_name: intellicampus-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - campus-network
+
+networks:
+  campus-network:
+    driver: bridge
+
+volumes:
+  pgdata:
+    driver: local
