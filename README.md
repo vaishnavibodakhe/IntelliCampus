@@ -26,6 +26,7 @@ The system is built as a robust **Spring Boot 3 (Java 21) modular monolith** com
 - [Key Motivations & Problem Statement](#-key-motivations--problem-statement)
 - [System Architecture & Data Flow](#-system-architecture--data-flow)
 - [Role-Based Access & Actor Matrix](#-role-based-access--actor-matrix)
+- [Team Task Division (4 Collaborators)](docs/TEAM_TASK_DIVISION.md)
 - [Core Functional Innovations](#-core-functional-innovations)
   - [1. Dual-Factor AI Attendance Validation Pipeline](#1-dual-factor-ai-attendance-validation-pipeline)
   - [2. Hash-Chained Tamper-Evident Marks & Audit Trail](#2-hash-chained-tamper-evident-marks--audit-trail)
@@ -330,7 +331,8 @@ IntelliCampus/
 │   ├── ARCHITECTURE.md         # Full technical architecture and system design
 │   ├── WORKFLOWS.md            # Role-wise flowcharts & state machines
 │   ├── API_SPECIFICATION.md    # REST API endpoints, schemas, and curl examples
-│   └── DATABASE_DESIGN.md      # Data dictionary, ER diagram, and pgvector schema
+│   ├── DATABASE_DESIGN.md      # Data dictionary, ER diagram, and pgvector schema
+│   └── TEAM_TASK_DIVISION.md   # 4-Collaborator role ownership & sprint milestones
 ├── docker-compose.yml          # Production multi-service orchestration
 ├── .gitignore                  # Git tracking exclusion rules
 ├── LICENSE                     # MIT License
