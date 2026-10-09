@@ -14,7 +14,7 @@ This document defines the official engineering division of work across **4 team 
 +-------------------+----------------------------+-------------------------------------+-----------------------------+
 | Collaborator 1    | Admin & System Lead        | Auth, RBAC, Academic Setup, Audit   | Spring Security, JWT, DB    |
 | Collaborator 2    | Faculty & Vision Lead      | Attendance Capture, Marks, Overrides| InsightFace, Anti-Spoof, CV |
-| Collaborator 3    | Student & AI Chatbot Lead  | Attendance Confirm, Dynamic QR, RAG | Spring AI, pgvector, STOMP  |
+| Collaborator 3    | Student & AI Chatbot Lead  | Attendance Confirm, Dynamic QR, RAG | Spring AI, MySQL & Vector, STOMP |
 | Collaborator 4    | Mentor, HOD & Analytics    | Early Warning ML, Leave, Governance | Scikit-Learn, Random Forest |
 +-------------------+----------------------------+-------------------------------------+-----------------------------+
 ```
@@ -89,7 +89,7 @@ This document defines the official engineering division of work across **4 team 
 - **FastAPI Microservice (`ai-service/app/api/analyze.py`)**:
   - Integration with **InsightFace Buffalo_l (ArcFace)** for multi-face detection and 512-dim embedding extraction.
   - Multi-scale CNN anti-spoofing detector (scores liveness; $< 0.60$ flagged as review).
-  - Division-scoped cosine vector search using PostgreSQL `pgvector`.
+  - Division-scoped cosine vector matching for enrolled students.
   - Ephemeral memory handling: guarantees raw classroom images are discarded immediately after inference.
 
 ### 3. Database Tables Owned
@@ -123,7 +123,7 @@ This document defines the official engineering division of work across **4 team 
   - Subject-wise attendance aggregation and defaulter flag identification ($< 75\%$).
   - Attendance dispute logging (`POST /api/attendance/{recordId}/dispute`).
 - **`com.intellicampus.chatbot` (RAG Engine)**:
-  - Institutional PDF ingestion & chunking (500 tokens, 50 token overlap) with `pgvector` indexing.
+  - Institutional PDF ingestion & chunking (500 tokens, 50 token overlap) with vector passage indexing.
   - Query embedding & cosine similarity retrieval (top 5 passages).
   - Spring AI / LLM orchestration ($T=0$, strict citations of document name + page, polite refusal on low confidence).
   - Multilingual support for English, Hindi, and Marathi (`POST /api/chat/ask`).
@@ -151,7 +151,7 @@ This document defines the official engineering division of work across **4 team 
 ### 5. Key Milestones
 - **Weeks 5–8**: Student portal dashboard, device fingerprinting, subject-wise attendance stats.
 - **Weeks 8–13**: WebSocket STOMP listener, 120s countdown modal, html5-qrcode camera scanner.
-- **Weeks 14–19**: Spring AI RAG pipeline, pgvector chunking, multilingual query handling.
+- **Weeks 14–19**: Spring AI RAG pipeline, vector chunking, multilingual query handling.
 
 ---
 

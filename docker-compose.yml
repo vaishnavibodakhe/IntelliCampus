@@ -24,7 +24,7 @@ services:
       - "8080:8080"
     environment:
       - DB_HOST=db
-      - DB_PORT=5432
+      - DB_PORT=3306
       - DB_NAME=intellicampus_db
       - DB_USER=campus_admin
       - DB_PASSWORD=SecureCampusPassword2026!
@@ -54,19 +54,20 @@ services:
       - campus-network
 
   db:
-    image: pgvector/pgvector:pg16
+    image: mysql:8.0
     container_name: intellicampus-db
     restart: unless-stopped
     ports:
-      - "5432:5432"
+      - "3306:3306"
     environment:
-      POSTGRES_DB: intellicampus_db
-      POSTGRES_USER: campus_admin
-      POSTGRES_PASSWORD: SecureCampusPassword2026!
+      MYSQL_ROOT_PASSWORD: RootSecurePassword2026!
+      MYSQL_DATABASE: intellicampus_db
+      MYSQL_USER: campus_admin
+      MYSQL_PASSWORD: SecureCampusPassword2026!
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U campus_admin -d intellicampus_db"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "campus_admin", "-pSecureCampusPassword2026!"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -87,5 +88,5 @@ networks:
     driver: bridge
 
 volumes:
-  pgdata:
+  mysql_data:
     driver: local

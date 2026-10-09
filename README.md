@@ -5,7 +5,7 @@
 [![Python 3.11](https://img.shields.io/badge/AI%20Engine-Python%203.11-blue.svg?logo=python)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/AI%20API-FastAPI-009688.svg?logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React 18](https://img.shields.io/badge/Frontend-React%2018-61DAFB.svg?logo=react)](https://react.dev/)
-[![PostgreSQL 16](https://img.shields.io/badge/Database-PostgreSQL%2016%20%2B%20pgvector-336791.svg?logo=postgresql)](https://github.com/pgvector/pgvector)
+[![MySQL 8](https://img.shields.io/badge/Database-MySQL%208.0%2B-4479A1.svg?logo=mysql)](https://www.mysql.com/)
 [![Redis 7](https://img.shields.io/badge/Cache-Redis%207-DC382D.svg?logo=redis)](https://redis.io/)
 [![Docker Compose](https://img.shields.io/badge/Deployment-Docker%20Compose-2496ED.svg?logo=docker)](https://www.docker.com/)
 [![DPDP Act 2023](https://img.shields.io/badge/Compliance-DPDP%20Act%202023-purple.svg)](#-privacy-ethics--dpdp-compliance)
@@ -17,7 +17,7 @@
 
 **IntelliCampus** is a secure, intelligent, and tamper-evident campus administration platform designed to modernize higher education institutional operations. While traditional college enterprise portals operate merely as passive relational record repositories, **IntelliCampus** closes critical operational gaps across **fraud-resistant attendance**, **tamper-evident academic grading**, **document-grounded AI support**, **predictive early-warning student interventions**, and **cryptographically verifiable credentials**.
 
-The system is built as a robust **Spring Boot 3 (Java 21) modular monolith** combined with a high-performance **Python 3.11 (FastAPI) AI microservice**, backed by **PostgreSQL 16 with pgvector**, **Redis 7**, and a responsive **React 18** client.
+The system is built as a robust **Spring Boot 3 (Java 21) modular monolith** combined with a high-performance **Python 3.11 (FastAPI) AI microservice**, backed by **MySQL 8.0 / 8.4**, **Redis 7**, and a responsive **React 18** client.
 
 ---
 
@@ -59,7 +59,7 @@ Conventional college administration workflows suffer from structural vulnerabili
 | **Attendance Fraud & Proxies** | Roll-calls waste 10–15 mins/lecture; static QR codes and proxy buddies undermine academic integrity. | **Dual-Factor Attendance**: One-shot classroom photo analyzed by InsightFace + anti-spoofing; student confirms within 2 mins via device binding & classroom geofence. Dynamic rotating QR fallback (15s HMAC). |
 | **Silent Mark Manipulations** | Internal marks altered in spreadsheets or relational databases with zero immutable history. | **Cryptographic Hash Chain**: Every grade change creates an insert-only SHA-256 block linking to the previous entry, with mandatory audit reason. |
 | **Scattered Communications** | Important circulars posted randomly across physical boards, WhatsApp groups, and unstructured portals. | **Targeted Notices & Tracking**: Segmented notifications by department, year, and division with read-receipt audit and automated deadline alerts. |
-| **Office Queues for Routine Queries** | Administrative staff repeatedly field identical routine queries about syllabus, exam fees, and deadlines. | **Document-Grounded RAG Chatbot**: Spring AI + pgvector RAG system that answers strictly from verified PDFs with exact citations (English, Hindi, Marathi). |
+| **Office Queues for Routine Queries** | Administrative staff repeatedly field identical routine queries about syllabus, exam fees, and deadlines. | **Document-Grounded RAG Chatbot**: Spring AI RAG system that answers strictly from verified PDFs with exact citations (English, Hindi, Marathi). |
 | **Reactive Dropout Interventions** | Struggling students are noticed only when semester failure lists or detention notices appear. | **Weekly Early Warning System (EWS)**: Machine learning model (Random Forest / Logistic Regression) evaluates 6 indicators weekly, alerting mentors to top risk drivers. |
 | **Certificate / Receipt Forgery** | Hard-copy fee receipts and paper bonafides are vulnerable to tampering and time-consuming manual validation. | **Public Verification**: PDF documents issued with cryptographically signed QR codes and hashes; instantly verifiable online without authentication. |
 | **Unlinked Paper Leave Requests** | Physical leave slips lost in transit, resulting in unfair student attendance shortages. | **Integrated Multi-Step Leave Workflow**: Multi-tier approvals (Mentor &rarr; HOD) automatically recompute session denominators in attendance calculations. |
@@ -90,14 +90,14 @@ IntelliCampus uses a **modular monolith** backend paired with a dedicated **Pyth
 |  +--------------+  +--------------+  +---------------+  +--------------+  +---------------------+  |
 +-------------------+-------------------------+---------------------------------+--------------------+
                     |                         |                                 |
-           JDBC / pgvector             Redis Protocol                   Internal REST API
+           JDBC over TLS               Redis Protocol                   Internal REST API
                     |                         |                                 |
                     v                         v                                 v
         +-----------------------+   +-------------------+          +-------------------------+
-        |   PostgreSQL 16 DB    |   |      Redis 7      |          | Python 3.11 AI Service  |
+        |     MySQL 8.0 DB      |   |      Redis 7      |          | Python 3.11 AI Service  |
         |  - Relational Schema  |   | - Dynamic QR HMAC |          | - InsightFace (512-dim) |
-        |  - pgvector (Faces)   |   | - Rate Limiters   |          | - Anti-Spoofing Scorer  |
-        |  - pgvector (RAG)     |   | - Session Caching |          | - Scikit-Learn EWS      |
+        |  - JSON Biometrics    |   | - Rate Limiters   |          | - Anti-Spoofing Scorer  |
+        |  - JSON Document RAG  |   | - Session Caching |          | - Scikit-Learn EWS      |
         |  - Immutable Audit    |   +-------------------+          +-------------------------+
         +-----------------------+
 ```
@@ -149,7 +149,7 @@ To completely eliminate proxy attendance while finishing class marking in **unde
   +---> [4. Perceptual Hash (pHash)] : 64-bit DCT pHash Hamming distance > 8 (blocks cropped/resized photos).
   +---> [5. InsightFace Extraction]  : Multi-face 512-dim normalized embedding extraction.
   +---> [6. Spoof Detection]        : Anti-spoofing CNN scores face liveness; < 0.60 sent to Review.
-  +---> [7. Cosine Search in Vector] : pgvector matches division embeddings (similarity >= 0.50, margin >= 0.05).
+  +---> [7. Cosine Search in Vector] : Matches division embeddings via cosine similarity (similarity >= 0.50, margin >= 0.05).
   +---> [8. WebSocket Push to Mentees]: Matched students receive push notification on `/user/queue/attendance`.
   +---> [9. 2-Minute Confirmation]   : Student confirms from approved device fingerprint inside classroom geofence.
   +---> [10. Dynamic QR Fallback]    : Unmatched students scan 15-second rotating HMAC-SHA256 teacher QR code.
@@ -201,7 +201,7 @@ $$\text{entry\_hash} = \text{SHA-256}(\text{prev\_hash} + \text{actor\_id} + \te
 
 The IntelliCampus knowledge engine replaces noisy, uncurated chat channels with a hallucination-free, retrieval-augmented system:
 - **PDF Ingestion & Chunking**: Institutional PDFs (circulars, syllabi, fee structures, ordinances) are parsed into 500-token passages with a 50-token sliding overlap.
-- **Vector Search**: Passages are vectorized and stored in PostgreSQL `pgvector`.
+- **Vector Search**: Passages are vectorized and indexed for cosine similarity retrieval.
 - **Grounded Generation**: Questions are embedded, retrieving the top 5 cosine-similar chunks. LLM queries run with `temperature = 0.0` with explicit system prompt restrictions:
   > *"You are the IntelliCampus official assistant. Answer ONLY using the supplied context excerpts. Always cite Document Title and Page Number. If the context does not contain the answer, politely refuse and instruct the student to contact the academic registrar."*
 - **Multilingual Support**: Supports queries and responses in **English, Hindi, and Marathi**.
@@ -267,8 +267,7 @@ A scheduled background job analyzes student academic telemetry weekly to flag ea
 | AI Microservice     | Python 3.11, FastAPI, Uvicorn | Face recognition & ML inference  |
 | Biometrics / Vision | InsightFace (ArcFace), OpenCV | 512-dim embedding & anti-spoof   |
 | Machine Learning    | Scikit-Learn, NumPy, Pandas   | Early Warning Risk Classifier    |
-| Primary Database    | PostgreSQL 16                 | Relational datastore             |
-| Vector Extensions   | pgvector 0.5+                 | Cosine similarity face & RAG     |
+| Primary Database    | MySQL 8.0 / 8.4 LTS           | Relational data & JSON storage   |
 | In-Memory Cache     | Redis 7 Alpine                | OTPs, dynamic QR, rate limits    |
 | AI Orchestration    | Spring AI (RAG Engine)        | Vector search & LLM prompt chain |
 | Frontend Library    | React 18, Vite / CRA          | Single-page web application      |
@@ -311,7 +310,7 @@ IntelliCampus/
 │   │   │   │   ├── notify/     # WebSocket STOMP broadcasting and email alerts
 │   │   │   │   └── risk/       # Scheduled EWS pipeline & mentor actions
 │   │   │   └── resources/
-│   │   │       ├── db/migration/ # Flyway SQL migrations (schema, pgvector)
+│   │   │       ├── db/migration/ # Flyway SQL migrations (MySQL schema, tables)
 │   │   │       └── application.yml # Backend application configurations
 │   ├── Dockerfile              # Multi-stage container build for Java 21
 │   ├── pom.xml                 # Maven build dependencies
@@ -331,7 +330,7 @@ IntelliCampus/
 │   ├── ARCHITECTURE.md         # Full technical architecture and system design
 │   ├── WORKFLOWS.md            # Role-wise flowcharts & state machines
 │   ├── API_SPECIFICATION.md    # REST API endpoints, schemas, and curl examples
-│   ├── DATABASE_DESIGN.md      # Data dictionary, ER diagram, and pgvector schema
+│   ├── DATABASE_DESIGN.md      # Data dictionary, ER diagram, and MySQL schema
 │   └── TEAM_TASK_DIVISION.md   # 4-Collaborator role ownership & sprint milestones
 ├── docker-compose.yml          # Production multi-service orchestration
 ├── .gitignore                  # Git tracking exclusion rules
@@ -350,7 +349,7 @@ Ensure the following tools are installed on your workstation:
 - **Java Development Kit (JDK 21 LTS)** *(for local backend dev)*
 - **Node.js (v20 LTS)** & **npm** *(for local frontend dev)*
 - **Python 3.11** *(for local AI service dev)*
-- **PostgreSQL 16** with **pgvector** *(if running outside Docker)*
+- **MySQL 8.0+** *(if running outside Docker)*
 
 ---
 
@@ -367,12 +366,13 @@ The fastest method to launch the entire IntelliCampus ecosystem:
 2. **Configure environment variables**:
    Create a `.env` file in the project root:
    ```env
-   # PostgreSQL & pgvector
-   DB_HOST=postgres
-   DB_PORT=5432
+   # MySQL Database
+   DB_HOST=db
+   DB_PORT=3306
    DB_NAME=intellicampus_db
    DB_USER=campus_admin
    DB_PASSWORD=SecureCampusPassword2026!
+   MYSQL_ROOT_PASSWORD=RootSecurePassword2026!
 
    # Redis Cache
    REDIS_HOST=redis
@@ -406,7 +406,7 @@ The fastest method to launch the entire IntelliCampus ecosystem:
 | `intellicampus-web` | Frontend Web UI | `http://localhost:3000` | Nginx reverse proxy serving React app |
 | `intellicampus-api` | Backend API Monolith | `http://localhost:8080` | Spring Boot 3 Core Server |
 | `intellicampus-ai` | AI Microservice | `http://localhost:8000` | FastAPI Face & Risk Engine |
-| `intellicampus-db` | Database | `localhost:5432` | PostgreSQL 16 with pgvector |
+| `intellicampus-db` | Database | `localhost:3306` | MySQL 8.0 Server |
 | `intellicampus-redis` | Cache & Sessions | `localhost:6379` | Redis 7 Alpine |
 
 ---
@@ -415,8 +415,8 @@ The fastest method to launch the entire IntelliCampus ecosystem:
 
 #### 1. Database & Cache
 ```bash
-# Launch PostgreSQL with pgvector and Redis using Docker
-docker run -d --name campus-db -p 5432:5432 -e POSTGRES_USER=campus_admin -e POSTGRES_PASSWORD=SecureCampusPassword2026! -e POSTGRES_DB=intellicampus_db pgvector/pgvector:pg16
+# Launch MySQL 8.0 and Redis using Docker
+docker run -d --name campus-db -p 3306:3306 -e MYSQL_DATABASE=intellicampus_db -e MYSQL_USER=campus_admin -e MYSQL_PASSWORD=SecureCampusPassword2026! -e MYSQL_ROOT_PASSWORD=RootSecurePassword2026! mysql:8.0
 docker run -d --name campus-redis -p 6379:6379 redis:7-alpine
 ```
 
@@ -499,7 +499,7 @@ IntelliCampus is intentionally architected to strictly adhere to **India's Digit
 
 1. **Informed Digital Consent**: Biometric enrollment cannot be triggered without an affirmative, cryptographically recorded student consent action (`consent_at`, `consent_version`).
 2. **Zero Raw Image Retention**: Raw facial photographs captured during attendance are processed purely in ephemeral memory and discarded immediately upon 512-dimension vector extraction. No raw facial images are stored on disk or database.
-3. **Encryption at Rest**: Face vectors stored in PostgreSQL `pgvector` are encrypted at rest using **AES-GCM-256** with encryption keys maintained in environment secret vaults outside the database.
+3. **Encryption at Rest**: Face vectors stored in the database are encrypted at rest using **AES-GCM-256** with encryption keys maintained in environment secret vaults outside the database.
 4. **Purpose Limitation & Right to Erasure**: Biometric embeddings are strictly utilized for attendance validation and never repurposed. Students possess the irrevocable right to withdraw consent; an administrative action immediately purges all biometric records.
 5. **Privacy by Default for Public Verification**: Public document validation outputs only masked credentials, preventing identity theft while proving authenticity.
 6. **No Continuous GPS Surveillance**: Geolocation coordinates are requested exclusively at the instantaneous moment of attendance submission to establish classroom presence and are never continuously tracked.

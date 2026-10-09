@@ -62,5 +62,5 @@ yarn-error.log*
 *.sublime-project
 *.sublime-workspace
 
-# PostgreSQL local data
-pgdata/
+# MySQL local data
+mysql_data/

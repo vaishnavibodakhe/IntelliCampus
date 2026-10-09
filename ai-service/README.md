@@ -65,7 +65,7 @@ Extracts all detected faces from the teacher's classroom photograph, scoring eac
   - `bbox`: Coordinates `[x_min, y_min, x_max, y_max]` in pixels.
   - `quality`: Scaled metric ($0.0 - 1.0$) evaluating sharpness, face size, and illumination.
   - `spoofScore`: Probability ($0.0 - 1.0$) that the face is a living person. Values below $0.60$ indicate digital screens or printed media.
-  - `embedding`: 512-dimensional vector normalized to unit length for cosine distance comparisons in PostgreSQL `pgvector`.
+  - `embedding`: 512-dimensional vector normalized to unit length for cosine distance comparisons in the backend and MySQL storage.
 
 ---
 

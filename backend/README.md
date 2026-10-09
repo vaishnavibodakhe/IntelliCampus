@@ -5,7 +5,7 @@
 [![Spring Security](https://img.shields.io/badge/Security-Spring%20Security%206-green.svg)](https://spring.io/projects/spring-security)
 [![Spring AI](https://img.shields.io/badge/AI-Spring%20AI-blue.svg)](https://spring.io/projects/spring-ai)
 [![Flyway](https://img.shields.io/badge/Migration-Flyway-red.svg)](https://flywaydb.org/)
-[![PostgreSQL](https://img.shields.io/badge/Database-PostgreSQL%2016-336791.svg?logo=postgresql)](https://www.postgresql.org/)
+[![MySQL 8](https://img.shields.io/badge/Database-MySQL%208.0%2B-4479A1.svg?logo=mysql)](https://www.mysql.com/)
 
 ---
 
@@ -27,7 +27,7 @@ com.intellicampus/
 ├── attendance/     # Attendance session manager, validation pipeline, geofence, dynamic QR
 ├── audit/          # SHA-256 hash-chained immutable audit log & verification service
 ├── auth/           # Authentication, JWT token provider, password policies, account lockout
-├── chatbot/        # Document ingestion, Spring AI chunking, pgvector search, RAG pipeline
+├── chatbot/        # Document ingestion, Spring AI chunking, vector similarity search, RAG pipeline
 ├── common/         # Global exception handlers, security utils, base entities, DTOs
 ├── config/         # SecurityFilterChain, CORS, Redis, WebSocket STOMP config
 ├── documents/      # Verifiable PDF generation, SHA-256 hashing, public verification
@@ -135,15 +135,16 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:intellicampus_db}
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:intellicampus_db}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
     username: ${DB_USER:campus_admin}
     password: ${DB_PASSWORD:SecureCampusPassword2026!}
+    driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
       ddl-auto: validate
     properties:
       hibernate:
-        dialect: org.hibernate.dialect.PostgreSQLDialect
+        dialect: org.hibernate.dialect.MySQLDialect
   data:
     redis:
       host: ${REDIS_HOST:localhost}
@@ -178,7 +179,7 @@ app:
 ### Prerequisites
 - JDK 21 LTS installed and on `PATH`
 - Apache Maven 3.9+
-- Active PostgreSQL instance with `pgvector` extension
+- Active MySQL 8.0+ instance (or Docker container)
 
 ### Compile and Package
 ```bash

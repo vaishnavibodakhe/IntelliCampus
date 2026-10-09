@@ -6,7 +6,7 @@ This document details the engineering architecture, structural patterns, inter-s
 
 ## 🏗️ Architectural Topology
 
-IntelliCampus is structured as a **Modular Monolith** backend complemented by a specialized **Computer Vision / AI Microservice**, backed by **PostgreSQL 16 with pgvector** and **Redis 7**.
+IntelliCampus is structured as a **Modular Monolith** backend complemented by a specialized **Computer Vision / AI Microservice**, backed by **MySQL 8.0 / MySQL 8.4 LTS** and **Redis 7**.
 
 ```
 +-----------------------------------------------------------------------------------------+
@@ -42,12 +42,12 @@ IntelliCampus is structured as a **Modular Monolith** backend complemented by a 
              | (JDBC over TLS)               | (Redis Protocol)              | (Internal HTTP REST)
              v                               v                               v
 +---------------------------+   +---------------------------+   +---------------------------+
-|      DATA & VECTOR        |   |       MEMORY CACHE        |   |      VISION & ML AI       |
+|       DATA STORAGE        |   |       MEMORY CACHE        |   |      VISION & ML AI       |
 |                           |   |                           |   |                           |
-|   PostgreSQL 16 Engine    |   |      Redis 7 Alpine       |   |  Python 3.11 FastAPI App  |
+|      MySQL 8.0 Engine     |   |      Redis 7 Alpine       |   |  Python 3.11 FastAPI App  |
 |   - Relational Core Data  |   |   - In-Memory Rate Limits |   |   - InsightFace ArcFace   |
-|   - pgvector Face Embeds  |   |   - Dynamic 15s QR HMACs  |   |   - Anti-Spoofing CNN     |
-|   - pgvector RAG Chunks   |   |   - Ephemeral Sessions    |   |   - Scikit-Learn EWS      |
+|   - JSON Biometric Embeds |   |   - Dynamic 15s QR HMACs  |   |   - Anti-Spoofing CNN     |
+|   - Native JSON Documents |   |   - Ephemeral Sessions    |   |   - Scikit-Learn EWS      |
 |   - SHA-256 Audit Chain   |   |   - Blacklisted Tokens    |   |   - Zero Image Storage    |
 +---------------------------+   +---------------------------+   +---------------------------+
 ```
@@ -60,7 +60,7 @@ IntelliCampus is structured as a **Modular Monolith** backend complemented by a 
 | :--- | :--- | :--- |
 | **Modular Monolith over Microservices** | Keeps database transactions, deployments, and testing manageable for an institutional team while strictly isolating domain packages. | All backend modules scale within the same process; however, clean package interfaces make extracting future microservices straightforward. |
 | **Separate Python AI Microservice** | State-of-the-art vision models (InsightFace, ONNX Runtime) and ML libraries (scikit-learn) have first-class support and highest inference performance in Python. | Introduces an internal network RPC hop between the Spring Boot server and the Python worker. |
-| **Vector Matching inside PostgreSQL (pgvector)** | Consolidates identity records and 512-dimensional vector indexes into one ACID-compliant database, enabling SQL queries to filter vectors by classroom division before cosine similarity search. | Requires vector index tuning (HNSW / IVFFlat) as institutional student populations scale into tens of thousands. |
+| **MySQL 8.0 Enterprise Relational Storage** | High ubiquity, ACID transactional guarantees, native JSON type, and widespread institutional adoption across college server environments. | Division-scoped face vector comparisons are computed in-memory by the AI microservice / backend, which is fast and efficient for 40-80 students per division. |
 | **Student 2-Factor Presence Confirmation** | Removes single point of failure from vision models or instructor oversight by requiring active student device confirmation. | Students require smartphones in class; handled gracefully by the teacher's dynamic QR code fallback and manual override options. |
 | **Cryptographic Hash Chain for Audit Logging** | Implements blockchain-level tamper evidence without the compute overhead, latency, or monetary expense of external distributed ledgers. | Detects unauthorized tampering if database rows are directly edited via raw SQL, but cannot prevent edits if a rogue root admin modifies both data and hash recalculations. |
 | **Biometric Vectors Only (No Stored Photos)** | Minimizes privacy risk and guarantees compliance with the DPDP Act 2023. Images are processed in RAM and discarded immediately. | Cannot re-extract embeddings from past sessions if the underlying face recognition model architecture is upgraded. |
@@ -149,15 +149,16 @@ services:
       - "8000:8000"
 
   db:
-    image: pgvector/pgvector:pg16
+    image: mysql:8.0
     ports:
-      - "5432:5432"
+      - "3306:3306"
     environment:
-      POSTGRES_DB: intellicampus_db
-      POSTGRES_USER: campus_admin
-      POSTGRES_PASSWORD: SecureCampusPassword2026!
+      MYSQL_DATABASE: intellicampus_db
+      MYSQL_USER: campus_admin
+      MYSQL_PASSWORD: SecureCampusPassword2026!
+      MYSQL_ROOT_PASSWORD: RootSecurePassword2026!
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mysql_data:/var/lib/mysql
 
   redis:
     image: redis:7-alpine
@@ -165,5 +166,5 @@ services:
       - "6379:6379"
 
 volumes:
-  pgdata:
+  mysql_data:
 ```
