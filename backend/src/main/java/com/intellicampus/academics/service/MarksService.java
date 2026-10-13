@@ -9,6 +9,7 @@ import com.intellicampus.academics.model.MarkEntry;
 import com.intellicampus.academics.model.MarkStatus;
 import com.intellicampus.academics.repository.MarkCorrectionRequestRepository;
 import com.intellicampus.academics.repository.MarkEntryRepository;
+import com.intellicampus.academics.validation.MarkRangeValidator;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
@@ -29,23 +30,24 @@ public class MarksService {
     private final StudentProfileRepository studentProfileRepository;
     private final SubjectRepository subjectRepository;
     private final UserRepository userRepository;
+    private final MarkRangeValidator markRangeValidator;
 
     public MarksService(MarkEntryRepository markEntryRepository,
                         MarkCorrectionRequestRepository correctionRepository,
                         StudentProfileRepository studentProfileRepository,
                         SubjectRepository subjectRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        MarkRangeValidator markRangeValidator) {
         this.markEntryRepository = markEntryRepository;
         this.correctionRepository = correctionRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.subjectRepository = subjectRepository;
         this.userRepository = userRepository;
+        this.markRangeValidator = markRangeValidator;
     }
 
     public MarkResponseDto saveOrUpdateMark(SaveMarkRequestDto req) {
-        if (req.getMarks() < 0 || req.getMarks() > req.getMaxMarks()) {
-            throw new IllegalArgumentException("Marks must be between 0 and " + req.getMaxMarks());
-        }
+        markRangeValidator.validateMarks(req.getMarks(), req.getMaxMarks());
 
         StudentProfile student = studentProfileRepository.findById(req.getStudentId())
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + req.getStudentId()));
@@ -94,9 +96,7 @@ public class MarksService {
         MarkEntry mark = markEntryRepository.findById(req.getMarkId())
                 .orElseThrow(() -> new IllegalArgumentException("Mark record not found: " + req.getMarkId()));
 
-        if (req.getReason() == null || req.getReason().trim().length() < 15) {
-            throw new IllegalArgumentException("Mark correction justification must be at least 15 characters long.");
-        }
+        markRangeValidator.validateCorrection(req.getNewMarks(), mark.getMaxMarks(), req.getReason());
 
         User faculty = userRepository.findById(req.getFacultyId())
                 .orElseThrow(() -> new IllegalArgumentException("Faculty not found: " + req.getFacultyId()));
