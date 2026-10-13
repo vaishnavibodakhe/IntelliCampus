@@ -4,6 +4,7 @@ import com.intellicampus.audit.dto.AuditLogResponseDto;
 import com.intellicampus.audit.dto.AuditVerificationResponseDto;
 import com.intellicampus.audit.model.AuditLogEntry;
 import com.intellicampus.audit.repository.AuditLogEntryRepository;
+import com.intellicampus.audit.validation.HashChainValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,9 +24,12 @@ public class AuditChainService {
     private static final DateTimeFormatter ISO_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE_TIME;
 
     private final AuditLogEntryRepository auditRepository;
+    private final HashChainValidator hashChainValidator;
 
-    public AuditChainService(AuditLogEntryRepository auditRepository) {
+    public AuditChainService(AuditLogEntryRepository auditRepository,
+                             HashChainValidator hashChainValidator) {
         this.auditRepository = auditRepository;
+        this.hashChainValidator = hashChainValidator;
     }
 
     public synchronized AuditLogEntry recordEntry(Long actorId,
@@ -79,46 +83,18 @@ public class AuditChainService {
             return AuditVerificationResponseDto.valid(0, GENESIS_PREV_HASH);
         }
 
-        String expectedPrevHash = GENESIS_PREV_HASH;
-        for (int i = 0; i < entries.size(); i++) {
-            AuditLogEntry current = entries.get(i);
-
-            // 1. Verify link with previous block
-            if (!current.getPrevHash().equalsIgnoreCase(expectedPrevHash)) {
-                return AuditVerificationResponseDto.invalid(
-                        entries.size(),
-                        i,
-                        current.getId(),
-                        "Broken chain link at index " + i + ". Expected prev_hash " + expectedPrevHash + " but found " + current.getPrevHash()
-                );
-            }
-
-            // 2. Verify current block's hash matches calculated hash
-            String calculatedHash = calculateHash(
-                    current.getPrevHash(),
-                    current.getActorId(),
-                    current.getAction(),
-                    current.getEntityType(),
-                    current.getEntityId(),
-                    current.getOldValue(),
-                    current.getNewValue(),
-                    current.getReason(),
-                    current.getCreatedAt().format(ISO_FORMATTER)
+        HashChainValidator.ChainValidationResult result = hashChainValidator.validateChain(entries);
+        if (result.isValid()) {
+            String lastHash = entries.get(entries.size() - 1).getEntryHash();
+            return AuditVerificationResponseDto.valid(entries.size(), lastHash);
+        } else {
+            return AuditVerificationResponseDto.invalid(
+                    result.getTotalBlocks(),
+                    result.getTamperedIndex(),
+                    result.getTamperedEntryId(),
+                    result.getMessage()
             );
-
-            if (!current.getEntryHash().equalsIgnoreCase(calculatedHash)) {
-                return AuditVerificationResponseDto.invalid(
-                        entries.size(),
-                        i,
-                        current.getId(),
-                        "Entry hash mismatch at index " + i + ". Ledger entry may have been tampered with."
-                );
-            }
-
-            expectedPrevHash = current.getEntryHash();
         }
-
-        return AuditVerificationResponseDto.valid(entries.size(), expectedPrevHash);
     }
 
     @Transactional(readOnly = true)

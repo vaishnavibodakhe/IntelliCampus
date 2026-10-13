@@ -1,6 +1,7 @@
 package com.intellicampus.credential.service;
 
 import com.intellicampus.audit.service.AuditChainService;
+import com.intellicampus.audit.validation.HashChainValidator;
 import com.intellicampus.credential.dto.*;
 import com.intellicampus.credential.model.DocumentStatus;
 import com.intellicampus.credential.model.VerifiableDocument;
@@ -22,13 +23,16 @@ public class CredentialService {
     private final VerifiableDocumentRepository documentRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final AuditChainService auditChainService;
+    private final HashChainValidator hashChainValidator;
 
     public CredentialService(VerifiableDocumentRepository documentRepository,
                              StudentProfileRepository studentProfileRepository,
-                             AuditChainService auditChainService) {
+                             AuditChainService auditChainService,
+                             HashChainValidator hashChainValidator) {
         this.documentRepository = documentRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.auditChainService = auditChainService;
+        this.hashChainValidator = hashChainValidator;
     }
 
     public DocumentResponseDto issueDocument(IssueDocumentRequestDto req) {
@@ -105,6 +109,11 @@ public class CredentialService {
     }
 
     public DocumentResponseDto revokeDocument(String code, RevokeDocumentRequestDto req) {
+        if (req == null) {
+            throw new IllegalArgumentException("Revocation request cannot be null.");
+        }
+        hashChainValidator.validateRevocationReason(req.getReason());
+
         VerifiableDocument doc = documentRepository.findByCode(code)
                 .orElseThrow(() -> new IllegalArgumentException("Document not found with code: " + code));
 
@@ -113,7 +122,7 @@ public class CredentialService {
         }
 
         doc.setStatus(DocumentStatus.REVOKED);
-        String reason = req.getReason() != null ? req.getReason() : "Administrative revocation";
+        String reason = req.getReason().trim();
         doc.setRevokedReason(reason);
 
         VerifiableDocument updated = documentRepository.save(doc);
