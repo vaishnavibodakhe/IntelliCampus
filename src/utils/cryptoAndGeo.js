@@ -121,3 +121,74 @@ export function getRotatingQRToken(sessionId) {
     secondsLeft
   };
 }
+
+/**
+ * Validates whether student GPS position is within classroom boundary.
+ * IC-SRS-1.0 Section 8.2 & Test Case TC-02
+ * Rejects if accuracy > 100m or distance > maxRadiusM.
+ */
+export function validateGeofence(studentLat, studentLon, studentAccuracyM, roomLat, roomLon, maxRadiusM = 50) {
+  if (studentLat == null || studentLon == null || roomLat == null || roomLon == null) {
+    return {
+      valid: false,
+      distanceM: null,
+      error: "Incomplete GPS coordinates provided for geofence verification."
+    };
+  }
+
+  // Reject check-ins where GPS accuracy is greater than 100 meters
+  if (studentAccuracyM != null && studentAccuracyM > 100) {
+    return {
+      valid: false,
+      distanceM: null,
+      error: `GPS accuracy (±${Math.round(studentAccuracyM)}m) exceeds maximum allowable threshold of 100m. Please move closer to a window or re-calibrate device GPS.`
+    };
+  }
+
+  const distanceM = calculateHaversineDistance(studentLat, studentLon, roomLat, roomLon);
+  const allowedRadius = maxRadiusM || 50;
+
+  if (distanceM > allowedRadius) {
+    return {
+      valid: false,
+      distanceM,
+      error: `Geofence boundary violation: You are ${distanceM}m away from classroom center, exceeding allowable perimeter of ${allowedRadius}m.`
+    };
+  }
+
+  return {
+    valid: true,
+    distanceM,
+    error: null
+  };
+}
+
+/**
+ * Validates AI face anti-spoofing confidence score.
+ * IC-SRS-1.0 Section 8.1 & Test Case TC-04
+ * Flags record as REVIEW if spoof confidence is below 0.60.
+ */
+export function validateSpoofConfidence(spoofScore, minThreshold = 0.60) {
+  if (spoofScore == null) {
+    return {
+      isPassing: false,
+      status: "REVIEW",
+      reason: "Missing anti-spoofing liveness verification."
+    };
+  }
+
+  if (spoofScore < minThreshold) {
+    return {
+      isPassing: false,
+      status: "REVIEW",
+      reason: `Anti-spoofing confidence (${spoofScore.toFixed(2)}) is below safety threshold (${minThreshold.toFixed(2)}). Flagged for faculty manual review.`
+    };
+  }
+
+  return {
+    isPassing: true,
+    status: "PRESENT",
+    reason: `Anti-spoofing verified (${spoofScore.toFixed(2)} >= ${minThreshold.toFixed(2)})`
+  };
+}
+
