@@ -192,3 +192,23 @@ export function validateSpoofConfidence(spoofScore, minThreshold = 0.60) {
   };
 }
 
+/**
+ * Validates document revocation justification string.
+ * IC-SRS-1.0 Section 8.7 & Test Case TC-12
+ * Enforces mandatory reason of at least 10 characters.
+ */
+export function validateRevocationReason(reason, minLength = 10) {
+  if (!reason || reason.trim().length < minLength) {
+    const len = reason ? reason.trim().length : 0;
+    return {
+      valid: false,
+      error: `Revocation justification is mandatory and must contain at least ${minLength} characters (provided: ${len}).`
+    };
+  }
+  return {
+    valid: true,
+    error: null
+  };
+}
+
+
