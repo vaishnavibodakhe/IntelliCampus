@@ -14,7 +14,8 @@ import {
   Sparkles,
   ExternalLink,
   ChevronRight,
-  RefreshCw
+  RefreshCw,
+  Bell
 } from 'lucide-react';
 import { calculateHaversineDistance } from '../utils/cryptoAndGeo';
 
@@ -284,6 +285,12 @@ export default function StudentView({
   const studentMarks = marks.filter(m => m.rollNo === currentUser.rollNo);
   const myLeaves = leaveRequests.filter(l => l.studentId === currentUser.id);
   const myDocuments = issuedDocuments.filter(d => d.rollNo === currentUser.rollNo);
+  const targetedNotices = notices.filter(n => {
+    const matchDept = !n.targetDepartment || n.targetDepartment === 'All Departments' || n.targetDepartment === currentUser.department;
+    const matchYear = !n.targetYear || n.targetYear === 'All Years' || n.targetYear === currentUser.year;
+    const matchDiv = !n.targetDivision || n.targetDivision === 'All Divisions' || n.targetDivision === currentUser.division;
+    return matchDept && matchYear && matchDiv;
+  });
 
   return (
     <div className="student-container animate-fade-in">
@@ -324,6 +331,12 @@ export default function StudentView({
           className={`tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Issued Documents ({myDocuments.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('notices')} 
+          className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
+        >
+          <Bell size={16} /> Notices &amp; Circulars ({targetedNotices.length})
         </button>
       </div>
 
@@ -724,6 +737,64 @@ export default function StudentView({
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: NOTICES & CIRCULARS */}
+      {activeTab === 'notices' && (
+        <div className="tab-pane animate-fade-in">
+          <div className="glass-card">
+            <div className="card-header-flex">
+              <div>
+                <h3><Bell size={18} /> Official Notices &amp; Broadcast Circulars</h3>
+                <p className="card-desc">
+                  Curated circulars targeted to {currentUser.department} • {currentUser.year || 'All Years'} • {currentUser.division || 'All Divisions'}.
+                </p>
+              </div>
+              <span className="badge-pill info">{targetedNotices.length} Active Circulars</span>
+            </div>
+
+            {targetedNotices.length === 0 ? (
+              <div className="empty-state" style={{ padding: '32px', textAlign: 'center' }}>
+                <Bell size={36} className="text-secondary" style={{ margin: '0 auto 12px', display: 'block', opacity: 0.5 }} />
+                <p className="text-secondary">No current circulars matching your department and academic division.</p>
+              </div>
+            ) : (
+              <div className="notices-stream" style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+                {targetedNotices.map(notice => (
+                  <div key={notice.id} className="notice-item-card glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px' }}>
+                    <div className="notice-item-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
+                      <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>{notice.title}</h4>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                        <span className="badge-pill info">{notice.targetDepartment}</span>
+                        {notice.targetYear && notice.targetYear !== 'All Years' && (
+                          <span className="badge-pill accent">{notice.targetYear}</span>
+                        )}
+                        {notice.targetDivision && notice.targetDivision !== 'All Divisions' && (
+                          <span className="badge-pill warning">{notice.targetDivision}</span>
+                        )}
+                      </div>
+                    </div>
+                    <p style={{ color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.5, margin: '8px 0' }}>
+                      {notice.body}
+                    </p>
+                    <div className="notice-item-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
+                      <div>
+                        <span>📢 Issued by <strong>{notice.publisherName || notice.publisherRole || 'Administration'}</strong></span>
+                        <span style={{ margin: '0 8px' }}>•</span>
+                        <span>{new Date(notice.publishedAt).toLocaleDateString()}</span>
+                      </div>
+                      {notice.deadline && (
+                        <span className="badge-pill danger">
+                          Deadline: {notice.deadline}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
