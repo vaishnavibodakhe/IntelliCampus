@@ -249,10 +249,11 @@ export default function FacultyView({
     alert(`Status overridden to ${overrideNewStatus} with logged audit justification.`);
   };
 
-  // Publish Marks (locks marks)
+  // Publish All Marks for selected exam (locks marks)
   const handlePublishMarks = () => {
-    setCurrentMarkList(currentMarkList.map(m => ({ ...m, status: 'PUBLISHED' })));
-    setMarks(marks.map(m => ({ ...m, status: 'PUBLISHED' })));
+    const updated = marks.map(m => m.exam === selectedExam ? { ...m, status: 'PUBLISHED' } : m);
+    setCurrentMarkList(updated);
+    setMarks(updated);
 
     onAddAuditLog({
       action: 'PUBLISH_MARKS',
@@ -265,11 +266,61 @@ export default function FacultyView({
     alert(`${selectedExam} marks successfully published and locked. Further changes will require HOD correction approval.`);
   };
 
+  // Revert All Marks for selected exam to Draft
+  const handleRevertAllToDraft = () => {
+    const updated = marks.map(m => m.exam === selectedExam ? { ...m, status: 'DRAFT' } : m);
+    setCurrentMarkList(updated);
+    setMarks(updated);
+
+    onAddAuditLog({
+      action: 'REVERT_MARKS_DRAFT',
+      entityType: 'MARK_ENTRIES',
+      entityId: 'EXAM_' + selectedExam.replace(/\s+/g, '_'),
+      oldValue: '{"status":"PUBLISHED"}',
+      newValue: '{"status":"DRAFT"}',
+      reason: `Faculty reverted ${selectedExam} marks to Draft status`
+    });
+    alert(`${selectedExam} marks reverted to Draft mode.`);
+  };
+
+  // Update draft mark score
+  const handleUpdateMarkValue = (markId, newVal) => {
+    const val = Math.max(0, Number(newVal) || 0);
+    const updated = marks.map(m => {
+      if (m.id === markId) {
+        return { ...m, marks: Math.min(val, m.maxMarks) };
+      }
+      return m;
+    });
+    setMarks(updated);
+    setCurrentMarkList(updated);
+  };
+
+  // Toggle single mark status between DRAFT and PUBLISHED
+  const handleToggleMarkStatus = (markId) => {
+    const target = marks.find(m => m.id === markId);
+    if (!target) return;
+
+    const newStatus = target.status === 'PUBLISHED' ? 'DRAFT' : 'PUBLISHED';
+    const updated = marks.map(m => m.id === markId ? { ...m, status: newStatus } : m);
+    setMarks(updated);
+    setCurrentMarkList(updated);
+
+    onAddAuditLog({
+      action: 'TOGGLE_MARK_STATUS',
+      entityType: 'MARK_ENTRY',
+      entityId: String(markId),
+      oldValue: JSON.stringify({ status: target.status }),
+      newValue: JSON.stringify({ status: newStatus }),
+      reason: `Faculty toggled mark status for ${target.studentName} to ${newStatus}`
+    });
+  };
+
   // Request Mark Correction to HOD
   const handleSubmitCorrectionRequest = (e) => {
     e.preventDefault();
-    if (!correctionReason || correctionReason.trim().length < 10) {
-      alert('Correction reason must be at least 10 characters.');
+    if (!correctionReason || correctionReason.trim().length < 15) {
+      alert('Correction justification reason must be at least 15 characters (MRK-05).');
       return;
     }
 
@@ -570,9 +621,12 @@ export default function FacultyView({
                 <option value="Lab Assignment 1">Lab Assignment 1 (Max: 20)</option>
               </select>
             </div>
-            <div className="toolbar-actions">
-              <button onClick={handlePublishMarks} className="btn-primary">
-                <Lock size={15} /> Publish &amp; Lock Marks
+            <div className="toolbar-actions" style={{ display: 'flex', gap: '8px' }}>
+              <button type="button" onClick={handlePublishMarks} className="btn-primary">
+                <Lock size={15} /> Publish All Marks
+              </button>
+              <button type="button" onClick={handleRevertAllToDraft} className="btn-secondary">
+                <RefreshCw size={15} /> Revert All to Draft
               </button>
             </div>
           </div>
@@ -597,7 +651,31 @@ export default function FacultyView({
                     <td><strong>{m.studentName}</strong></td>
                     <td>{m.subjectCode}</td>
                     <td>
-                      <span className="font-mono font-bold text-primary">{m.marks}</span>
+                      {m.status === 'PUBLISHED' ? (
+                        <span className="font-mono font-bold text-success">
+                          🔒 {m.marks}
+                        </span>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <input 
+                            type="number" 
+                            min="0" 
+                            max={m.maxMarks} 
+                            value={m.marks} 
+                            onChange={e => handleUpdateMarkValue(m.id, e.target.value)}
+                            className="font-mono text-primary font-bold"
+                            style={{ 
+                              width: '72px', 
+                              padding: '4px 8px', 
+                              borderRadius: '6px', 
+                              background: 'rgba(255,255,255,0.08)', 
+                              border: '1px solid rgba(56, 189, 248, 0.4)',
+                              textAlign: 'center'
+                            }}
+                          />
+                          <span className="text-xs text-muted">/ {m.maxMarks}</span>
+                        </div>
+                      )}
                     </td>
                     <td className="font-mono">{m.maxMarks}</td>
                     <td>
@@ -607,17 +685,36 @@ export default function FacultyView({
                     </td>
                     <td>
                       {m.status === 'PUBLISHED' ? (
-                        <button 
-                          onClick={() => {
-                            setCorrectionModal({ open: true, markId: m.id, currentVal: m.marks });
-                            setCorrectionNewMarks(m.marks);
-                          }}
-                          className="btn-secondary btn-xs"
-                        >
-                          Request Correction
-                        </button>
+                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                          <button 
+                            type="button"
+                            onClick={() => {
+                              setCorrectionModal({ open: true, markId: m.id, currentVal: m.marks });
+                              setCorrectionNewMarks(m.marks);
+                            }}
+                            className="btn-secondary btn-xs"
+                            title="Propose score correction to HOD"
+                          >
+                            <Edit3 size={12} /> Request Correction
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => handleToggleMarkStatus(m.id)}
+                            className="btn-secondary btn-xs"
+                            title="Revert individual score to editable draft"
+                          >
+                            To Draft
+                          </button>
+                        </div>
                       ) : (
-                        <span className="text-muted text-xs">Directly Editable</span>
+                        <button 
+                          type="button"
+                          onClick={() => handleToggleMarkStatus(m.id)}
+                          className="btn-primary btn-xs"
+                          title="Publish and lock this student's grade"
+                        >
+                          <Lock size={12} /> Publish
+                        </button>
                       )}
                     </td>
                   </tr>
