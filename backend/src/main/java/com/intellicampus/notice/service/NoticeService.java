@@ -6,6 +6,7 @@ import com.intellicampus.notice.model.Notice;
 import com.intellicampus.notice.model.NoticeReadReceipt;
 import com.intellicampus.notice.repository.NoticeReadReceiptRepository;
 import com.intellicampus.notice.repository.NoticeRepository;
+import com.intellicampus.notice.validation.NoticeAudienceValidator;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
@@ -25,15 +26,18 @@ public class NoticeService {
     private final NoticeReadReceiptRepository noticeReadReceiptRepository;
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final NoticeAudienceValidator noticeAudienceValidator;
 
     public NoticeService(NoticeRepository noticeRepository,
                          NoticeReadReceiptRepository noticeReadReceiptRepository,
                          UserRepository userRepository,
-                         StudentProfileRepository studentProfileRepository) {
+                         StudentProfileRepository studentProfileRepository,
+                         NoticeAudienceValidator noticeAudienceValidator) {
         this.noticeRepository = noticeRepository;
         this.noticeReadReceiptRepository = noticeReadReceiptRepository;
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
+        this.noticeAudienceValidator = noticeAudienceValidator;
     }
 
     @Transactional(readOnly = true)
@@ -70,6 +74,12 @@ public class NoticeService {
     }
 
     public NoticeDto createNotice(CreateNoticeRequestDto req) {
+        noticeAudienceValidator.validateAudience(
+                req.getTargetDepartment(),
+                req.getTargetYear(),
+                req.getTargetDivision()
+        );
+
         User publisher = null;
         if (req.getPublisherId() != null) {
             publisher = userRepository.findById(req.getPublisherId()).orElse(null);

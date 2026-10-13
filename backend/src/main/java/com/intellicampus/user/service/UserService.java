@@ -12,6 +12,7 @@ import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
+import com.intellicampus.user.validation.CsvUserValidator;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,15 +29,18 @@ public class UserService {
     private final StudentProfileRepository studentProfileRepository;
     private final DepartmentRepository departmentRepository;
     private final DivisionRepository divisionRepository;
+    private final CsvUserValidator csvUserValidator;
 
     public UserService(UserRepository userRepository,
                        StudentProfileRepository studentProfileRepository,
                        DepartmentRepository departmentRepository,
-                       DivisionRepository divisionRepository) {
+                       DivisionRepository divisionRepository,
+                       CsvUserValidator csvUserValidator) {
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.departmentRepository = departmentRepository;
         this.divisionRepository = divisionRepository;
+        this.csvUserValidator = csvUserValidator;
     }
 
     @Transactional(readOnly = true)
@@ -95,40 +99,24 @@ public class UserService {
     }
 
     public CsvImportResultDto importCsv(List<String> csvLines) {
+        CsvUserValidator.CsvValidationResult validation = csvUserValidator.validateCsvLines(csvLines);
         int imported = 0;
         int failed = 0;
-        List<String> errors = new ArrayList<>();
+        List<String> errors = new ArrayList<>(validation.getErrors());
 
-        for (int i = 0; i < csvLines.size(); i++) {
-            String line = csvLines.get(i).trim();
-            if (line.isEmpty() || line.startsWith("userCode") || line.startsWith("#")) continue;
-
-            String[] parts = line.split(",");
-            if (parts.length < 5) {
-                failed++;
-                errors.add("Line " + (i + 1) + ": Insufficient columns (expected userCode,name,email,role,department,rollNo)");
-                continue;
-            }
-
+        for (CreateUserRequestDto dto : validation.getValidRows()) {
             try {
-                CreateUserRequestDto dto = new CreateUserRequestDto();
-                dto.setUserCode(parts[0].trim());
-                dto.setName(parts[1].trim());
-                dto.setEmail(parts[2].trim());
-                dto.setRole(Role.valueOf(parts[3].trim().toUpperCase()));
-                dto.setDepartment(parts[4].trim());
-                if (parts.length > 5) dto.setRollNo(parts[5].trim());
-                if (parts.length > 6) dto.setDivision(parts[6].trim());
-
                 createUser(dto);
                 imported++;
             } catch (Exception ex) {
                 failed++;
-                errors.add("Line " + (i + 1) + " (" + parts[0] + "): " + ex.getMessage());
+                errors.add("User '" + dto.getUserCode() + "': " + ex.getMessage());
             }
         }
+        failed += validation.getErrors().size();
 
-        return new CsvImportResultDto(csvLines.size(), imported, failed, errors);
+        int totalCount = csvLines != null ? csvLines.size() : 0;
+        return new CsvImportResultDto(totalCount, imported, failed, errors);
     }
 
     private UserResponseDto mapToDto(User u) {
