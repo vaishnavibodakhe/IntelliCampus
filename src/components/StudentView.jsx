@@ -17,7 +17,7 @@ import {
   RefreshCw,
   Bell
 } from 'lucide-react';
-import { calculateHaversineDistance } from '../utils/cryptoAndGeo';
+import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
 
 export default function StudentView({
   currentUser,
@@ -115,15 +115,16 @@ export default function StudentView({
   const handleConfirmPresence = () => {
     if (!activeSession) return;
 
-    if (distanceM > 50) {
-      // Rejection due to geofence boundary violation
+    const geoCheck = validateGeofence(deviceGps.lat, deviceGps.lng, deviceGps.accuracy, roomLat, roomLng, 50);
+    if (!geoCheck.valid) {
+      // Rejection due to geofence boundary or accuracy violation
       const updatedRecords = activeSession.attendanceRecords.map(rec => {
         if (rec.studentId === currentUser.id) {
           return {
             ...rec,
             confirmed: false,
             finalStatus: 'GEO_OUT_OF_RANGE',
-            statusReason: `Geofence violation: ${distanceM}m exceeds 50m radius`
+            statusReason: geoCheck.error
           };
         }
         return rec;
@@ -137,17 +138,28 @@ export default function StudentView({
         entityType: 'ATTENDANCE_RECORD',
         entityId: `${activeSession.id}_${currentUser.id}`,
         oldValue: '{"status":"PENDING"}',
-        newValue: JSON.stringify({ distanceM, status: 'GEO_OUT_OF_RANGE' }),
-        reason: `Geofence rejection: Student ${currentUser.name} attempted check-in at ${distanceM}m (Max allowed: 50m)`
+        newValue: JSON.stringify({ distanceM: geoCheck.distanceM, accuracy: deviceGps.accuracy, status: 'GEO_OUT_OF_RANGE' }),
+        reason: geoCheck.error
       });
 
-      alert(`Geofence rejection: You are ${distanceM} meters away from the classroom center (Max allowed: 50m). Status set to Geo-out-of-range.`);
+      alert(geoCheck.error);
       return;
     }
 
-    // Inside geofence: determines Present vs Matched
-    const isFaceRecognized = (studentSessionRecord?.faceScore || 0) >= 0.5;
-    const determinedStatus = isFaceRecognized ? 'PRESENT' : 'MATCHED';
+    // Inside geofence: evaluates anti-spoofing and face confidence (TC-04)
+    const spoofScore = studentSessionRecord?.spoofScore ?? 0.95;
+    const isFaceRecognized = (studentSessionRecord?.faceScore || 0) >= 0.50;
+    
+    // Criterion 3: Flag records as REVIEW if anti-spoofing confidence is below threshold (0.60)
+    let determinedStatus = 'PRESENT';
+    let determinedReason = 'Face + GPS confirmed within allowable geofence';
+    if (spoofScore < 0.60) {
+      determinedStatus = 'REVIEW';
+      determinedReason = `Anti-spoofing confidence (${spoofScore.toFixed(2)}) below threshold (0.60). Flagged for manual faculty review.`;
+    } else if (!isFaceRecognized) {
+      determinedStatus = 'MATCHED';
+      determinedReason = 'GPS confirmed within 50m; matched student identity';
+    }
 
     const updatedRecords = activeSession.attendanceRecords.map(rec => {
       if (rec.studentId === currentUser.id) {
@@ -156,7 +168,7 @@ export default function StudentView({
           confirmed: true,
           confirmedAt: new Date().toISOString(),
           finalStatus: determinedStatus,
-          statusReason: isFaceRecognized ? 'Face + GPS confirmed within 50m' : 'GPS confirmed within 50m; matched student identity'
+          statusReason: determinedReason
         };
       }
       return rec;

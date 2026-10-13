@@ -13,6 +13,8 @@ import com.intellicampus.attendance.model.AttendanceStatus;
 import com.intellicampus.attendance.model.SessionStatus;
 import com.intellicampus.attendance.repository.AttendanceRecordRepository;
 import com.intellicampus.attendance.repository.AttendanceSessionRepository;
+import com.intellicampus.attendance.validation.GeofenceValidator;
+import com.intellicampus.attendance.validation.SpoofScoreValidator;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
@@ -39,6 +41,8 @@ public class AttendanceService {
     private final DivisionRepository divisionRepository;
     private final ClassroomRepository classroomRepository;
     private final StudentProfileRepository studentProfileRepository;
+    private final GeofenceValidator geofenceValidator;
+    private final SpoofScoreValidator spoofScoreValidator;
 
     public AttendanceService(AttendanceSessionRepository sessionRepository,
                              AttendanceRecordRepository recordRepository,
@@ -46,7 +50,9 @@ public class AttendanceService {
                              SubjectRepository subjectRepository,
                              DivisionRepository divisionRepository,
                              ClassroomRepository classroomRepository,
-                             StudentProfileRepository studentProfileRepository) {
+                             StudentProfileRepository studentProfileRepository,
+                             GeofenceValidator geofenceValidator,
+                             SpoofScoreValidator spoofScoreValidator) {
         this.sessionRepository = sessionRepository;
         this.recordRepository = recordRepository;
         this.userRepository = userRepository;
@@ -54,6 +60,8 @@ public class AttendanceService {
         this.divisionRepository = divisionRepository;
         this.classroomRepository = classroomRepository;
         this.studentProfileRepository = studentProfileRepository;
+        this.geofenceValidator = geofenceValidator;
+        this.spoofScoreValidator = spoofScoreValidator;
     }
 
     public SessionResponseDto startSession(StartSessionRequestDto req) {
@@ -127,26 +135,35 @@ public class AttendanceService {
         StudentProfile student = studentProfileRepository.findById(req.getStudentId())
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + req.getStudentId()));
 
-        // Validate GPS distance using Haversine formula
-        double distMeters = calculateHaversineDistance(
-                req.getLatitude(), req.getLongitude(),
-                session.getRoom().getLatitude(), session.getRoom().getLongitude()
+        // Validate GPS distance and accuracy threshold using GeofenceValidator
+        double distMeters = geofenceValidator.validate(
+                req.getLatitude(),
+                req.getLongitude(),
+                req.getAccuracyM(),
+                session.getRoom().getLatitude(),
+                session.getRoom().getLongitude(),
+                session.getRoom().getRadiusM()
         );
 
-        int maxRadius = session.getRoom().getRadiusM() != null ? session.getRoom().getRadiusM() : 50;
-        if (distMeters > maxRadius) {
-            throw new IllegalStateException("Geofence alert: Location is " + Math.round(distMeters) + "m away, exceeding classroom boundary of " + maxRadius + "m.");
-        }
-
         AttendanceRecord record = recordRepository.findBySessionAndStudent(session, student)
-                .orElseGet(() -> new AttendanceRecord(session, student, 0.90, 0.95, AttendanceStatus.PRESENT));
+                .orElseGet(() -> new AttendanceRecord(session, student, 0.90, 0.95, AttendanceStatus.PENDING));
 
         record.setConfirmed(true);
         record.setConfirmedAt(LocalDateTime.now());
         record.setConfirmLat(req.getLatitude());
         record.setConfirmLng(req.getLongitude());
-        record.setFinalStatus(AttendanceStatus.PRESENT);
-        record.setStatusReason("Verified via GPS Geofence (" + Math.round(distMeters) + "m) and Dynamic QR token");
+
+        AttendanceStatus finalStatus = spoofScoreValidator.evaluateStatus(
+                record.getSpoofScore(),
+                record.getFaceScore(),
+                true
+        );
+        record.setFinalStatus(finalStatus);
+        record.setStatusReason(spoofScoreValidator.resolveStatusReason(
+                record.getSpoofScore(),
+                record.getFaceScore(),
+                distMeters
+        ));
 
         AttendanceRecord savedRecord = recordRepository.save(record);
         return mapRecordToDto(savedRecord);
