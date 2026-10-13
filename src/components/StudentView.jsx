@@ -612,9 +612,29 @@ export default function StudentView({
                 </div>
 
                 <div className="form-group">
-                  <label>Attachment Proof (Doctor Certificate / Official Letter)</label>
-                  <div className="attachment-chip">
-                    <FileText size={15} /> <span>{leaveForm.attachmentName}</span>
+                  <label>Document Evidence Attachment (Doctor Certificate / Official Letter)</label>
+                  <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input 
+                      type="file" 
+                      id="leave-attachment-upload"
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      style={{ display: 'none' }}
+                      onChange={e => {
+                        if (e.target.files && e.target.files[0]) {
+                          setLeaveForm({ ...leaveForm, attachmentName: e.target.files[0].name });
+                        }
+                      }}
+                    />
+                    <label 
+                      htmlFor="leave-attachment-upload" 
+                      className="btn-secondary btn-sm"
+                      style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}
+                    >
+                      <FileText size={14} /> Select Proof File...
+                    </label>
+                    <div className="attachment-chip font-mono text-xs">
+                      <FileText size={14} /> <span>{leaveForm.attachmentName}</span>
+                    </div>
                   </div>
                 </div>
 
