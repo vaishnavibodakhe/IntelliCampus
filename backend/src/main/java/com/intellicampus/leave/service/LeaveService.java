@@ -6,6 +6,7 @@ import com.intellicampus.leave.dto.SubmitLeaveRequestDto;
 import com.intellicampus.leave.model.LeaveRequest;
 import com.intellicampus.leave.model.LeaveStatus;
 import com.intellicampus.leave.repository.LeaveRequestRepository;
+import com.intellicampus.leave.validation.LeaveDateValidator;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
@@ -25,31 +26,32 @@ public class LeaveService {
     private final LeaveRequestRepository leaveRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
+    private final LeaveDateValidator leaveDateValidator;
 
     public LeaveService(LeaveRequestRepository leaveRepository,
                         StudentProfileRepository studentProfileRepository,
-                        UserRepository userRepository) {
+                        UserRepository userRepository,
+                        LeaveDateValidator leaveDateValidator) {
         this.leaveRepository = leaveRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.userRepository = userRepository;
+        this.leaveDateValidator = leaveDateValidator;
     }
 
     public LeaveResponseDto submitLeave(SubmitLeaveRequestDto req) {
-        if (req.getFromDate() == null || req.getToDate() == null) {
-            throw new IllegalArgumentException("Both fromDate and toDate are required.");
-        }
-        if (req.getToDate().isBefore(req.getFromDate())) {
-            throw new IllegalArgumentException("To-date cannot be before from-date.");
-        }
-        if (req.getReason() == null || req.getReason().trim().length() < 5) {
-            throw new IllegalArgumentException("Leave reason must be at least 5 characters long.");
-        }
+        leaveDateValidator.validatePolicy(
+                req.getFromDate(),
+                req.getToDate(),
+                req.getReason(),
+                req.getAttachmentName(),
+                req.getAttachmentUrl()
+        );
 
         StudentProfile student = studentProfileRepository.findById(req.getStudentId())
                 .or(() -> userRepository.findById(req.getStudentId()).flatMap(studentProfileRepository::findByUser))
                 .orElseThrow(() -> new IllegalArgumentException("Student not found for id: " + req.getStudentId()));
 
-        int daysCount = (int) ChronoUnit.DAYS.between(req.getFromDate(), req.getToDate()) + 1;
+        int daysCount = leaveDateValidator.calculateDays(req.getFromDate(), req.getToDate());
 
         LeaveRequest leave = new LeaveRequest(
                 student,
