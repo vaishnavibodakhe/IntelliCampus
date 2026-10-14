@@ -3,8 +3,8 @@ version: '3.8'
 services:
   web:
     build:
-      context: ./frontend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: Dockerfile.web
     container_name: intellicampus-web
     restart: unless-stopped
     ports:
@@ -50,11 +50,14 @@ services:
     restart: unless-stopped
     ports:
       - "8000:8000"
+    environment:
+      - PORT=8000
+      - LOG_LEVEL=info
     networks:
       - campus-network
 
   db:
-    image: mysql:8.0
+    image: mysql:8
     container_name: intellicampus-db
     restart: unless-stopped
     ports:
@@ -66,6 +69,7 @@ services:
       MYSQL_PASSWORD: SecureCampusPassword2026!
     volumes:
       - mysql_data:/var/lib/mysql
+      - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "campus_admin", "-pSecureCampusPassword2026!"]
       interval: 5s
