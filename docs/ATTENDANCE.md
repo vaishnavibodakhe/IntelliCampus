@@ -73,7 +73,7 @@ sequenceDiagram
     participant API as Attendance API (/api/attendance/sessions)
     participant Geo as GeofenceValidator
     participant AI as AI Face Service
-    participant DB as PostgreSQL Database
+    participant DB as MySQL Database
 
     Note over Faculty,UI: Session Initialization
     Faculty->>UI: Select Subject, Room, Division & Click "Start Session"
