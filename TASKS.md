@@ -59,7 +59,7 @@
 | **#16** | `database` | [[Admin & Notices] Database: User, Role, Classroom & Notice Broadcast Entities](https://github.com/vaishnavibodakhe/IntelliCampus/issues/16) | `@jgayatri664` | `database`, `member-3` | `backend/src/main/java/com/intellicampus/user/model/`, `.../notice/model/` | ✅ Closed ([PR #26](https://github.com/vaishnavibodakhe/IntelliCampus/pull/26)) |
 | **#17** | `validation` | [[Admin & Notices] Validation: CSV Batch Ingestion & Notice Audience Scope Validator](https://github.com/vaishnavibodakhe/IntelliCampus/issues/17) | `@jgayatri664` | `validation`, `member-3` | `backend/src/main/java/com/intellicampus/user/validation/`, `.../notice/validation/` | ✅ Closed ([PR #40](https://github.com/vaishnavibodakhe/IntelliCampus/pull/40)) |
 | **#18** | `testing` | [[Admin & Notices] Testing: User CRUD, CSV Bulk Ingestion & Notice Delivery Tests](https://github.com/vaishnavibodakhe/IntelliCampus/issues/18) | `@jgayatri664` | `testing`, `member-3` | `backend/src/test/java/com/intellicampus/user/`, `backend/src/test/java/com/intellicampus/notice/` | ✅ Closed ([PR #44](https://github.com/vaishnavibodakhe/IntelliCampus/pull/44)) |
-| **#19** | `documentation` | [[Admin & Notices] Documentation: Directory Administration & Notice Targeting Manual](https://github.com/vaishnavibodakhe/IntelliCampus/issues/19) | `@jgayatri664` | `documentation`, `member-3` | `docs/ADMIN_SETUP.md`, `README.md` | Open |
+| **#19** | `documentation` | [[Admin & Notices] Documentation: Directory Administration & Notice Targeting Manual](https://github.com/vaishnavibodakhe/IntelliCampus/issues/19) | `@jgayatri664` | `documentation`, `member-3` | `docs/ADMIN_SETUP.md`, `README.md` | ✅ Closed ([PR #48](https://github.com/vaishnavibodakhe/IntelliCampus/pull/48)) |
 
 ---
 
