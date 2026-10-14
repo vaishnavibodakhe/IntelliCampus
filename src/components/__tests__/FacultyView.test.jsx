@@ -26,18 +26,18 @@ describe('Smart Attendance - Dynamic QR Code Token Rotation', () => {
 
   it('should rotate token slot every 15 seconds', () => {
     const sessionId = 101;
-    const now = Date.now();
-    const currentSlot = Math.floor(now / 15000);
-
-    const tokenData = getRotatingQRToken(sessionId);
-    assert.strictEqual(tokenData.slot, currentSlot, 'Slot must match floor(epoch / 15000)');
-
-    // Simulate 16 seconds into the future
+    const baseTime = 1700000000000;
+    const baseSlot = Math.floor(baseTime / 15000);
     const originalNow = Date.now;
+
     try {
-      Date.now = () => now + 16000;
+      Date.now = () => baseTime;
+      const tokenData = getRotatingQRToken(sessionId);
+      assert.strictEqual(tokenData.slot, baseSlot, 'Slot must match floor(epoch / 15000)');
+
+      Date.now = () => baseTime + 15000;
       const nextTokenData = getRotatingQRToken(sessionId);
-      assert.strictEqual(nextTokenData.slot, currentSlot + 1, 'Slot must advance after 15+ seconds');
+      assert.strictEqual(nextTokenData.slot, baseSlot + 1, 'Slot must advance after 15 seconds');
       assert.notStrictEqual(nextTokenData.token, tokenData.token, 'Token hash must rotate when slot advances');
     } finally {
       Date.now = originalNow;
