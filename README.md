@@ -115,6 +115,30 @@ curl http://localhost:8080/api/notices/feed?userId=200
 
 ---
 
+## 🔒 Cryptographic Audit Ledger & Verifiable Credentials
+
+Full Specification: [**docs/SECURITY_AUDIT.md**](docs/SECURITY_AUDIT.md)
+
+### Key Features
+- **SHA-256 Chained Audit Ledger**: Canonical block hash linking ($entryHash = \text{SHA-256}(prevHash \mid \dots)$) detecting historical payload tampering down to a single modified character.
+- **Privacy-Preserving Verifiable Credentials**: Public verification via signed QR codes with automated student name masking (`A*** R*** M***`).
+- **Enforced Revocation Policy**: Mandatory $\ge 10$-character administrative justification recorded immutably on the audit chain.
+- **AI Early-Warning System (EWS)**: Machine learning heuristics computing multi-factor risk scores and extracting explainable factors.
+
+### Quick Start: Verifying Audit Chain & Credentials
+```bash
+# Verify cryptographic hash chain integrity
+curl http://localhost:8080/api/audit/chain/verify
+
+# Public document verification
+curl http://localhost:8080/api/credentials/public/DOC-2026-A1B2C3D4E5
+
+# Evaluate student retention risk via AI pipeline
+curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
+```
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Backend**: Java 17, Spring Boot 3.3.4, Spring Data JPA, Spring Security
