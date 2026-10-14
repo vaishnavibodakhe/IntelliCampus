@@ -6,9 +6,11 @@ import HodView from './components/HodView';
 import FacultyView from './components/FacultyView';
 import MentorView from './components/MentorView';
 import StudentView from './components/StudentView';
+import StudentAuthView from './components/StudentAuthView';
 import PublicVerifierView from './components/PublicVerifierView';
 import AuditChainModal from './components/AuditChainModal';
 import ChatbotDrawer from './components/ChatbotDrawer';
+import { getStoredStudentSession, clearStudentSession } from './utils/studentAuthService';
 
 import {
   INITIAL_USERS,
@@ -48,13 +50,28 @@ export default function App() {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
 
+  // Authenticated Student Session (stored in localStorage)
+  const [studentSession, setStudentSession] = useState(() => getStoredStudentSession());
+
   // Synchronize HTML Theme attribute
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Current active student (for Student Role simulation)
-  const currentStudent = users.find(u => u.userCode === 'student.aarav') || users[4];
+  // Current active student (from real authenticated session or seed data)
+  const currentStudent = studentSession?.user ? {
+    id: studentSession.user.id,
+    userCode: studentSession.user.userCode,
+    name: studentSession.user.name,
+    email: studentSession.user.email,
+    role: 'STUDENT',
+    rollNo: studentSession.user.rollNo,
+    department: studentSession.user.department,
+    division: studentSession.user.division || `Year ${studentSession.user.year || 3} Div A`,
+    year: `Year ${studentSession.user.year || 3}`,
+    status: 'ACTIVE',
+    attendanceRate: 85.0
+  } : (users.find(u => u.userCode === 'student.aarav') || users[4]);
 
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
@@ -159,9 +176,21 @@ export default function App() {
           />
         )}
 
-        {currentRole === 'STUDENT' && (
+        {currentRole === 'STUDENT' && !studentSession && (
+          <StudentAuthView 
+            onAuthSuccess={(session) => {
+              setStudentSession(session);
+            }}
+          />
+        )}
+
+        {currentRole === 'STUDENT' && studentSession && (
           <StudentView 
             currentUser={currentStudent}
+            onLogout={() => {
+              clearStudentSession();
+              setStudentSession(null);
+            }}
             activeSession={activeSession}
             sessions={sessions}
             setSessions={setSessions}

@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface StudentProfileRepository extends JpaRepository<StudentProfile, Long> {
     Optional<StudentProfile> findByUser(User user);
     Optional<StudentProfile> findByRollNo(String rollNo);
+    boolean existsByRollNo(String rollNo);
     List<StudentProfile> findByMentor(User mentor);
     List<StudentProfile> findByDivisionId(Long divisionId);
 }

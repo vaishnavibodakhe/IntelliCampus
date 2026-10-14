@@ -30,7 +30,8 @@ export default function StudentView({
   notices,
   issuedDocuments,
   onOpenChat,
-  onAddAuditLog
+  onAddAuditLog,
+  onLogout
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
   
@@ -313,8 +314,26 @@ export default function StudentView({
             Monitor attendance metrics, confirm classroom presence, verify grades, track leaves, and consult the document-grounded chatbot.
           </p>
         </div>
-        <div className="header-meta-badge">
-          <span className="dot online" /> {currentUser.name} ({currentUser.rollNo}) • {currentUser.division}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <div className="header-meta-badge">
+            <span className="dot online" /> {currentUser.name} ({currentUser.rollNo || currentUser.userCode}) • {currentUser.division || currentUser.department || 'General'}
+          </div>
+          {onLogout && (
+            <button 
+              type="button"
+              onClick={onLogout}
+              className="btn-secondary"
+              style={{
+                padding: '0.4rem 0.85rem',
+                fontSize: '0.8rem',
+                borderRadius: '0.5rem',
+                cursor: 'pointer'
+              }}
+              title="Sign out of student account"
+            >
+              Sign Out
+            </button>
+          )}
         </div>
       </div>
 
@@ -324,7 +343,7 @@ export default function StudentView({
           onClick={() => setActiveTab('dashboard')} 
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
         >
-          <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate}%)
+          <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate !== undefined ? currentUser.attendanceRate : 0}%)
         </button>
         <button 
           onClick={() => setActiveTab('marks')} 
