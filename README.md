@@ -48,6 +48,43 @@ curl http://localhost:8080/api/attendance/sessions/100/token
 
 ---
 
+## 📚 Academic Grading & Multi-Tier Leave Workflow
+
+Full Specification: [**docs/ACADEMICS_AND_LEAVES.md**](docs/ACADEMICS_AND_LEAVES.md)
+
+### Key Features
+- **Marks Lifecycle Isolation**: Enforces `DRAFT` status for in-progress grading (hidden from student profiles) until published by faculty.
+- **HOD Grade Correction Sign-Off**: Mandatory $\ge 15$-character justification for mark changes, recording every approval or rejection on the SHA-256 chained audit ledger.
+- **Multi-Stage Leave Approval**: Structured state machine: `Student Application` $\rightarrow$ `Mentor Recommendation` $\rightarrow$ `HOD Final Approval`.
+- **Medical Certification Policy**: Mandatory certificate upload for absences longer than 2 days.
+
+### Quick Start: Submitting a Leave Application
+```bash
+# Student submits leave request
+curl -X POST http://localhost:8080/api/leave/requests \
+  -H "Content-Type: application/json" \
+  -d '{
+    "studentId": 10,
+    "fromDate": "2026-10-20",
+    "toDate": "2026-10-23",
+    "reason": "Recovery from seasonal viral fever",
+    "attachmentName": "medical_certificate.pdf",
+    "attachmentUrl": "https://storage.intellicampus.edu/med/cert_10.pdf"
+  }'
+
+# Mentor recommends leave
+curl -X PUT http://localhost:8080/api/leave/requests/501/mentor-review \
+  -H "Content-Type: application/json" \
+  -d '{
+    "approved": true,
+    "approverId": 2,
+    "status": "RECOMMENDED",
+    "comment": "Doctor certificate verified."
+  }'
+```
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Backend**: Java 17, Spring Boot 3.3.4, Spring Data JPA, Spring Security
