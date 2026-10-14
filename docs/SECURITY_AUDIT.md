@@ -99,7 +99,7 @@ sequenceDiagram
     actor Verifier as Employer / Verifier
     participant Scanner as QR Code / Browser
     participant API as Public Verification API (/api/credentials/public/{code})
-    participant DB as PostgreSQL Document Registry
+    participant DB as MySQL Document Registry
 
     Verifier->>Scanner: Scans QR Code on Document / Enters Document Code
     Scanner->>API: GET /api/credentials/public/DOC-2026-A1B2C3

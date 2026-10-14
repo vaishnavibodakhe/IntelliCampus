@@ -142,7 +142,7 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 ## 🛠️ Technology Stack
 
 - **Backend**: Java 17, Spring Boot 3.3.4, Spring Data JPA, Spring Security
-- **Database**: PostgreSQL 16 with pgvector extension
+- **Database**: MySQL 8 with Flyway migrations
 - **Frontend**: React 19, Vite, Vanilla CSS, Lucide Icons
 - **AI Microservice**: Python, FastAPI, Scikit-Learn
 - **Containerization**: Docker, Docker Compose

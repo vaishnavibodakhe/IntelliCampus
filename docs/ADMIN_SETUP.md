@@ -40,7 +40,7 @@ STU-005,Vikram Ashok Shinde,vikram.shinde@intellicampus.edu,Mechanical Engineeri
 
 ### 2.3. Malformed Row Isolation & Error Reporting
 Under the IntelliCampus fault-tolerant ingestion protocol (TC-09), a single malformed row does **not** fail the entire batch. Instead:
-- Valid rows are committed into PostgreSQL.
+- Valid rows are committed into MySQL.
 - Invalid rows (e.g. malformed email address, duplicate email within file or database, missing required column) are isolated into a detailed error report specifying the exact CSV line number:
 
 ```json
