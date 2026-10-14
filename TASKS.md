@@ -11,10 +11,10 @@
 
 | Member | Role | GitHub Username | Label | Module Assigned | Real Issue Range | Issue Count | Status |
 | :--- | :--- | :--- | :--- | :--- | :---: | :---: | :---: |
-| **Bhumika Khairnar** | Team Leader | `@khairnarbhumika34-ship-it` | `member-1` | Smart Attendance & Multimodal Verification | #2 – #7 | 6 | Open |
-| **Siddhi Kolage** | Developer | `@siddhi1111111` | `member-2` | Academic Grading & Multi-Tier Leave Workflow | #8 – #13 | 6 | Open |
-| **Gayatri Jadhav** | Developer | `@jgayatri664` | `member-3` | User Administration, Academic Setup & Campus Notices | #14 – #19 | 6 | Open |
-| **Vaishnavi Bodakhe** | Repo Owner | `@vaishnavibodakhe` | `member-4` | Verifiable Credentials, Cryptographic Audit & AI Analytics | #20 – #25 | 6 | Open |
+| **Bhumika Khairnar** | Team Leader | `@khairnarbhumika34-ship-it` | `member-1` | Smart Attendance & Multimodal Verification | #2 – #7 | 6 | ✅ Closed (6/6) |
+| **Siddhi Kolage** | Developer | `@siddhi1111111` | `member-2` | Academic Grading & Multi-Tier Leave Workflow | #8 – #13 | 6 | ✅ Closed (6/6) |
+| **Gayatri Jadhav** | Developer | `@jgayatri664` | `member-3` | User Administration, Academic Setup & Campus Notices | #14 – #19 | 6 | ✅ Closed (6/6) |
+| **Vaishnavi Bodakhe** | Repo Owner | `@vaishnavibodakhe` | `member-4` | Verifiable Credentials, Cryptographic Audit & AI Analytics | #20 – #25 | 6 | ✅ Closed (6/6) |
 
 ---
 
@@ -73,7 +73,7 @@
 | **#22** | `database` | [[Audit & Trust] Database: AuditLogEntry, VerifiableDocument & RiskRecord Entities](https://github.com/vaishnavibodakhe/IntelliCampus/issues/22) | `@vaishnavibodakhe` | `database`, `member-4` | `backend/src/main/java/com/intellicampus/audit/model/`, `.../credential/model/` | ✅ Closed ([PR #29](https://github.com/vaishnavibodakhe/IntelliCampus/pull/29)) |
 | **#23** | `validation` | [[Audit & Trust] Validation: SHA-256 Hash Chain Integrity & Document Tamper Check](https://github.com/vaishnavibodakhe/IntelliCampus/issues/23) | `@vaishnavibodakhe` | `validation`, `member-4` | `src/utils/cryptoAndGeo.js`, `backend/src/main/java/com/intellicampus/audit/validation/` | ✅ Closed ([PR #41](https://github.com/vaishnavibodakhe/IntelliCampus/pull/41)) |
 | **#24** | `testing` | [[Audit & Trust] Testing: Tamper Detection & Document Verification Test Suite](https://github.com/vaishnavibodakhe/IntelliCampus/issues/24) | `@vaishnavibodakhe` | `testing`, `member-4` | `backend/src/test/java/com/intellicampus/audit/`, `src/utils/__tests__/cryptoAndGeo.test.js` | ✅ Closed ([PR #45](https://github.com/vaishnavibodakhe/IntelliCampus/pull/45)) |
-| **#25** | `documentation` | [[Audit & Trust] Documentation: Cryptographic Audit Specification & Credential Guide](https://github.com/vaishnavibodakhe/IntelliCampus/issues/25) | `@vaishnavibodakhe` | `documentation`, `member-4` | `docs/SECURITY_AUDIT.md`, `README.md` | Open |
+| **#25** | `documentation` | [[Audit & Trust] Documentation: Cryptographic Audit Specification & Credential Guide](https://github.com/vaishnavibodakhe/IntelliCampus/issues/25) | `@vaishnavibodakhe` | `documentation`, `member-4` | `docs/SECURITY_AUDIT.md`, `README.md` | ✅ Closed ([PR #49](https://github.com/vaishnavibodakhe/IntelliCampus/pull/49)) |
 
 ---
 
