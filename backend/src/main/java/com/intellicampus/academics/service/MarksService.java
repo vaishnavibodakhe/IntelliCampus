@@ -14,6 +14,7 @@ import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
+import com.intellicampus.audit.service.AuditChainService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,19 +32,22 @@ public class MarksService {
     private final SubjectRepository subjectRepository;
     private final UserRepository userRepository;
     private final MarkRangeValidator markRangeValidator;
+    private final AuditChainService auditChainService;
 
     public MarksService(MarkEntryRepository markEntryRepository,
                         MarkCorrectionRequestRepository correctionRepository,
                         StudentProfileRepository studentProfileRepository,
                         SubjectRepository subjectRepository,
                         UserRepository userRepository,
-                        MarkRangeValidator markRangeValidator) {
+                        MarkRangeValidator markRangeValidator,
+                        AuditChainService auditChainService) {
         this.markEntryRepository = markEntryRepository;
         this.correctionRepository = correctionRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.subjectRepository = subjectRepository;
         this.userRepository = userRepository;
         this.markRangeValidator = markRangeValidator;
+        this.auditChainService = auditChainService;
     }
 
     public MarkResponseDto saveOrUpdateMark(SaveMarkRequestDto req) {
@@ -135,10 +139,39 @@ public class MarksService {
             correction.setStatus(CorrectionStatus.APPROVED);
             // Apply new marks to the target MarkEntry record
             MarkEntry mark = correction.getMarkEntry();
+            Double oldVal = mark.getMarks();
             mark.setMarks(correction.getNewMarks());
             markEntryRepository.save(mark);
+
+            // Record HOD approval on cryptographic audit chain
+            if (auditChainService != null) {
+                String hodName = (correction.getHod() != null) ? correction.getHod().getName() : "HOD";
+                auditChainService.recordEntry(
+                        decision.getHodId() != null ? decision.getHodId() : 1L,
+                        hodName,
+                        "MARK_CORRECTION_APPROVED",
+                        "MARK",
+                        String.valueOf(mark.getId()),
+                        String.format("{\"marks\":%.1f}", oldVal),
+                        String.format("{\"marks\":%.1f}", correction.getNewMarks()),
+                        "HOD approved mark correction: " + (decision.getComment() != null ? decision.getComment() : correction.getReason())
+                );
+            }
         } else {
             correction.setStatus(CorrectionStatus.REJECTED);
+            if (auditChainService != null) {
+                String hodName = (correction.getHod() != null) ? correction.getHod().getName() : "HOD";
+                auditChainService.recordEntry(
+                        decision.getHodId() != null ? decision.getHodId() : 1L,
+                        hodName,
+                        "MARK_CORRECTION_REJECTED",
+                        "MARK",
+                        String.valueOf(correction.getMarkEntry().getId()),
+                        String.format("{\"marks\":%.1f}", correction.getOldMarks()),
+                        String.format("{\"marks\":%.1f}", correction.getOldMarks()),
+                        "HOD rejected mark correction: " + (decision.getComment() != null ? decision.getComment() : "Rejected")
+                );
+            }
         }
 
         MarkCorrectionRequest saved = correctionRepository.save(correction);
