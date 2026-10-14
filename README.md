@@ -85,6 +85,36 @@ curl -X PUT http://localhost:8080/api/leave/requests/501/mentor-review \
 
 ---
 
+## 📢 User Administration, Academic Setup & Campus Notices
+
+Full Specification: [**docs/ADMIN_SETUP.md**](docs/ADMIN_SETUP.md)
+
+### Key Features
+- **Fault-Tolerant Bulk CSV Ingestion**: High-throughput student roster processing that isolates malformed records with line numbers while importing valid rows.
+- **Classroom GPS Geofencing Administration**: High-precision facility coordinate configuration with configurable perimeter boundaries.
+- **Hierarchical Notice Targeting**: Notice broadcasts filtered across `Department` $\times$ `Academic Year` $\times$ `Division` dimensions.
+- **Auditable Read Receipts**: Real-time readership tracking and duplicate view prevention.
+
+### Quick Start: Publishing a Targeted Notice
+```bash
+# Publish targeted notice for Computer Science Year 3
+curl -X POST http://localhost:8080/api/notices \
+  -H "Content-Type: application/json" \
+  -d '{
+    "title": "TE Computer Science Mini Project Synopsis Deadline",
+    "body": "Submission portal closes Friday at 5:00 PM.",
+    "targetDepartment": "Computer Science",
+    "targetYear": "Year 3",
+    "targetDivision": "All Divisions",
+    "publisherRole": "HOD Office"
+  }'
+
+# Fetch student personalized notice feed
+curl http://localhost:8080/api/notices/feed?userId=200
+```
+
+---
+
 ## 🛠️ Technology Stack
 
 - **Backend**: Java 17, Spring Boot 3.3.4, Spring Data JPA, Spring Security
