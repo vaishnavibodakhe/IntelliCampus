@@ -409,11 +409,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       entityId: String(doc.id),
       oldValue: '{}',
       newValue: JSON.stringify({ title: doc.title, chunks: doc.chunksIndexed }),
-      reason: `Document vectorized and chunked into pgvector embedding table (BOT-01)`
+      reason: `Document vectorized and chunked into embedding table (BOT-01)`
     });
 
     setNewKnowledgeTitle('');
-    alert('Document parsed, chunked, and indexed into pgvector for Chatbot answers.');
+    alert('Document parsed, chunked, and indexed for Chatbot answers.');
   };
 
   const filteredUsers = users.filter(u => {
@@ -863,7 +863,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Ingest Knowledge Document</h3>
               <p className="card-desc">
-                Upload official circulars, syllabi, or exam ordinances. Document is split into 500-token chunks and vectorized into `pgvector` (`BOT-01`).
+                Upload official circulars, syllabi, or exam ordinances. Document is split into 500-token chunks and vectorized for semantic search (`BOT-01`).
               </p>
               
               <form onSubmit={handleAddKnowledgeDoc} className="form-stack">
@@ -880,7 +880,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <div className="dropzone-box">
                   <Upload size={28} className="text-primary" />
                   <p className="dropzone-text">Click or drag official PDF circular here (Max: 20 MB)</p>
-                  <span className="dropzone-sub">PDF text extraction + pgvector indexing automated</span>
+                  <span className="dropzone-sub">PDF text extraction + vector indexing automated</span>
                 </div>
                 <button type="submit" className="btn-primary w-full">
                   <BrainCircuit size={16} /> Process & Vectorize Document
