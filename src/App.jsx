@@ -9,6 +9,8 @@ import StudentView from './components/StudentView';
 import PublicVerifierView from './components/PublicVerifierView';
 import AuditChainModal from './components/AuditChainModal';
 import ChatbotDrawer from './components/ChatbotDrawer';
+import StudentLogin from './components/StudentLogin';
+import StudentRegister from './components/StudentRegister';
 
 import {
   INITIAL_USERS,
@@ -25,10 +27,16 @@ import {
   INITIAL_RISK_STUDENTS
 } from './data/mockData';
 import { computeAuditEntryHash } from './utils/cryptoAndGeo';
+import { api, getStoredUser, clearAuthSession } from './api/client';
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState('FACULTY');
   const [theme, setTheme] = useState('dark');
+
+  // Authentication State (JWT & User Session)
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => getStoredUser());
+  const [authMode, setAuthMode] = useState('NONE'); // 'NONE' | 'LOGIN' | 'REGISTER'
+  const [authNotification, setAuthNotification] = useState(null);
 
   // Application Data Stores
   const [users, setUsers] = useState(INITIAL_USERS);
@@ -54,7 +62,9 @@ export default function App() {
   }, [theme]);
 
   // Current active student (for Student Role simulation)
-  const currentStudent = users.find(u => u.userCode === 'student.aarav') || users[4];
+  const currentStudent = (authenticatedUser && authenticatedUser.role === 'STUDENT')
+    ? (users.find(u => u.id === authenticatedUser.id || u.email === authenticatedUser.email) || authenticatedUser)
+    : (users.find(u => u.userCode === 'student.aarav') || users[4]);
 
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
@@ -86,6 +96,87 @@ export default function App() {
     setAuditLogs(prev => [...prev, completedBlock]);
   };
 
+  // Auth Lifecycle Handlers
+  const handleLoginSuccess = (authData) => {
+    if (authData && authData.user) {
+      setAuthenticatedUser(authData.user);
+      setAuthMode('NONE');
+      setCurrentRole(authData.user.role || 'STUDENT');
+      setAuthNotification({ type: 'success', message: `Welcome back, ${authData.user.name}!` });
+      setTimeout(() => setAuthNotification(null), 4000);
+
+      handleAddAuditLog({
+        action: 'STUDENT_LOGIN',
+        entityType: 'USER',
+        entityId: String(authData.user.id),
+        oldValue: '{}',
+        newValue: JSON.stringify({ email: authData.user.email, role: authData.user.role }),
+        reason: `Student ${authData.user.name} signed in successfully via JWT token`
+      });
+    }
+  };
+
+  const handleRegisterSuccess = (authData) => {
+    if (authData && authData.user) {
+      const newUser = {
+        id: authData.user.id || (users.length + 1),
+        userCode: authData.user.userCode,
+        name: authData.user.name,
+        email: authData.user.email,
+        role: 'STUDENT',
+        department: authData.user.department || 'Computer Science',
+        status: 'ACTIVE',
+        rollNo: authData.student?.rollNo || 'CS-NEW',
+        division: authData.student?.division || 'Div A',
+        year: authData.student?.year || 'Year 3',
+        attendanceRate: 0.0,
+        faceEnrolled: false
+      };
+
+      setUsers(prev => [...prev, newUser]);
+      setAuthenticatedUser(newUser);
+      setAuthMode('NONE');
+      setCurrentRole('STUDENT');
+      setAuthNotification({ type: 'success', message: `Registration complete! Welcome, ${newUser.name}.` });
+      setTimeout(() => setAuthNotification(null), 5000);
+
+      handleAddAuditLog({
+        action: 'STUDENT_REGISTRATION',
+        entityType: 'USER',
+        entityId: String(newUser.id),
+        oldValue: '{}',
+        newValue: JSON.stringify({ email: newUser.email, rollNo: newUser.rollNo }),
+        reason: `Student registered with DPDP Act 2023 biometric consent`
+      });
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.warn('Logout API call:', err);
+    } finally {
+      clearAuthSession();
+      const prevUser = authenticatedUser;
+      setAuthenticatedUser(null);
+      setAuthMode('LOGIN');
+      setAuthNotification({ type: 'info', message: 'You have been securely signed out. Session token invalidated.' });
+      setTimeout(() => setAuthNotification(null), 4000);
+
+      if (prevUser) {
+        handleAddAuditLog({
+          action: 'USER_LOGOUT',
+          entityType: 'USER',
+          entityId: String(prevUser.id),
+          oldValue: JSON.stringify({ email: prevUser.email }),
+          newValue: '{}',
+          reason: `Student ${prevUser.name} logged out; session token revoked and denylisted`
+        });
+      }
+    }
+  };
+
   return (
     <div className="app-wrapper">
       {/* Global Navigation Header */}
@@ -98,7 +189,39 @@ export default function App() {
         onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
         notificationCount={notices.length}
+        authenticatedUser={authenticatedUser}
+        onLogout={handleLogout}
+        onOpenAuth={() => setAuthMode('LOGIN')}
       />
+
+      {/* Global Auth Status Notification Toast */}
+      {authNotification && (
+        <div style={{
+          position: 'fixed',
+          top: '75px',
+          right: '25px',
+          zIndex: 9999,
+          background: authNotification.type === 'success' ? '#065f46' : '#1e3a8a',
+          color: '#ffffff',
+          padding: '10px 18px',
+          borderRadius: '8px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          fontSize: '0.9rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <span>{authNotification.message}</span>
+          <button 
+            onClick={() => setAuthNotification(null)}
+            style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Role-Based Workflow Viewport */}
       <main className="main-viewport">
@@ -197,6 +320,73 @@ export default function App() {
         onClose={() => setIsChatbotOpen(false)}
         knowledgeDocs={knowledgeDocs}
       />
+
+      {/* Student Authentication Modal (Registration, Login & Session) */}
+      {authMode !== 'NONE' && (
+        <div 
+          className="modal-backdrop" 
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.75)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 1000,
+            overflowY: 'auto',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            padding: '2rem 1rem'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setAuthMode('NONE');
+            }
+          }}
+        >
+          <div style={{ position: 'relative', width: '100%', maxWidth: '760px' }}>
+            <button
+              onClick={() => setAuthMode('NONE')}
+              style={{
+                position: 'absolute',
+                top: '12px',
+                right: '12px',
+                background: 'rgba(255, 255, 255, 0.1)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '32px',
+                height: '32px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ffffff',
+                cursor: 'pointer',
+                zIndex: 10,
+                fontSize: '1.1rem'
+              }}
+              title="Close Authentication Dialog"
+            >
+              ✕
+            </button>
+
+            {authMode === 'LOGIN' && (
+              <StudentLogin 
+                onSwitchToRegister={() => setAuthMode('REGISTER')}
+                onLoginSuccess={handleLoginSuccess}
+              />
+            )}
+
+            {authMode === 'REGISTER' && (
+              <StudentRegister 
+                onSwitchToLogin={() => setAuthMode('LOGIN')}
+                onRegisterSuccess={handleRegisterSuccess}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
