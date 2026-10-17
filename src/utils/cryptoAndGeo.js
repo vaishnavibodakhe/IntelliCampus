@@ -106,23 +106,6 @@ export async function verifyAuditChainIntegrity(auditLogs) {
 }
 
 /**
- * Generates dynamic 15-second rotating QR token
- * slot = floor(epoch / 15)
- * token = base64url(HMAC-SHA256(secret, sessionId + ":" + slot))[0..16]
- * IC-SRS-1.0 Section 8.6
- */
-export function getRotatingQRToken(sessionId) {
-  const slot = Math.floor(Date.now() / 15000);
-  const secondsLeft = 15 - (Math.floor(Date.now() / 1000) % 15);
-  const mockToken = quickHash(`secret_key:${sessionId}:${slot}`).slice(0, 16).toUpperCase();
-  return {
-    slot,
-    token: `IC-${mockToken}`,
-    secondsLeft
-  };
-}
-
-/**
  * Validates whether student GPS position is within classroom boundary.
  * IC-SRS-1.0 Section 8.2 & Test Case TC-02
  * Rejects if accuracy > 100m or distance > maxRadiusM.

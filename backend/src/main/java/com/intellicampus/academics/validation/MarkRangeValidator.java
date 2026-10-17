@@ -56,8 +56,31 @@ public class MarkRangeValidator {
     /**
      * Validates full proposed mark correction request.
      */
+    public void validateMarks(Double marks, Double maxMarks) {
+        if (maxMarks == null || maxMarks <= 0) {
+            throw new IllegalArgumentException("Maximum marks must be a positive number.");
+        }
+        if (marks == null) {
+            throw new IllegalArgumentException("Marks value is mandatory.");
+        }
+        if (marks < 0) {
+            throw new IllegalArgumentException("Marks cannot be negative. Provided: " + marks);
+        }
+        if (marks > maxMarks) {
+            throw new IllegalArgumentException(
+                    String.format("Marks (%s) exceed maximum score boundary of %s.", marks, maxMarks)
+            );
+        }
+    }
+
+    public void validateCorrection(Double proposedMarks, Double maxMarks, String reason) {
+        validateMarks(proposedMarks, maxMarks);
+        validateCorrectionReason(reason);
+    }
+
     public void validateCorrection(Integer proposedMarks, Integer maxMarks, String reason) {
         validateMarks(proposedMarks, maxMarks);
         validateCorrectionReason(reason);
     }
 }
+

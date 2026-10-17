@@ -40,7 +40,8 @@ public class AuditChainService {
                                                   String oldValue,
                                                   String newValue,
                                                   String reason) {
-        String prevHash = auditRepository.findLatestEntry()
+        String prevHash = auditRepository.findTopByOrderByCreatedAtDesc()
+                .or(() -> auditRepository.findLatestEntry())
                 .map(AuditLogEntry::getEntryHash)
                 .orElse(GENESIS_PREV_HASH);
 
@@ -78,7 +79,10 @@ public class AuditChainService {
 
     @Transactional(readOnly = true)
     public AuditVerificationResponseDto verifyChain() {
-        List<AuditLogEntry> entries = auditRepository.findAllByOrderByIdAsc();
+        List<AuditLogEntry> entries = auditRepository.findAllByOrderByCreatedAtAsc();
+        if (entries == null || entries.isEmpty()) {
+            entries = auditRepository.findAllByOrderByIdAsc();
+        }
         if (entries.isEmpty()) {
             return AuditVerificationResponseDto.valid(0, GENESIS_PREV_HASH);
         }

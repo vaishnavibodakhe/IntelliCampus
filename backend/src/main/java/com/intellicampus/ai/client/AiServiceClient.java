@@ -79,8 +79,9 @@ public class AiServiceClient {
             double dropPenalty = Math.max(0.0, -attDelta / 50.0) * 0.25;
             double marksPenalty = Math.max(0.0, (50.0 - marksRate) / 50.0) * 0.2;
             double backlogPenalty = Math.min(0.3, backlogs * 0.1);
+            double leavePenalty = leaveDays > 4 ? 0.15 : 0.0;
 
-            double rawScore = attPenalty + dropPenalty + marksPenalty + backlogPenalty;
+            double rawScore = attPenalty + dropPenalty + marksPenalty + backlogPenalty + leavePenalty;
             double riskScore = Math.min(0.99, Math.max(0.05, Math.round(rawScore * 100.0) / 100.0));
 
             String level;

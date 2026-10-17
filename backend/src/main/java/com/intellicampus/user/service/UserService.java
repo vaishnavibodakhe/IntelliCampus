@@ -87,9 +87,10 @@ public class UserService {
 
         if (req.getRole() == Role.STUDENT && req.getRollNo() != null) {
             Division div = null;
-            if (dept != null && req.getDivision() != null) {
+            final Department targetDept = dept;
+            if (targetDept != null && req.getDivision() != null) {
                 div = divisionRepository.findByNameAndDepartmentId(req.getDivision(), dept.getId())
-                        .orElseGet(() -> divisionRepository.save(new Division(dept, 3, req.getDivision())));
+                        .orElseGet(() -> divisionRepository.save(new Division(targetDept, 3, req.getDivision())));
             }
             StudentProfile profile = new StudentProfile(savedUser, req.getRollNo(), div, null);
             studentProfileRepository.save(profile);
@@ -136,8 +137,10 @@ public class UserService {
                 dto.setDivision(p.getDivision() != null ? p.getDivision().getName() : null);
                 dto.setAttendanceRate(p.getAttendanceRate());
                 dto.setFeeStatus(p.getFeeStatus());
+                dto.setFaceEnrolled(Boolean.TRUE.equals(p.getFaceEnrolled()));
             });
         }
         return dto;
     }
 }
+

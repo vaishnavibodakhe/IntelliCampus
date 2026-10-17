@@ -57,6 +57,10 @@ public class User {
 
     public User() {}
 
+    public User(String name, String email, String passwordHash, Role role, String userCode) {
+        this(userCode, role, name, email, passwordHash, null);
+    }
+
     public User(String userCode, Role role, String name, String email, String passwordHash, Department department) {
         this.userCode = userCode;
         this.role = role;
@@ -115,3 +119,4 @@ public class User {
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
+
