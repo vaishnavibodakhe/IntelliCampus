@@ -106,140 +106,120 @@ This specification documents the complete REST API interface implemented across 
 
 ---
 
-## 📸 3. Biometrics & Attendance Pipeline Endpoints
+## 📸 3. Biometrics & Face Recognition Attendance Pipeline Endpoints
 
 ### 3.1 Face Enrollment (Explicit Student Consent)
-- **Endpoint**: `POST /api/students/{id}/face`
+- **Endpoint**: `POST /api/students/{studentId}/face-enroll`
 - **Access**: Student (Self) or Admin
 - **Request**: `multipart/form-data`
-  - `frontImage`: image file
-  - `leftImage`: image file
-  - `rightImage`: image file
-  - `consent`: `true`
-  - `consentVersion`: `"v1.0-DPDP-2026"`
-- **Response** (`201 Created`):
+  - `photo`: single front face image file (JPEG or PNG, $\le 15\text{MB}$)
+  - `consentVersion`: `"1.0"` (DPDP Act 2023 biometric consent)
+- **Response** (`200 OK`):
   ```json
   {
-    "studentId": 1042,
-    "enrolled": true,
-    "consentAt": "2026-10-08T09:30:12Z"
+    "id": 1042,
+    "userCode": "STU_CS_1042",
+    "name": "Aarav Mehta",
+    "rollNo": "2024-CS-042",
+    "faceEnrolled": true,
+    "facePhotoPath": "/uploads/student-faces/student_1042.jpg",
+    "consentAt": "2026-10-08T09:30:12Z",
+    "consentVersion": "1.0"
   }
   ```
-- **Error Codes**: `400 NO_CONSENT`, `400 NO_FACE_DETECTED`
+- **Error Codes**: `400 BAD_REQUEST` (0 faces detected, multiple faces, blurry face, or invalid file type).
 
-### 3.2 Start Classroom Attendance Session
-- **Endpoint**: `POST /api/sessions/start`
+### 3.2 Download Student Face Photo
+- **Endpoint**: `GET /api/students/{studentId}/face-photo`
+- **Access**: Admin or HOD Only
+- **Query Parameter**: `requesterId` (User ID)
+- **Response** (`200 OK`): Image binary stream (`image/jpeg` or `image/png`)
+- **Error Codes**: `403 FORBIDDEN` (Requester is not ADMIN or HOD), `404 NOT_FOUND` (No enrolled photo).
+
+### 3.3 Start Classroom Attendance Session
+- **Endpoint**: `POST /api/attendance/sessions`
 - **Access**: Faculty
 - **Request**:
   ```json
   {
+    "facultyId": 1,
     "subjectId": 12,
     "divisionId": 4,
-    "roomId": 7
+    "roomId": 7,
+    "challengeCode": "K7Q2",
+    "photoWindowMinutes": 10
   }
   ```
 - **Response** (`201 Created`):
   ```json
   {
-    "sessionId": 51,
+    "id": 51,
     "challengeCode": "K7Q2",
+    "status": "OPEN",
     "photoWindowEndsAt": "2026-10-08T09:40:00Z"
   }
   ```
 - **Error Codes**: `409 ACTIVE_SESSION_EXISTS`
 
-### 3.3 Upload Classroom Snapshot
-- **Endpoint**: `POST /api/sessions/{id}/photo`
-- **Access**: Faculty
+### 3.4 Upload Classroom Multi-Face Photograph
+- **Endpoint**: `POST /api/attendance/sessions/{id}/photo`
+- **Access**: Faculty (up to 5 photos per open session)
 - **Request**: `multipart/form-data`
-  - `image`: image file
-  - `lat`: `18.5204`
-  - `lng`: `73.8567`
-  - `accuracy`: `12.5`
-- **Response** (`202 Accepted`):
-  ```json
-  {
-    "status": "PROCESSING",
-    "message": "Photo accepted for facial recognition & anti-spoofing analysis"
-  }
-  ```
-- **Error Codes**: `410 WINDOW_CLOSED`, `422 OUTSIDE_GEOFENCE`, `422 DUPLICATE_PHOTO`, `422 NEAR_DUPLICATE_PHOTO`
-
-### 3.4 Query Session Match Results
-- **Endpoint**: `GET /api/sessions/{id}/result`
-- **Access**: Faculty
+  - `photo`: image file (JPEG/PNG)
+  - `latitude`: `18.5204`
+  - `longitude`: `73.8567`
+  - `accuracyM`: `12.5`
 - **Response** (`200 OK`):
   ```json
   {
     "sessionId": 51,
-    "status": "REVIEW",
-    "confirmed": [{ "studentId": 101, "name": "Alice Smith", "score": 0.94 }],
-    "matchedUnconfirmed": [{ "studentId": 102, "name": "Bob Jones", "score": 0.88 }],
-    "review": [{ "studentId": 103, "name": "Charlie Brown", "reason": "LOW_SPOOF_SCORE" }],
-    "absent": [{ "studentId": 104, "name": "Diana Prince" }]
+    "photoId": 1,
+    "photoIndex": 1,
+    "totalPhotos": 1,
+    "facesDetected": 24,
+    "studentsMatched": 21,
+    "studentsInReview": 2,
+    "unmatchedFaceCount": 1,
+    "message": "Classroom photo processed: 24 faces detected, 21 matched, 2 in review."
   }
   ```
+- **Error Codes**: `400 BAD_REQUEST` (Window closed, maximum 5 photos exceeded, or duplicate photo hash).
 
-### 3.5 Student 2-Minute Confirmation
-- **Endpoint**: `POST /api/attendance/{sessionId}/confirm`
-- **Access**: Student
-- **Request**:
-  ```json
-  {
-    "lat": 18.5204,
-    "lng": 73.8567,
-    "accuracy": 15.0,
-    "deviceId": "dev_fp_9a8b7c6d5e4f"
-  }
-  ```
+### 3.5 Query Session Details & Roster
+- **Endpoint**: `GET /api/attendance/sessions/{id}`
+- **Access**: Faculty / Student (read own status)
 - **Response** (`200 OK`):
   ```json
   {
-    "confirmed": true,
-    "status": "PRESENT"
+    "id": 51,
+    "status": "OPEN",
+    "totalPresent": 21,
+    "totalReview": 2,
+    "totalAbsent": 3,
+    "records": [
+      { "studentId": 101, "studentName": "Aarav Mehta", "faceScore": 0.92, "finalStatus": "PRESENT" },
+      { "studentId": 102, "studentName": "Rohan Patel", "faceScore": 0.38, "finalStatus": "REVIEW" }
+    ]
   }
   ```
-- **Error Codes**: `403 DEVICE_NOT_APPROVED`, `410 WINDOW_CLOSED`, `422 OUTSIDE_GEOFENCE`
 
-### 3.6 Rotating Dynamic QR Attendance Fallback
-- **Endpoint**: `POST /api/attendance/{sessionId}/qr`
-- **Access**: Student
-- **Request**:
-  ```json
-  {
-    "qrToken": "K7Q2-hmac-98124b",
-    "lat": 18.5204,
-    "lng": 73.8567,
-    "deviceId": "dev_fp_9a8b7c6d5e4f"
-  }
-  ```
-- **Response** (`200 OK`):
-  ```json
-  {
-    "status": "PRESENT_QR"
-  }
-  ```
-- **Error Codes**: `410 EXPIRED_QR_TOKEN`
+### 3.6 Finalise & Lock Attendance Session
+- **Endpoint**: `PUT /api/attendance/sessions/{id}/status?status=FINALISED`
+- **Access**: Faculty
+- **Behavior**: Transitions session to `FINALISED` and marks all unresolved records as `ABSENT`.
+- **Response** (`200 OK`): `SessionResponseDto`
 
 ### 3.7 Manual Faculty Attendance Override
-- **Endpoint**: `POST /api/attendance/{sessionId}/override`
+- **Endpoint**: `PUT /api/attendance/sessions/{id}/records/{studentId}/override`
 - **Access**: Faculty
 - **Request**:
   ```json
   {
-    "studentId": 103,
-    "newStatus": "PRESENT",
+    "status": "PRESENT",
     "reason": "Camera missed student sitting in shaded rear corner of room."
   }
   ```
-- **Response** (`200 OK`):
-  ```json
-  {
-    "studentId": 103,
-    "status": "PRESENT",
-    "auditLogId": 9842
-  }
-  ```
+- **Response** (`200 OK`): `AttendanceRecordResponseDto`
 - **Error Codes**: `400 REASON_REQUIRED`
 
 ### 3.8 Finalize Attendance Session

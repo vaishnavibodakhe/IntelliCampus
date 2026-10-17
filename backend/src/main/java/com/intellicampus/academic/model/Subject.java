@@ -34,6 +34,10 @@ public class Subject {
 
     public Subject() {}
 
+    public Subject(String code, String name, Integer credits) {
+        this(code, name, credits, null, null);
+    }
+
     public Subject(String code, String name, Integer credits, Department department, User faculty) {
         this.code = code;
         this.name = name;
@@ -64,3 +68,4 @@ public class Subject {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
+

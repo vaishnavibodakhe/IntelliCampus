@@ -14,6 +14,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
@@ -22,20 +23,14 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-/**
- * MockMvc test suite verifying HTTP contracts for /api/attendance/sessions REST API.
- * Compliant with IC-SRS-1.0 Section 8.6 & Test Cases TC-02/TC-03.
- */
 @ExtendWith(MockitoExtension.class)
 class AttendanceControllerTest {
 
     private MockMvc mockMvc;
-
     private ObjectMapper objectMapper;
 
     @Mock
@@ -105,52 +100,60 @@ class AttendanceControllerTest {
     }
 
     @Test
-    @DisplayName("GET /api/attendance/sessions/{id}/token - Returns dynamic 15-second rotating QR token with 200 OK")
-    void testGetDynamicQrTokenEndpoint() throws Exception {
-        DynamicQrTokenDto tokenDto = new DynamicQrTokenDto(123456L, "IC-A1B2C3D4E5F6", 12);
-        when(attendanceService.generateDynamicQrToken(100L)).thenReturn(tokenDto);
+    @DisplayName("POST /api/attendance/sessions/{id}/photo - Uploads classroom photo and returns recognition result")
+    void testUploadClassroomPhotoEndpoint() throws Exception {
+        MockMultipartFile photo = new MockMultipartFile(
+                "photo", "classroom.jpg", "image/jpeg", "dummy image content".getBytes()
+        );
 
-        mockMvc.perform(get("/api/attendance/sessions/100/token"))
+        PhotoRecognitionResultDto resultDto = new PhotoRecognitionResultDto();
+        resultDto.setSessionId(100L);
+        resultDto.setPhotoId(1L);
+        resultDto.setPhotoIndex(1);
+        resultDto.setTotalPhotos(1);
+        resultDto.setFacesDetected(15);
+        resultDto.setStudentsMatched(12);
+        resultDto.setStudentsInReview(2);
+        resultDto.setUnmatchedFaceCount(1);
+        resultDto.setMessage("Processed 15 faces");
+
+        when(attendanceService.processClassroomPhoto(eq(100L), any(), any(), any(), any()))
+                .thenReturn(resultDto);
+
+        mockMvc.perform(multipart("/api/attendance/sessions/100/photo")
+                        .file(photo)
+                        .param("latitude", "18.52043")
+                        .param("longitude", "73.85674")
+                        .param("accuracyM", "10.0"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.slot").value(123456))
-                .andExpect(jsonPath("$.token").value("IC-A1B2C3D4E5F6"))
-                .andExpect(jsonPath("$.secondsLeft").value(12));
+                .andExpect(jsonPath("$.sessionId").value(100))
+                .andExpect(jsonPath("$.facesDetected").value(15))
+                .andExpect(jsonPath("$.studentsMatched").value(12))
+                .andExpect(jsonPath("$.studentsInReview").value(2))
+                .andExpect(jsonPath("$.unmatchedFaceCount").value(1));
 
-        verify(attendanceService).generateDynamicQrToken(100L);
+        verify(attendanceService).processClassroomPhoto(eq(100L), any(), any(), any(), any());
     }
 
     @Test
-    @DisplayName("POST /api/attendance/sessions/{id}/confirm - Confirms student check-in with 200 OK")
-    void testConfirmAttendanceEndpoint() throws Exception {
-        StudentConfirmAttendanceDto req = new StudentConfirmAttendanceDto();
-        req.setStudentId(10L);
-        req.setChallengeCode("K7Q2");
-        req.setLatitude(18.52044);
-        req.setLongitude(73.85675);
-        req.setAccuracyM(15.0);
-
+    @DisplayName("GET /api/attendance/sessions/records/student/{studentId} - Returns student attendance records")
+    void testGetStudentAttendanceRecordsEndpoint() throws Exception {
         AttendanceRecordResponseDto recordDto = new AttendanceRecordResponseDto();
         recordDto.setId(501L);
         recordDto.setStudentId(10L);
         recordDto.setStudentName("Aarav Mehta");
         recordDto.setRollNo("2024-CS-042");
-        recordDto.setConfirmed(true);
         recordDto.setFinalStatus(AttendanceStatus.PRESENT);
-        recordDto.setStatusReason("Verified via GPS Geofence (15m) and Dynamic QR Token.");
 
-        when(attendanceService.confirmStudentAttendance(eq(100L), any(StudentConfirmAttendanceDto.class)))
-                .thenReturn(recordDto);
+        when(attendanceService.getRecordsForStudent(10L)).thenReturn(List.of(recordDto));
 
-        mockMvc.perform(post("/api/attendance/sessions/100/confirm")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(req)))
+        mockMvc.perform(get("/api/attendance/sessions/records/student/10"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.studentId").value(10))
-                .andExpect(jsonPath("$.studentName").value("Aarav Mehta"))
-                .andExpect(jsonPath("$.confirmed").value(true))
-                .andExpect(jsonPath("$.finalStatus").value("PRESENT"));
+                .andExpect(jsonPath("$[0].studentId").value(10))
+                .andExpect(jsonPath("$[0].studentName").value("Aarav Mehta"))
+                .andExpect(jsonPath("$[0].finalStatus").value("PRESENT"));
 
-        verify(attendanceService).confirmStudentAttendance(eq(100L), any(StudentConfirmAttendanceDto.class));
+        verify(attendanceService).getRecordsForStudent(10L);
     }
 
     @Test
@@ -182,7 +185,7 @@ class AttendanceControllerTest {
         recordDto.setId(501L);
         recordDto.setStudentId(10L);
         recordDto.setFinalStatus(AttendanceStatus.PRESENT);
-        recordDto.setStatusReason("Faculty manual verification");
+        recordDto.setStatusReason("Faculty manual override: Faculty manual verification");
 
         when(attendanceService.overrideRecordStatus(eq(100L), eq(10L), any(ManualOverrideDto.class)))
                 .thenReturn(recordDto);
@@ -193,7 +196,7 @@ class AttendanceControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.studentId").value(10))
                 .andExpect(jsonPath("$.finalStatus").value("PRESENT"))
-                .andExpect(jsonPath("$.statusReason").value("Faculty manual verification"));
+                .andExpect(jsonPath("$.statusReason").value("Faculty manual override: Faculty manual verification"));
 
         verify(attendanceService).overrideRecordStatus(eq(100L), eq(10L), any(ManualOverrideDto.class));
     }
