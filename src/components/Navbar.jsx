@@ -11,7 +11,8 @@ import {
   Sun, 
   Moon, 
   Sparkles,
-  BookOpen
+  BookOpen,
+  LogOut
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -22,7 +23,9 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-  notificationCount = 2
+  notificationCount = 2,
+  currentUser = null,
+  onLogout = null
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
@@ -136,6 +139,24 @@ export default function Navbar({
           <Sparkles size={17} />
           <span className="btn-label">Ask AI</span>
         </button>
+
+        {/* Authenticated User Badge & Logout Option */}
+        {currentUser && (
+          <div className="auth-nav-user" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', background: 'var(--bg-surface)', padding: '3px 8px 3px 10px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-medium)' }}>
+            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {currentUser.name}
+            </span>
+            <button
+              onClick={onLogout}
+              id="navbar-logout-btn"
+              className="action-icon-btn"
+              title="Logout from session"
+              style={{ padding: '4px', background: 'transparent', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+            >
+              <LogOut size={14} />
+            </button>
+          </div>
+        )}
 
         {/* Theme Toggle */}
         <button 

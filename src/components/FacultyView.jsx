@@ -31,12 +31,67 @@ export default function FacultyView({
   setMarks,
   markCorrections,
   setMarkCorrections,
-  onAddAuditLog
+  onAddAuditLog,
+  currentUser = null,
+  onLogout = null
 }) {
   const [activeTab, setActiveTab] = useState('attendance');
-  const [selectedSubjectId, setSelectedSubjectId] = useState(12);
-  const [selectedRoomId, setSelectedRoomId] = useState(7);
+  const [backendCourses, setBackendCourses] = useState([]);
+  const [selectedSubjectId, setSelectedSubjectId] = useState(null);
+  const [selectedRoomId, setSelectedRoomId] = useState(null);
   const [activeSession, setActiveSession] = useState(sessions[0] || null);
+
+  // Filter courses for this faculty: prioritize backend courses, or filter prop subjects
+  const assignedCourses = backendCourses.length > 0 
+    ? backendCourses 
+    : subjects.filter(s => !currentUser?.id || s.facultyId === currentUser.id || s.facultyName === currentUser.name);
+
+  // Initialize selected subject and room dynamically
+  useEffect(() => {
+    if (assignedCourses.length > 0 && !selectedSubjectId) {
+      setSelectedSubjectId(assignedCourses[0].id);
+    }
+    if (rooms && rooms.length > 0 && !selectedRoomId) {
+      setSelectedRoomId(rooms[0].id);
+    }
+  }, [assignedCourses, rooms, selectedSubjectId, selectedRoomId]);
+
+  // Fetch real data from backend API for the logged-in faculty
+  useEffect(() => {
+    let isMounted = true;
+    const fetchFacultyData = async () => {
+      try {
+        const [courseRes, sessionRes] = await Promise.allSettled([
+          api.getFacultyCourses(),
+          api.getFacultySessions()
+        ]);
+
+        if (!isMounted) return;
+
+        if (courseRes.status === 'fulfilled' && courseRes.value?.data) {
+          setBackendCourses(courseRes.value.data);
+          if (courseRes.value.data.length > 0) {
+            setSelectedSubjectId(courseRes.value.data[0].id);
+          }
+        }
+
+        if (sessionRes.status === 'fulfilled' && sessionRes.value?.data && sessionRes.value.data.length > 0) {
+          const loadedSessions = sessionRes.value.data;
+          const openSess = loadedSessions.find(s => s.status === 'OPEN') || loadedSessions[0];
+          setActiveSession(prev => ({
+            ...prev,
+            ...openSess,
+            roomName: openSess.room || prev?.roomName || 'Classroom'
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not fetch real faculty data, continuing with active context:', err);
+      }
+    };
+
+    fetchFacultyData();
+    return () => { isMounted = false; };
+  }, [currentUser]);
 
   // Live Camera & Recognition state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -190,10 +245,10 @@ export default function FacultyView({
 
     try {
       const sess = await api.startSession({
-        facultyId: 3,
-        subjectId: selectedSubjectId,
+        facultyId: currentUser?.id || 3,
+        subjectId: selectedSubjectId || (assignedCourses[0]?.id || 12),
         divisionId: 1,
-        roomId: selectedRoomId,
+        roomId: selectedRoomId || (rooms[0]?.id || 7),
         challengeCode: code,
         photoWindowMinutes: 10
       });
@@ -489,11 +544,11 @@ export default function FacultyView({
       markId: correctionModal.markId,
       studentName: targetMark?.studentName || 'Student',
       rollNo: targetMark?.rollNo || 'CS-104',
-      subjectCode: targetMark?.subjectCode || 'CS-302',
+      subjectCode: targetMark?.subjectCode || assignedCourses[0]?.code || 'Course',
       exam: targetMark?.exam || selectedExam,
       oldMarks: targetMark?.marks || 0,
       newMarks: Number(correctionNewMarks),
-      facultyName: 'Prof. Vikram Verma',
+      facultyName: currentUser?.name || 'Faculty Member',
       reason: correctionReason,
       status: 'PENDING_HOD',
       requestedAt: new Date().toISOString(),
@@ -523,8 +578,20 @@ export default function FacultyView({
             Class attendance session management with real InsightFace face recognition, marks grading, and HOD correction workflows.
           </p>
         </div>
-        <div className="header-meta-badge">
-          <span className="dot online" /> Prof. Vikram Verma (Dept of Computer Science)
+        <div className="header-meta-badge" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div>
+            <span className="dot online" /> {currentUser?.name || 'Faculty Member'} ({currentUser?.department || 'Academic Department'})
+          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="action-icon-btn"
+              title="Logout from Faculty Portal"
+              style={{ padding: '3px 8px', fontSize: '0.72rem', fontWeight: 600, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Sign Out
+            </button>
+          )}
         </div>
       </div>
 
@@ -551,10 +618,10 @@ export default function FacultyView({
           <div className="session-status-banner glass-card">
             <div className="session-header-col">
               <div className="session-title-wrap">
-                <span className="badge-pill info">CS-302 Div A</span>
-                <h2>{activeSession?.subjectName || 'Select Class & Room'}</h2>
+                <span className="badge-pill info">{activeSession?.subjectCode || assignedCourses[0]?.code || 'Class'} {activeSession?.division || 'Div A'}</span>
+                <h2>{activeSession?.subjectName || assignedCourses[0]?.name || 'Select Class & Room'}</h2>
                 <div className="session-meta">
-                  <span><MapPin size={14} /> {activeSession?.roomName} (Lat: 18.5204, Lng: 73.8567)</span>
+                  <span><MapPin size={14} /> {activeSession?.roomName || 'Classroom'}</span>
                   <span><Clock size={14} /> 10-Min Photo Window</span>
                 </div>
               </div>
@@ -587,7 +654,7 @@ export default function FacultyView({
               <div className="card-header-flex">
                 <h3>Live Classroom Camera</h3>
                 <span className="badge-pill success">
-                  <CheckCircle2 size={12} /> Geofence: Inside Room 204 (12m &lt; 50m)
+                  <CheckCircle2 size={12} /> Geofence: Inside {activeSession?.roomName || 'Classroom'} (Verified)
                 </span>
               </div>
               <p className="card-desc">
@@ -833,7 +900,15 @@ export default function FacultyView({
                 </tr>
               </thead>
               <tbody>
-                {marks.filter(m => m.exam === selectedExam).map(m => (
+                {marks
+                  .filter(m => m.exam === selectedExam)
+                  .filter(m => {
+                    if (!currentUser?.name || !assignedCourses || assignedCourses.length === 0) return true;
+                    const matchesCourse = assignedCourses.some(c => c.code === m.subjectCode || c.name === m.subjectCode);
+                    const matchesFaculty = m.updatedBy === currentUser.name || m.facultyName === currentUser.name;
+                    return matchesCourse || matchesFaculty;
+                  })
+                  .map(m => (
                   <tr key={m.id}>
                     <td className="font-mono">{m.rollNo}</td>
                     <td><strong>{m.studentName}</strong></td>

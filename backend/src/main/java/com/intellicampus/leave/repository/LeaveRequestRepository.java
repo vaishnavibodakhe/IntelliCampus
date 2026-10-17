@@ -15,6 +15,7 @@ import java.util.List;
 @Repository
 public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, Long> {
     List<LeaveRequest> findByStudentOrderBySubmittedAtDesc(StudentProfile student);
+    List<LeaveRequest> findByMentorOrderBySubmittedAtDesc(User mentor);
     List<LeaveRequest> findByMentorAndMentorStatus(User mentor, LeaveStatus mentorStatus);
     List<LeaveRequest> findByHodStatus(LeaveStatus hodStatus);
     List<LeaveRequest> findByFinalStatus(LeaveStatus finalStatus);

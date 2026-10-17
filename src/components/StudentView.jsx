@@ -152,7 +152,7 @@ export default function StudentView({
     });
 
     setLeaveForm({ fromDate: '', toDate: '', reason: '', attachmentName: 'medical_certificate.pdf' });
-    alert('Leave application submitted to your mentor Dr. Sunita Mehta for review.');
+    alert(`Leave application submitted to your mentor ${currentUser.mentorName || 'assigned mentor'} for review.`);
   };
 
   // Dispute attendance
@@ -174,7 +174,7 @@ export default function StudentView({
 
     setDisputeModal({ open: false, sessionId: null });
     setDisputeComment('');
-    alert('Dispute logged and forwarded to course faculty Prof. Vikram Verma.');
+    alert('Dispute logged and forwarded to course faculty for review.');
   };
 
   const studentMarks = marks.filter(m => m.rollNo === currentUser.rollNo);

@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { api } from '../api/client';
 import { 
   Users, 
   AlertTriangle, 
@@ -19,7 +20,9 @@ export default function MentorView({
   leaveRequests,
   setLeaveRequests,
   users,
-  onAddAuditLog
+  onAddAuditLog,
+  currentUser = null,
+  onLogout = null
 }) {
   const [activeTab, setActiveTab] = useState('risk');
   const [riskFilter, setRiskFilter] = useState('ALL');
@@ -30,10 +33,56 @@ export default function MentorView({
   const [recommendModal, setRecommendModal] = useState({ open: false, reqId: null, isRecommend: true });
   const [mentorCommentText, setMentorCommentText] = useState('');
 
-  // Mentees assigned to Dr. Sunita Mehta
-  const mentees = users.filter(u => u.mentorId === 4 || u.role === 'STUDENT');
+  const [backendMentees, setBackendMentees] = useState([]);
+  const [backendLeaves, setBackendLeaves] = useState([]);
+
+  // Fetch real data from backend API for the logged-in mentor
+  useEffect(() => {
+    let isMounted = true;
+    const fetchMentorData = async () => {
+      try {
+        const [menteeRes, leaveRes] = await Promise.allSettled([
+          api.getMentorMentees(),
+          api.getMentorLeaves()
+        ]);
+
+        if (!isMounted) return;
+
+        if (menteeRes.status === 'fulfilled' && menteeRes.value?.data && menteeRes.value.data.length > 0) {
+          setBackendMentees(menteeRes.value.data);
+        }
+
+        if (leaveRes.status === 'fulfilled' && leaveRes.value?.data && leaveRes.value.data.length > 0) {
+          setBackendLeaves(leaveRes.value.data);
+        }
+      } catch (err) {
+        console.warn('Could not fetch real mentor data, using active context:', err);
+      }
+    };
+
+    fetchMentorData();
+    return () => { isMounted = false; };
+  }, [currentUser]);
+
+  // Mentees assigned to the logged-in mentor
+  const mentees = backendMentees.length > 0
+    ? backendMentees
+    : users.filter(u => {
+        if (!currentUser?.id) return u.role === 'STUDENT';
+        return u.mentorId === currentUser.id || u.mentorName === currentUser.name;
+      });
+
   const highRiskStudents = riskStudents.filter(r => r.level === 'HIGH');
-  const pendingLeavesForMentor = leaveRequests.filter(l => l.mentorStatus === 'SUBMITTED');
+  
+  // Pending leaves filtered for this mentor
+  const currentLeaveSource = backendLeaves.length > 0 ? backendLeaves : leaveRequests;
+  const pendingLeavesForMentor = currentLeaveSource.filter(l => {
+    const isSubmitted = l.mentorStatus === 'SUBMITTED';
+    if (!currentUser?.name) return isSubmitted;
+    const isAssigned = l.mentorId === currentUser.id || l.mentorName === currentUser.name || !l.mentorName;
+    return isSubmitted && isAssigned;
+  });
+
   const filteredRiskStudents = riskStudents.filter(r => {
     if (riskFilter === 'ALL') return true;
     return r.level === riskFilter;
@@ -56,7 +105,7 @@ export default function MentorView({
             {
               id: Date.now(),
               date: new Date().toISOString().split('T')[0],
-              mentorName: 'Dr. Sunita Mehta',
+              mentorName: currentUser?.name || 'Faculty Mentor',
               note: mentorActionNote
             }
           ]
@@ -122,8 +171,20 @@ export default function MentorView({
             Early Warning System (EWS) student risk analytics, explainable factor diagnosis, and student leave review before HOD escalation.
           </p>
         </div>
-        <div className="header-meta-badge">
-          <span className="dot online" /> Dr. Sunita Mehta (Faculty Mentor)
+        <div className="header-meta-badge" style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <div>
+            <span className="dot online" /> {currentUser?.name || 'Faculty Mentor'} ({currentUser?.department || 'Academic Department'})
+          </div>
+          {onLogout && (
+            <button
+              onClick={onLogout}
+              className="action-icon-btn"
+              title="Logout from Mentor Portal"
+              style={{ padding: '3px 8px', fontSize: '0.72rem', fontWeight: 600, background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.35)', color: '#ef4444', borderRadius: '4px', cursor: 'pointer' }}
+            >
+              Sign Out
+            </button>
+          )}
         </div>
       </div>
 

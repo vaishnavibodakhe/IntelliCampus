@@ -21,12 +21,21 @@ async function handleResponse(response) {
   return await response.text();
 }
 
+function getAuthHeaders(extra = {}) {
+  const token = localStorage.getItem('intellicampus_token');
+  const headers = { ...extra };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  return headers;
+}
+
 export const api = {
   // Attendance Sessions
-  async startSession({ facultyId = 3, subjectId, divisionId = 1, roomId, challengeCode, photoWindowMinutes = 10 }) {
+  async startSession({ facultyId, subjectId, divisionId = 1, roomId, challengeCode, photoWindowMinutes = 10 }) {
     const res = await fetch('/api/attendance/sessions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         facultyId,
         subjectId,
@@ -131,6 +140,57 @@ export const api = {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),
+    });
+    return handleResponse(res);
+  },
+
+  // Faculty Portal Endpoints
+  async getFacultyMe() {
+    const res = await fetch('/api/faculty/me', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getFacultyCourses() {
+    const res = await fetch('/api/faculty/courses', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getFacultySessions() {
+    const res = await fetch('/api/faculty/sessions', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getFacultyCorrections() {
+    const res = await fetch('/api/faculty/corrections', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Mentor Portal Endpoints
+  async getMentorMe() {
+    const res = await fetch('/api/mentor/me', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getMentorMentees() {
+    const res = await fetch('/api/mentor/mentees', {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getMentorLeaves() {
+    const res = await fetch('/api/mentor/leaves', {
+      headers: getAuthHeaders()
     });
     return handleResponse(res);
   },
