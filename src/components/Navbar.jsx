@@ -137,6 +137,7 @@ export default function Navbar({
           <span className="btn-label">Ask AI</span>
         </button>
 
+
         {/* Theme Toggle */}
         <button 
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}

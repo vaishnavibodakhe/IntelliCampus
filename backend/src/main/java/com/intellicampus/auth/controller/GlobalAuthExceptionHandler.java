@@ -3,6 +3,7 @@ package com.intellicampus.auth.controller;
 import com.intellicampus.auth.dto.ErrorResponseDto;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.LockedException;
@@ -10,6 +11,7 @@ import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -19,12 +21,14 @@ public class GlobalAuthExceptionHandler {
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ErrorResponseDto> handleIllegalArgument(IllegalArgumentException ex) {
+        boolean isConflict = ex.getMessage() != null && ex.getMessage().toLowerCase().contains("already registered");
+        HttpStatus status = isConflict ? HttpStatus.CONFLICT : HttpStatus.BAD_REQUEST;
         ErrorResponseDto error = new ErrorResponseDto(
-                HttpStatus.BAD_REQUEST.value(),
-                "Bad Request",
+                status.value(),
+                status.getReasonPhrase(),
                 ex.getMessage()
         );
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        return ResponseEntity.status(status).body(error);
     }
 
     @ExceptionHandler(BadCredentialsException.class)
@@ -55,6 +59,26 @@ public class GlobalAuthExceptionHandler {
                 ex.getMessage()
         );
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ErrorResponseDto> handleAccessDenied(AccessDeniedException ex) {
+        ErrorResponseDto error = new ErrorResponseDto(
+                HttpStatus.FORBIDDEN.value(),
+                "Forbidden",
+                "Access is denied: insufficient role privileges"
+        );
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    public ResponseEntity<ErrorResponseDto> handleResponseStatusException(ResponseStatusException ex) {
+        ErrorResponseDto error = new ErrorResponseDto(
+                ex.getStatusCode().value(),
+                ex.getReason() != null ? ex.getReason() : "Request Error",
+                ex.getReason()
+        );
+        return ResponseEntity.status(ex.getStatusCode()).body(error);
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

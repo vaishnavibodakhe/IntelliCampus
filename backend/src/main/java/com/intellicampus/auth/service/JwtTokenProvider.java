@@ -10,7 +10,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
-import java.util.Arrays;
 import java.util.Date;
 
 @Component
@@ -21,19 +20,19 @@ public class JwtTokenProvider {
     private final long refreshExpirationDays;
 
     public JwtTokenProvider(
-            @Value("${app.jwt.secret:4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1}") String secret,
+            @Value("${JWT_SECRET:${app.jwt.secret:}}") String secret,
             @Value("${app.jwt.access-expiration-minutes:15}") long accessExpirationMinutes,
             @Value("${app.jwt.refresh-expiration-days:7}") long refreshExpirationDays) {
-        this.secret = secret;
+        if (secret == null || secret.trim().length() < 32) {
+            throw new IllegalStateException("JWT_SECRET environment variable is missing or shorter than 32 characters.");
+        }
+        this.secret = secret.trim();
         this.accessExpirationMinutes = accessExpirationMinutes;
         this.refreshExpirationDays = refreshExpirationDays;
     }
 
     private SecretKey getSigningKey() {
         byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
-        if (keyBytes.length < 32) {
-            keyBytes = Arrays.copyOf(keyBytes, 32);
-        }
         return Keys.hmacShaKeyFor(keyBytes);
     }
 
@@ -80,13 +79,29 @@ public class JwtTokenProvider {
         }
     }
 
-    public String getEmailFromToken(String token) {
-        Claims claims = Jwts.parser()
+    public Claims getClaims(String token) {
+        return Jwts.parser()
                 .verifyWith(getSigningKey())
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
-        return claims.getSubject();
+    }
+
+    public String getEmailFromToken(String token) {
+        return getClaims(token).getSubject();
+    }
+
+    public String getRoleFromToken(String token) {
+        return getClaims(token).get("role", String.class);
+    }
+
+    public Long getUserIdFromToken(String token) {
+        Number idNum = getClaims(token).get("userId", Number.class);
+        return idNum != null ? idNum.longValue() : null;
+    }
+
+    public String getUserCodeFromToken(String token) {
+        return getClaims(token).get("userCode", String.class);
     }
 
     public long getAccessExpirationSeconds() {
