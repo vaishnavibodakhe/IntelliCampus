@@ -3,7 +3,6 @@ import {
   CheckCircle2, 
   Clock, 
   MapPin, 
-  QrCode, 
   FileText, 
   MessageSquare, 
   AlertTriangle, 
@@ -11,11 +10,11 @@ import {
   Send, 
   Download, 
   ShieldCheck, 
-  Sparkles,
-  ExternalLink,
-  ChevronRight,
-  RefreshCw,
-  Bell
+  Sparkles, 
+  ExternalLink, 
+  ChevronRight, 
+  RefreshCw, 
+  Bell 
 } from 'lucide-react';
 import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
 
@@ -34,10 +33,6 @@ export default function StudentView({
   onLogout
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
-  
-  // Student active session state
-  const [isQrScannerActive, setIsQrScannerActive] = useState(false);
-  const [manualQrCodeInput, setManualQrCodeInput] = useState('');
 
   // Leave application state
   const [leaveForm, setLeaveForm] = useState({
@@ -113,120 +108,8 @@ export default function StudentView({
   };
 
   // Handle Confirm Attendance (ATT-07) with Present / Matched / Geo-out-of-range statuses
-  const handleConfirmPresence = () => {
-    if (!activeSession) return;
-
-    const geoCheck = validateGeofence(deviceGps.lat, deviceGps.lng, deviceGps.accuracy, roomLat, roomLng, 50);
-    if (!geoCheck.valid) {
-      // Rejection due to geofence boundary or accuracy violation
-      const updatedRecords = activeSession.attendanceRecords.map(rec => {
-        if (rec.studentId === currentUser.id) {
-          return {
-            ...rec,
-            confirmed: false,
-            finalStatus: 'GEO_OUT_OF_RANGE',
-            statusReason: geoCheck.error
-          };
-        }
-        return rec;
-      });
-
-      const updatedSess = { ...activeSession, attendanceRecords: updatedRecords };
-      setSessions(sessions.map(s => s.id === updatedSess.id ? updatedSess : s));
-
-      onAddAuditLog({
-        action: 'GEOFENCE_REJECTED',
-        entityType: 'ATTENDANCE_RECORD',
-        entityId: `${activeSession.id}_${currentUser.id}`,
-        oldValue: '{"status":"PENDING"}',
-        newValue: JSON.stringify({ distanceM: geoCheck.distanceM, accuracy: deviceGps.accuracy, status: 'GEO_OUT_OF_RANGE' }),
-        reason: geoCheck.error
-      });
-
-      alert(geoCheck.error);
-      return;
-    }
-
-    // Inside geofence: evaluates anti-spoofing and face confidence (TC-04)
-    const spoofScore = studentSessionRecord?.spoofScore ?? 0.95;
-    const isFaceRecognized = (studentSessionRecord?.faceScore || 0) >= 0.50;
-    
-    // Criterion 3: Flag records as REVIEW if anti-spoofing confidence is below threshold (0.60)
-    let determinedStatus = 'PRESENT';
-    let determinedReason = 'Face + GPS confirmed within allowable geofence';
-    if (spoofScore < 0.60) {
-      determinedStatus = 'REVIEW';
-      determinedReason = `Anti-spoofing confidence (${spoofScore.toFixed(2)}) below threshold (0.60). Flagged for manual faculty review.`;
-    } else if (!isFaceRecognized) {
-      determinedStatus = 'MATCHED';
-      determinedReason = 'GPS confirmed within 50m; matched student identity';
-    }
-
-    const updatedRecords = activeSession.attendanceRecords.map(rec => {
-      if (rec.studentId === currentUser.id) {
-        return {
-          ...rec,
-          confirmed: true,
-          confirmedAt: new Date().toISOString(),
-          finalStatus: determinedStatus,
-          statusReason: determinedReason
-        };
-      }
-      return rec;
-    });
-
-    const updatedSess = { ...activeSession, attendanceRecords: updatedRecords };
-    setSessions(sessions.map(s => s.id === updatedSess.id ? updatedSess : s));
-
-    onAddAuditLog({
-      action: 'CONFIRM_ATTENDANCE',
-      entityType: 'ATTENDANCE_RECORD',
-      entityId: `${activeSession.id}_${currentUser.id}`,
-      oldValue: '{"confirmed":false}',
-      newValue: JSON.stringify({ confirmed: true, distanceM, status: determinedStatus }),
-      reason: `Student ${currentUser.name} confirmed presence within classroom geofence (${distanceM}m). Status: ${determinedStatus}`
-    });
-
-    alert(`Presence confirmed! Your status is now ${determinedStatus} within room geofence (${distanceM}m).`);
-  };
-
-  // Handle QR code fallback confirmation (ATT-11)
-  const handleScanQrFallback = (e) => {
-    e.preventDefault();
-    if (!manualQrCodeInput.startsWith('IC-')) {
-      alert('Invalid or expired QR token format.');
-      return;
-    }
-
-    const updatedRecords = activeSession.attendanceRecords.map(rec => {
-      if (rec.studentId === currentUser.id) {
-        return {
-          ...rec,
-          confirmed: true,
-          confirmedAt: new Date().toISOString(),
-          finalStatus: 'PRESENT',
-          statusReason: 'Verified via dynamic teacher QR fallback (ATT-11)'
-        };
-      }
-      return rec;
-    });
-
-    const updatedSess = { ...activeSession, attendanceRecords: updatedRecords };
-    setSessions(sessions.map(s => s.id === updatedSess.id ? updatedSess : s));
-
-    onAddAuditLog({
-      action: 'QR_FALLBACK_ATTENDANCE',
-      entityType: 'ATTENDANCE_RECORD',
-      entityId: `${activeSession.id}_${currentUser.id}`,
-      oldValue: '{}',
-      newValue: JSON.stringify({ qrToken: manualQrCodeInput }),
-      reason: `Student marked Present via rotating dynamic QR fallback code`
-    });
-
-    setIsQrScannerActive(false);
-    setManualQrCodeInput('');
-    alert('Attendance successfully recorded via teacher dynamic QR code!');
-  };
+  // Student attendance is automated via faculty classroom photo recognition (ATT-03).
+  // StudentView remains read-only for session verification.
 
   // Submit Leave Request (LVE-01)
   const handleApplyLeave = (e) => {
@@ -428,59 +311,28 @@ export default function StudentView({
           <div className="alert-banner-actions" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '8px' }}>
             {studentSessionRecord?.finalStatus === 'PRESENT' && (
               <div className="badge-pill success text-sm">
-                <CheckCircle2 size={16} /> Present (Face + Geofence Confirmed)
+                <CheckCircle2 size={16} /> Present (Facial Biometric Verified)
               </div>
             )}
 
-            {studentSessionRecord?.finalStatus === 'MATCHED' && (
-              <div className="badge-pill info text-sm">
-                <CheckCircle2 size={16} /> Matched (Location Confirmed, Awaiting Face/QR)
+            {studentSessionRecord?.finalStatus === 'REVIEW' && (
+              <div className="badge-pill warning text-sm">
+                <AlertTriangle size={16} /> Under Faculty Review (Borderline Face Match)
               </div>
             )}
 
-            {studentSessionRecord?.finalStatus === 'GEO_OUT_OF_RANGE' && (
+            {studentSessionRecord?.finalStatus === 'ABSENT' && (
               <div className="badge-pill danger text-sm">
-                <AlertTriangle size={16} /> Geo-out-of-range ({distanceM}m &gt; 50m)
+                <AlertTriangle size={16} /> Absent (Unmatched / Finalised)
               </div>
             )}
 
-            {(!studentSessionRecord?.confirmed || studentSessionRecord?.finalStatus === 'GEO_OUT_OF_RANGE') && (
-              <div className="flex-gap" style={{ marginTop: '4px' }}>
-                <button onClick={handleConfirmPresence} className="btn-primary">
-                  <CheckCircle2 size={16} /> Confirm Attendance (Geofenced)
-                </button>
-                <button onClick={() => setIsQrScannerActive(!isQrScannerActive)} className="btn-secondary">
-                  <QrCode size={16} /> Scan QR Fallback
-                </button>
+            {(!studentSessionRecord || studentSessionRecord?.finalStatus === 'PENDING') && (
+              <div className="badge-pill muted text-sm">
+                <Clock size={16} /> Attendance In Progress (Classroom Photo Processing)
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {/* QR Scanner Fallback Modal */}
-      {isQrScannerActive && (
-        <div className="glass-card mb-6 highlight-border animate-fade-in">
-          <div className="card-header-flex">
-            <h4>Dynamic Rotating QR Fallback Scanner</h4>
-            <button onClick={() => setIsQrScannerActive(false)} className="btn-secondary btn-xs">&times; Close</button>
-          </div>
-          <p className="card-desc">
-            If lighting or angle prevented your face from being detected in the class photo, enter the teacher's 15-second rotating token or scan the screen (`ATT-11`).
-          </p>
-          <form onSubmit={handleScanQrFallback} className="form-inline-group">
-            <input 
-              type="text" 
-              placeholder="Enter dynamic code shown on teacher screen (e.g. IC-A782...)"
-              value={manualQrCodeInput}
-              onChange={e => setManualQrCodeInput(e.target.value)}
-              className="font-mono"
-              required
-            />
-            <button type="submit" className="btn-primary">
-              Verify Token &amp; Mark Present
-            </button>
-          </form>
         </div>
       )}
 

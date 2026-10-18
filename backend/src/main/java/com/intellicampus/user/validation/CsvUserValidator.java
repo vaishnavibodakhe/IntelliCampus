@@ -78,7 +78,7 @@ public class CsvUserValidator {
         }
 
         if (!missingHeaders.isEmpty()) {
-            errors.add("Missing mandatory CSV headers: " + String.join(", ", missingHeaders) +
+            errors.add("Missing required CSV header: " + String.join(", ", missingHeaders) +
                     ". Expected headers: userCode, name, email, department, rollNo, [role, division].");
             return new CsvValidationResult(validRows, errors);
         }
@@ -112,6 +112,11 @@ public class CsvUserValidator {
 
             if (userCode.isEmpty() || name.isEmpty() || email.isEmpty() || department.isEmpty()) {
                 errors.add(String.format("Line %d: Empty values detected in required fields (userCode, name, email, or department).", lineNum));
+                continue;
+            }
+
+            if (!email.contains("@") || !email.contains(".")) {
+                errors.add(String.format("Line %d: Invalid email format for '%s'.", lineNum, email));
                 continue;
             }
 

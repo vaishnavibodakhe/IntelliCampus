@@ -62,12 +62,13 @@ app:
     confirm-timeout-seconds: 120
     geofence-default-radius-m: 50
     geofence-max-accuracy-m: 100
-    face-match-threshold: 0.50
+    face-match-threshold: 0.45
     face-match-margin: 0.05
     spoof-min-score: 0.60
     phash-max-distance: 8
-    qr-slot-seconds: 15
     defaulter-threshold-percent: 75
+  storage:
+    face-dir: ${FACE_DIR:./uploads/student-faces}
   ai:
     service-url: ${AI_SERVICE_URL:http://localhost:8000}
 
