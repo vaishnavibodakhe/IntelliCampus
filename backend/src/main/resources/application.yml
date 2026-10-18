@@ -51,7 +51,7 @@ app:
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:3000}
   jwt:
-    secret: ${JWT_SECRET:4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1}
+    secret: ${JWT_SECRET}
     access-expiration-minutes: 15
     refresh-expiration-days: 7
     lockout-max-attempts: 5

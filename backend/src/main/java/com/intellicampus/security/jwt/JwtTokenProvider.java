@@ -21,10 +21,15 @@ public class JwtTokenProvider {
     private final long accessExpirationMs;
 
     public JwtTokenProvider(
-            @Value("${app.jwt.secret:4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1}") String secret,
+            @Value("${app.jwt.secret}") String secret,
             @Value("${app.jwt.access-expiration-minutes:15}") long accessExpirationMinutes) {
-        // Ensure secret meets minimum HMAC SHA-256 length requirement (256 bits = 32 bytes)
-        byte[] keyBytes = secret.getBytes(StandardCharsets.UTF_8);
+        if (secret == null || secret.trim().isBlank()) {
+            throw new IllegalStateException("Missing required configuration: JWT_SECRET is not configured. Please set the 'JWT_SECRET' environment variable with a cryptographically secure 256-bit (or longer) key.");
+        }
+        if (secret.trim().length() < 32) {
+            throw new IllegalStateException("JWT_SECRET is too short: must be at least 32 characters (256 bits) for HMAC-SHA256.");
+        }
+        byte[] keyBytes = secret.trim().getBytes(StandardCharsets.UTF_8);
         this.key = Keys.hmacShaKeyFor(keyBytes);
         this.accessExpirationMs = accessExpirationMinutes * 60 * 1000;
     }

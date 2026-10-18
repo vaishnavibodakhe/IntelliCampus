@@ -79,8 +79,10 @@ DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=intellicampus
 DB_USER=campus_admin
-DB_PASSWORD=SecureCampusPassword2026!
-JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
+DB_PASSWORD=your_mysql_password_here
+# Generate your own secret (at least 32 characters):
+# PowerShell: -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+JWT_SECRET=your_generated_jwt_secret_here_min_32_chars
 FRONTEND_URL=http://localhost:5173
 SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
@@ -95,8 +97,9 @@ $env:DB_HOST="localhost"
 $env:DB_PORT="3306"
 $env:DB_NAME="intellicampus"
 $env:DB_USER="campus_admin"
-$env:DB_PASSWORD="SecureCampusPassword2026!"
-$env:JWT_SECRET="4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1"
+$env:DB_PASSWORD="your_mysql_password_here"
+# Generate your own secret:
+$env:JWT_SECRET = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
 $env:SMTP_HOST="smtp.gmail.com"
 $env:SMTP_PORT="587"
 $env:SMTP_USERNAME="your_email@gmail.com"

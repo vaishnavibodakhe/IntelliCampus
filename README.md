@@ -187,14 +187,17 @@ The Faculty and Mentor portals operate on completely separated, dedicated routes
 
 ```env
 CLIENT_URL=http://localhost:5173
-JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
+# Generate your own secret (must be at least 32 characters / 256 bits):
+# Bash: openssl rand -hex 32
+# PowerShell: -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+JWT_SECRET=your_generated_jwt_secret_here_min_32_chars
 
 # MySQL Database Configuration
 DB_HOST=localhost
 DB_PORT=3306
 DB_NAME=intellicampus
 DB_USER=campus_admin
-DB_PASSWORD=SecureCampusPassword2026!
+DB_PASSWORD=your_mysql_password_here
 
 # Spring Mail SMTP Configuration
 SMTP_HOST=smtp.gmail.com
@@ -216,12 +219,27 @@ MAIL_FROM=noreply@intellicampus.edu
    ```bash
    npm install
    ```
-2. Start the Spring Boot backend API server (port 8080):
+2. Generate your own JWT secret and export backend environment variables:
+   - **Linux / macOS**:
+     ```bash
+     export JWT_SECRET=$(openssl rand -hex 32)
+     export DB_USER=campus_admin
+     export DB_PASSWORD=your_db_password
+     ```
+   - **Windows PowerShell**:
+     ```powershell
+     # Generate your own secret:
+     $env:JWT_SECRET = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+     $env:DB_USER = "campus_admin"
+     $env:DB_PASSWORD = "your_db_password"
+     ```
+3. Start the Spring Boot backend API server (port 8080):
    ```bash
    cd backend
    ./mvnw spring-boot:run
    ```
-3. Start the Vite development frontend (port 5173):
+   *(Note: The backend requires `JWT_SECRET` and will fail startup with a clear error message if it is missing or under 32 characters).*
+4. Start the Vite development frontend (port 5173):
    ```bash
    npm run dev
    ```

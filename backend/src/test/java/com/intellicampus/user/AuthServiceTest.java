@@ -49,7 +49,7 @@ class AuthServiceTest {
     private RevokedTokenRepository revokedTokenRepository;
     @Mock
     private PasswordEncoder passwordEncoder;
-    private JwtTokenProvider tokenProvider = new JwtTokenProvider("4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1", 15);
+    private JwtTokenProvider tokenProvider = new JwtTokenProvider("unit_test_jwt_secret_key_minimum_32_chars_for_hmac_sha256", 15);
     private EmailService emailService = new EmailService(null);
 
     private AuthService authService;

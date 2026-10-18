@@ -152,7 +152,7 @@ spring:
 
 app:
   jwt:
-    secret: ${JWT_SECRET:4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1}
+    secret: ${JWT_SECRET}
     access-expiration-minutes: 15
     refresh-expiration-days: 7
     lockout-max-attempts: 5
@@ -177,17 +177,26 @@ app:
 ## 🚀 Build & Execution Guide
 
 ### Prerequisites
-- JDK 21 LTS installed and on `PATH`
-- Apache Maven 3.9+
-- Active MySQL 8.0+ instance (or Docker container)
+- JDK 17+ or 21 LTS installed and on `PATH`
+- Apache Maven 3.8+ (or included `mvnw`)
+- Active MySQL 8.0+ instance (database: `intellicampus`)
+- Required environment variables:
+  - `DB_USER` (e.g. `campus_admin`)
+  - `DB_PASSWORD`
+  - `JWT_SECRET` (generate your own secret, min 32 chars: `openssl rand -hex 32`)
 
 ### Compile and Package
 ```bash
-# Clean build and run automated unit tests
-mvn clean package
+# Generate your own JWT secret (Linux/macOS):
+export JWT_SECRET=$(openssl rand -hex 32)
+# Windows PowerShell:
+$env:JWT_SECRET = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
 
-# Run Spring Boot application locally
-mvn spring-boot:run
+# Clean build and run automated unit tests
+./mvnw clean package
+
+# Run Spring Boot application locally (requires JWT_SECRET set)
+./mvnw spring-boot:run
 ```
 
 ### Run Tests
