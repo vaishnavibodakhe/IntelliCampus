@@ -158,12 +158,34 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 
 ---
 
+## 🔑 Frontend Authentication & Demo Accounts
+
+IntelliCampus features role-based access control with frontend session management. User sessions are safely preserved in `sessionStorage` across page refreshes.
+
+### Demo Login Credentials
+Login codes are case-insensitive. Any non-empty password is accepted for demo simulation:
+
+| Login Code | User Name | Role | Department / Notes |
+| :--- | :--- | :--- | :--- |
+| `student.aarav` | Aarav Shah | `STUDENT` | Computer Science, Year 3, Div A (CS-104) |
+| `student.priya` | Priya Nair | `STUDENT` | Computer Science, Year 3, Div A (CS-105) |
+| `student.rohan` | Rohan Deshmukh | `STUDENT` | Computer Science, Year 3, Div A (CS-106) |
+| `student.kavya` | Kavya Iyer | `STUDENT` | Computer Science, Year 3, Div A (CS-107) |
+| `prof.verma` | Prof. Vikram Verma | `FACULTY` | Computer Science Faculty |
+| `hod.sharma` | Dr. Ananya Sharma | `HOD` | Computer Science Head of Department |
+| `dr.mehta` | Dr. Sunita Mehta | `MENTOR` | Computer Science Faculty Mentor |
+| `admin.patel` | Rajesh Patel | `ADMIN` | System Administrator |
+
+*The Public Verifier view (`PUBLIC`) remains accessible without requiring login.*
+
+---
+
 ## 🧪 Automated Testing
 
 Run the automated test suite:
 
 ```bash
-# Frontend & Component Unit Tests (28 passing tests)
+# Frontend & Component Unit Tests (33 passing tests)
 npm test
 
 # Production Build Validation

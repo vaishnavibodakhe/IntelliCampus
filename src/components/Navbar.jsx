@@ -11,8 +11,17 @@ import {
   Sun, 
   Moon, 
   Sparkles,
-  BookOpen
+  BookOpen,
+  LogOut,
+  LogIn
 } from 'lucide-react';
+
+function getInitials(name) {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
 
 export default function Navbar({ 
   currentRole, 
@@ -22,7 +31,10 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-  notificationCount = 2
+  notificationCount = 2,
+  loggedInUser = null,
+  onLogout,
+  onLoginClick
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
@@ -65,11 +77,21 @@ export default function Navbar({
           {roles.map(r => {
             const Icon = r.icon;
             const isActive = currentRole === r.id;
+            // When logged in: only user's own role and PUBLIC are enabled
+            // When logged out: only PUBLIC is accessible
+            const isDisabled = loggedInUser
+              ? (r.id !== loggedInUser.role && r.id !== 'PUBLIC')
+              : (r.id !== 'PUBLIC');
+
             return (
               <button
                 key={r.id}
-                onClick={() => setCurrentRole(r.id)}
-                className={`role-pill-btn ${isActive ? 'active' : ''}`}
+                onClick={() => {
+                  if (!isDisabled) setCurrentRole(r.id);
+                }}
+                disabled={isDisabled}
+                className={`role-pill-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                title={isDisabled ? (loggedInUser ? `Restricted to ${loggedInUser.role} workflow` : 'Please log in to access this workflow') : undefined}
                 style={{
                   '--accent': r.color
                 }}
@@ -145,6 +167,38 @@ export default function Navbar({
         >
           {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
         </button>
+
+        {/* Authentication State & User Controls */}
+        {loggedInUser ? (
+          <div className="navbar-user-section">
+            <div className="user-chip" title={`${loggedInUser.name} (${loggedInUser.role})`}>
+              <div className="user-avatar-initials">
+                {getInitials(loggedInUser.name)}
+              </div>
+              <div className="user-chip-info">
+                <span className="user-chip-name">{loggedInUser.name}</span>
+                <span className="user-chip-role">{loggedInUser.role}</span>
+              </div>
+            </div>
+            <button 
+              onClick={onLogout} 
+              className="action-icon-btn logout-btn"
+              title="Logout from IntelliCampus"
+            >
+              <LogOut size={16} />
+              <span className="btn-label">Logout</span>
+            </button>
+          </div>
+        ) : (
+          <button 
+            onClick={onLoginClick} 
+            className="action-icon-btn login-btn"
+            title="Sign In to IntelliCampus"
+          >
+            <LogIn size={16} />
+            <span className="btn-label">Login</span>
+          </button>
+        )}
       </div>
     </header>
   );
