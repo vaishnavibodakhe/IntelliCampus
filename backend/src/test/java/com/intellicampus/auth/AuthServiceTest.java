@@ -180,6 +180,53 @@ class AuthServiceTest {
     }
 
     @Test
+    @DisplayName("Login - Student-only portal rejects staff user with generic error and counts failed attempt")
+    void testLogin_StaffUserRejected() {
+        User facultyUser = new User();
+        facultyUser.setId(3L);
+        facultyUser.setUserCode("prof.verma");
+        facultyUser.setName("Prof. Vikram Verma");
+        facultyUser.setEmail("v.verma@intellicampus.edu");
+        facultyUser.setPasswordHash("$2a$10$hashedPasswordPlaceholder");
+        facultyUser.setRole(Role.FACULTY);
+        facultyUser.setStatus(UserStatus.ACTIVE);
+        facultyUser.setFailedAttempts(0);
+
+        LoginRequestDto req = new LoginRequestDto("prof.verma", "ValidPass123!");
+        when(userRepository.findByUserCode("prof.verma")).thenReturn(Optional.of(facultyUser));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> authService.login(req));
+        assertEquals("Invalid login code or password.", ex.getMessage());
+        assertEquals(1, facultyUser.getFailedAttempts());
+        verify(userRepository).save(facultyUser);
+        verify(jwtTokenProvider, never()).generateToken(any());
+    }
+
+    @Test
+    @DisplayName("Login - Staff user login attempts enforce 5-minute lockout after 5 consecutive failures")
+    void testLogin_StaffUserLockoutAfter5Failures() {
+        User adminUser = new User();
+        adminUser.setId(1L);
+        adminUser.setUserCode("admin.patel");
+        adminUser.setName("Rajesh Patel");
+        adminUser.setEmail("admin@intellicampus.edu");
+        adminUser.setPasswordHash("$2a$10$hashedPasswordPlaceholder");
+        adminUser.setRole(Role.ADMIN);
+        adminUser.setStatus(UserStatus.ACTIVE);
+        adminUser.setFailedAttempts(4);
+
+        LoginRequestDto req = new LoginRequestDto("admin.patel", "AnyPassword");
+        when(userRepository.findByUserCode("admin.patel")).thenReturn(Optional.of(adminUser));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> authService.login(req));
+        assertEquals("Invalid login code or password.", ex.getMessage());
+        assertEquals(5, adminUser.getFailedAttempts());
+        assertNotNull(adminUser.getLockedUntil());
+        assertTrue(adminUser.getLockedUntil().isAfter(LocalDateTime.now().plusMinutes(4)));
+        verify(userRepository).save(adminUser);
+    }
+
+    @Test
     @DisplayName("Register - Success creates student and calls FaceEnrollmentService")
     void testRegister_Success() {
         RegisterRequestDto req = new RegisterRequestDto();

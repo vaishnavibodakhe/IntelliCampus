@@ -70,16 +70,12 @@ export default function LoginView({ users = [], onLogin }) {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
 
-  // Role-less demo codes from seed data
+  // Student-only demo codes from seed data
   const demoCodes = [
     'student.aarav',
     'student.priya',
     'student.rohan',
-    'student.kavya',
-    'prof.verma',
-    'dr.mehta',
-    'hod.sharma',
-    'admin.patel'
+    'student.kavya'
   ];
 
   // Stop webcam helper
@@ -212,6 +208,10 @@ export default function LoginView({ users = [], onLogin }) {
         password: loginPassword
       });
 
+      if (res && res.user && res.user.role !== 'STUDENT') {
+        setError('Invalid login code or password.');
+        return;
+      }
       if (res && res.accessToken) {
         setToken(res.accessToken);
       }
@@ -232,6 +232,10 @@ export default function LoginView({ users = [], onLogin }) {
       if (isNetworkError && users && users.length > 0) {
         const mockResult = authenticateUser(users, loginCode, loginPassword);
         if (mockResult.success) {
+          if (mockResult.user?.role !== 'STUDENT') {
+            setError('Invalid login code or password.');
+            return;
+          }
           if (onLogin) onLogin(mockResult.user);
           return;
         }
@@ -456,7 +460,7 @@ export default function LoginView({ users = [], onLogin }) {
           </div>
 
           <h2 className="login-title">
-            {viewMode === 'LOGIN' && 'Sign In to IntelliCampus'}
+            {viewMode === 'LOGIN' && 'Student Portal'}
             {viewMode === 'REGISTER' && 'Student Self-Registration'}
             {viewMode === 'FORGOT' && (forgotStep === 1 ? 'Forgot Password' : 'Set New Password')}
           </h2>
@@ -501,7 +505,7 @@ export default function LoginView({ users = [], onLogin }) {
                   id="loginCode"
                   type="text"
                   className="login-input"
-                  placeholder="e.g. student.aarav or admin.patel"
+                  placeholder="e.g. student.aarav"
                   value={loginCode}
                   onChange={(e) => {
                     setLoginCode(e.target.value);

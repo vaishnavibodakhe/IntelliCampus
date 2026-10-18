@@ -158,25 +158,50 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 
 ---
 
-## 🔑 Frontend Authentication & Demo Accounts
+## 🎓 Student-Only Portal & Authentication
 
-IntelliCampus features role-based access control with frontend session management. User sessions are safely preserved in `sessionStorage` across page refreshes.
+IntelliCampus is configured by default as a **Student-Only Portal** for student workflows: attendance verification, academic marks viewing, multi-tier leave submission, campus notices, verifiable credentials, and AI document chat.
 
-### Demo Login Credentials
-Login codes are case-insensitive. Any non-empty password is accepted for demo simulation:
+### Student-Only Mode Configuration (`VITE_STUDENT_ONLY`)
+The portal mode is governed by the Vite environment flag `VITE_STUDENT_ONLY`:
+- **`VITE_STUDENT_ONLY=true` (Default)**:
+  - Portal is exclusively accessible to students.
+  - Heading displays **Student Portal** on login.
+  - Staff workflows (`AdminView`, `HodView`, `FacultyView`, `MentorView`, `PublicVerifierView`, and `AuditChainModal`) are completely skipped from rendering.
+  - The Navbar role workflow switcher, Audit Chain button, and Live session challenge badge are removed.
+  - Navbar retains: branding, campus notice alerts, Ask AI chatbot, theme toggle, and logged-in student user chip with Logout button.
+  - Only students can authenticate (`AuthService.login` rejects non-student logins with the generic error `"Invalid login code or password."` to prevent role enumeration).
+  - Any non-student session detected in `sessionStorage` is automatically cleared.
+- **`VITE_STUDENT_ONLY=false`**:
+  - Restores the multi-role environment allowing team members to switch between Admin, HOD, Faculty, Mentor, Student, and Public Verifier workflows.
 
-| Login Code | User Name | Role | Department / Notes |
+#### How to Switch Portal Modes
+Create or edit your local `.env` file (or export in environment):
+```bash
+# To run in Student-Only mode (default):
+VITE_STUDENT_ONLY=true
+
+# To switch back to legacy multi-role staff mode:
+VITE_STUDENT_ONLY=false
+```
+Then restart the development server or rebuild:
+```bash
+npm run dev
+# or for production build
+npm run build
+```
+
+### Student Demo Accounts
+Login codes are case-insensitive. Default password for all seeded demo accounts is **`CampusPass2026!`** (any non-empty password is accepted in offline mock simulation):
+
+| Login Code | Student Name | Role | Department & Academic Placement |
 | :--- | :--- | :--- | :--- |
-| `student.aarav` | Aarav Shah | `STUDENT` | Computer Science, Year 3, Div A (CS-104) |
-| `student.priya` | Priya Nair | `STUDENT` | Computer Science, Year 3, Div A (CS-105) |
-| `student.rohan` | Rohan Deshmukh | `STUDENT` | Computer Science, Year 3, Div A (CS-106) |
-| `student.kavya` | Kavya Iyer | `STUDENT` | Computer Science, Year 3, Div A (CS-107) |
-| `prof.verma` | Prof. Vikram Verma | `FACULTY` | Computer Science Faculty |
-| `hod.sharma` | Dr. Ananya Sharma | `HOD` | Computer Science Head of Department |
-| `dr.mehta` | Dr. Sunita Mehta | `MENTOR` | Computer Science Faculty Mentor |
-| `admin.patel` | Rajesh Patel | `ADMIN` | System Administrator |
+| `student.aarav` | Aarav Shah | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-104) |
+| `student.priya` | Priya Nair | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-105) |
+| `student.rohan` | Rohan Deshmukh | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-106) |
+| `student.kavya` | Kavya Iyer | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-107) |
 
-*The Public Verifier view (`PUBLIC`) remains accessible without requiring login.*
+*(Note: Seeded staff accounts `prof.verma`, `hod.sharma`, `dr.mehta`, and `admin.patel` remain preserved in the backend database for team development, but are blocked from logging in when student-only mode is active).*
 
 ---
 

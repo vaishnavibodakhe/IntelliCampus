@@ -16,6 +16,8 @@ import {
   LogIn
 } from 'lucide-react';
 
+import { isStudentOnlyMode } from '../utils/studentPortalConfig';
+
 function getInitials(name) {
   if (!name) return 'U';
   const parts = name.trim().split(/\s+/);
@@ -34,7 +36,8 @@ export default function Navbar({
   notificationCount = 2,
   loggedInUser = null,
   onLogout,
-  onLoginClick
+  onLoginClick,
+  studentOnly = isStudentOnlyMode()
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
@@ -70,44 +73,46 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Role Workflow Switcher */}
-      <div className="role-switcher-container">
-        <span className="role-switcher-label">Select Active Workflow:</span>
-        <div className="role-pill-group">
-          {roles.map(r => {
-            const Icon = r.icon;
-            const isActive = currentRole === r.id;
-            // When logged in: only user's own role and PUBLIC are enabled
-            // When logged out: only PUBLIC is accessible
-            const isDisabled = loggedInUser
-              ? (r.id !== loggedInUser.role && r.id !== 'PUBLIC')
-              : (r.id !== 'PUBLIC');
+      {/* Role Workflow Switcher (Hidden in student-only mode) */}
+      {!studentOnly && (
+        <div className="role-switcher-container">
+          <span className="role-switcher-label">Select Active Workflow:</span>
+          <div className="role-pill-group">
+            {roles.map(r => {
+              const Icon = r.icon;
+              const isActive = currentRole === r.id;
+              // When logged in: only user's own role and PUBLIC are enabled
+              // When logged out: only PUBLIC is accessible
+              const isDisabled = loggedInUser
+                ? (r.id !== loggedInUser.role && r.id !== 'PUBLIC')
+                : (r.id !== 'PUBLIC');
 
-            return (
-              <button
-                key={r.id}
-                onClick={() => {
-                  if (!isDisabled) setCurrentRole(r.id);
-                }}
-                disabled={isDisabled}
-                className={`role-pill-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
-                title={isDisabled ? (loggedInUser ? `Restricted to ${loggedInUser.role} workflow` : 'Please log in to access this workflow') : undefined}
-                style={{
-                  '--accent': r.color
-                }}
-              >
-                <Icon size={15} />
-                <span>{r.label}</span>
-              </button>
-            );
-          })}
+              return (
+                <button
+                  key={r.id}
+                  onClick={() => {
+                    if (!isDisabled) setCurrentRole(r.id);
+                  }}
+                  disabled={isDisabled}
+                  className={`role-pill-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
+                  title={isDisabled ? (loggedInUser ? `Restricted to ${loggedInUser.role} workflow` : 'Please log in to access this workflow') : undefined}
+                  style={{
+                    '--accent': r.color
+                  }}
+                >
+                  <Icon size={15} />
+                  <span>{r.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Action shortcuts */}
       <div className="navbar-actions">
-        {/* Active Class Live Indicator */}
-        {activeSession && activeSession.status === 'OPEN' && (
+        {/* Active Class Live Indicator (Staff feature: hidden in student-only mode) */}
+        {!studentOnly && activeSession && activeSession.status === 'OPEN' && (
           <div className="live-session-badge animate-pulse-glow" title="Active attendance session ongoing">
             <span className="live-dot" />
             <span>Live: {activeSession.challengeCode}</span>
@@ -139,15 +144,17 @@ export default function Navbar({
           )}
         </div>
 
-        {/* Cryptographic Audit Hash Chain Inspector */}
-        <button 
-          onClick={onOpenAudit}
-          className="action-icon-btn audit-btn"
-          title="Cryptographic SHA-256 Audit Chain Inspector"
-        >
-          <Link2 size={17} />
-          <span className="btn-label">Audit Chain</span>
-        </button>
+        {/* Cryptographic Audit Hash Chain Inspector (Staff feature: hidden in student-only mode) */}
+        {!studentOnly && (
+          <button 
+            onClick={onOpenAudit}
+            className="action-icon-btn audit-btn"
+            title="Cryptographic SHA-256 Audit Chain Inspector"
+          >
+            <Link2 size={17} />
+            <span className="btn-label">Audit Chain</span>
+          </button>
+        )}
 
         {/* RAG Chatbot Button */}
         <button 
@@ -171,13 +178,13 @@ export default function Navbar({
         {/* Authentication State & User Controls */}
         {loggedInUser ? (
           <div className="navbar-user-section">
-            <div className="user-chip" title={`${loggedInUser.name} (${loggedInUser.role})`}>
+            <div className="user-chip" title={studentOnly ? loggedInUser.name : `${loggedInUser.name} (${loggedInUser.role})`}>
               <div className="user-avatar-initials">
                 {getInitials(loggedInUser.name)}
               </div>
               <div className="user-chip-info">
                 <span className="user-chip-name">{loggedInUser.name}</span>
-                <span className="user-chip-role">{loggedInUser.role}</span>
+                {!studentOnly && <span className="user-chip-role">{loggedInUser.role}</span>}
               </div>
             </div>
             <button 

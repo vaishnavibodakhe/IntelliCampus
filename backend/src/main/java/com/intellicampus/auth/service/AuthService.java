@@ -94,12 +94,28 @@ public class AuthService {
 
         User user = userOpt.get();
 
-        // 1. Check account lockout
+        // 1. Student-only policy: only allow users whose role is STUDENT.
+        // For any other role, return exactly the same generic error as a wrong password ("Invalid login code or password.")
+        // so the response does not reveal the account exists, and count it as a failed attempt.
+        if (user.getRole() != Role.STUDENT) {
+            int failed = (user.getFailedAttempts() != null ? user.getFailedAttempts() : 0) + 1;
+            user.setFailedAttempts(failed);
+            if (failed >= 5) {
+                user.setLockedUntil(LocalDateTime.now().plusMinutes(5));
+                log.warn("Non-student user {} login rejected and locked out after 5 consecutive failed login attempts.", user.getUserCode());
+            } else {
+                log.warn("Non-student user {} login rejected (role: {}). Attempt {} counted as failed.", user.getUserCode(), user.getRole(), failed);
+            }
+            userRepository.save(user);
+            throw new BadCredentialsException("Invalid login code or password.");
+        }
+
+        // 2. Check account lockout
         if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
             throw new AccountLockedException("Account temporarily locked due to too many failed attempts. Please try again later.");
         }
 
-        // 2. Validate password
+        // 3. Validate password
         if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
             int failed = (user.getFailedAttempts() != null ? user.getFailedAttempts() : 0) + 1;
             user.setFailedAttempts(failed);
