@@ -17,6 +17,7 @@ public class UserResponseDto {
     private String feeStatus;
     private Boolean faceEnrolled;
     private String phone;
+    private String specialization;
 
     public UserResponseDto() {}
 
@@ -68,4 +69,14 @@ public class UserResponseDto {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getEmployeeId() { return userCode; }
+    public void setEmployeeId(String employeeId) {
+        if (this.userCode == null || this.userCode.isBlank()) {
+            this.userCode = employeeId;
+        }
+    }
+
+    public String getSpecialization() { return specialization; }
+    public void setSpecialization(String specialization) { this.specialization = specialization; }
 }

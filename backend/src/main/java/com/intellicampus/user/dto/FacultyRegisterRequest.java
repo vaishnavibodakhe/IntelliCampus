@@ -1,15 +1,18 @@
 package com.intellicampus.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.*;
 
 public class FacultyRegisterRequest {
 
     @NotBlank(message = "Full name is required")
     @Size(min = 3, max = 100, message = "Full name must be between 3 and 100 characters")
+    @JsonAlias({"name", "fullName"})
     private String fullName;
 
     @NotBlank(message = "Faculty ID is required")
     @Size(min = 2, max = 40, message = "Faculty ID must be between 2 and 40 characters")
+    @JsonAlias({"employeeId", "facultyId"})
     private String facultyId;
 
     @NotBlank(message = "Email is required")
@@ -26,8 +29,8 @@ public class FacultyRegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters long")
     @Pattern(
-        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#^()_+=\\-\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}$",
-        message = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$",
+        message = "Password must be at least 8 characters with uppercase, lowercase, and a number"
     )
     private String password;
 
@@ -39,8 +42,22 @@ public class FacultyRegisterRequest {
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
 
+    public String getName() { return fullName; }
+    public void setName(String name) {
+        if (this.fullName == null || this.fullName.isBlank()) {
+            this.fullName = name;
+        }
+    }
+
     public String getFacultyId() { return facultyId; }
     public void setFacultyId(String facultyId) { this.facultyId = facultyId; }
+
+    public String getEmployeeId() { return facultyId; }
+    public void setEmployeeId(String employeeId) {
+        if (this.facultyId == null || this.facultyId.isBlank()) {
+            this.facultyId = employeeId;
+        }
+    }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

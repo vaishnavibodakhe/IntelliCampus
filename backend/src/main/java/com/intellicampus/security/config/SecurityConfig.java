@@ -34,7 +34,7 @@ public class SecurityConfig {
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final CustomAccessDeniedHandler accessDeniedHandler;
 
-    @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:3000}")
+    @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:3000}")
     private String allowedOrigins;
 
     public SecurityConfig(JwtAuthenticationFilter jwtAuthenticationFilter,
@@ -86,6 +86,17 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                 // Auth endpoints are publicly accessible
                 .requestMatchers("/api/auth/**").permitAll()
+                .requestMatchers(
+                    "/api/faculty/login",
+                    "/api/faculty/register",
+                    "/api/faculty/forgot-password",
+                    "/api/faculty/reset-password/**",
+                    "/api/mentor/login",
+                    "/api/mentor/register",
+                    "/api/mentor/forgot-password",
+                    "/api/mentor/reset-password/**",
+                    "/api/logout"
+                ).permitAll()
                 // API docs & swagger
                 .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 // Public verification & verifier endpoints

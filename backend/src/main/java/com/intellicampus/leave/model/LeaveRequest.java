@@ -2,6 +2,8 @@ package com.intellicampus.leave.model;
 
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -45,6 +47,7 @@ public class LeaveRequest {
     private User mentor;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "mentor_status", nullable = false, length = 20)
     private LeaveStatus mentorStatus = LeaveStatus.SUBMITTED;
 
@@ -56,6 +59,7 @@ public class LeaveRequest {
     private User hod;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "hod_status", nullable = false, length = 20)
     private LeaveStatus hodStatus = LeaveStatus.SUBMITTED;
 
@@ -63,6 +67,7 @@ public class LeaveRequest {
     private String hodComment;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "final_status", nullable = false, length = 20)
     private LeaveStatus finalStatus = LeaveStatus.SUBMITTED;
 

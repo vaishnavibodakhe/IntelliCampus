@@ -60,6 +60,8 @@ public class MentorPortalController {
         dto.setDepartment(mentor.getDepartment() != null ? mentor.getDepartment().getName() : "Faculty Mentor");
         dto.setStatus(mentor.getStatus());
         dto.setPhone(mentor.getPhone());
+        dto.setEmployeeId(mentor.getUserCode());
+        dto.setSpecialization(mentor.getSpecialization());
 
         return ResponseEntity.ok(ApiResponse.success("Mentor profile loaded", dto));
     }

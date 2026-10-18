@@ -3,6 +3,8 @@ package com.intellicampus.academics.model;
 import com.intellicampus.academic.model.Subject;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -36,6 +38,7 @@ public class MarkEntry {
     private Double maxMarks;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
     private MarkStatus status = MarkStatus.DRAFT;
 

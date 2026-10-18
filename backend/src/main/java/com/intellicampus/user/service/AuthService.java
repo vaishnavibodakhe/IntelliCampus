@@ -38,9 +38,9 @@ public class AuthService {
 
     private static final Logger log = LoggerFactory.getLogger(AuthService.class);
 
-    // Password complexity pattern: min 8 chars, 1 uppercase, 1 lowercase, 1 digit, 1 special character
+    // Password complexity pattern: min 8 chars, 1 uppercase, 1 lowercase, 1 digit
     private static final Pattern PASSWORD_PATTERN = Pattern.compile(
-            "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#^()_+=\\-\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}$"
+            "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$"
     );
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{10}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
@@ -123,6 +123,9 @@ public class AuthService {
 
         User user = new User(mentorId, Role.MENTOR, req.getFullName().trim(), email, passwordHash, dept);
         user.setPhone(req.getPhone().trim());
+        if (req.getSpecialization() != null && !req.getSpecialization().isBlank()) {
+            user.setSpecialization(req.getSpecialization().trim());
+        }
         User savedUser = userRepository.save(user);
 
         String token = tokenProvider.generateToken(savedUser);
@@ -133,27 +136,29 @@ public class AuthService {
      * Faculty Login
      */
     public AuthResponse loginFaculty(LoginRequest req) {
-        return authenticateUser(req.getEmail(), req.getPassword(), Role.FACULTY);
+        return authenticateUser(req.getIdentifier(), req.getPassword(), Role.FACULTY);
     }
 
     /**
      * Mentor Login
      */
     public AuthResponse loginMentor(LoginRequest req) {
-        return authenticateUser(req.getEmail(), req.getPassword(), Role.MENTOR);
+        return authenticateUser(req.getIdentifier(), req.getPassword(), Role.MENTOR);
     }
 
     /**
      * Common authentication preventing cross-role login and leaking account status
      */
-    private AuthResponse authenticateUser(String email, String rawPassword, Role expectedRole) {
-        if (email == null || rawPassword == null) {
+    private AuthResponse authenticateUser(String identifier, String rawPassword, Role expectedRole) {
+        if (identifier == null || rawPassword == null) {
             throw new InvalidCredentialsException("Invalid credentials");
         }
 
-        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email.trim());
+        String lookup = identifier.trim();
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(lookup)
+                .or(() -> userRepository.findByUserCode(lookup));
         if (userOpt.isEmpty()) {
-            // Throw generic error to prevent email enumeration
+            // Throw generic error to prevent enumeration
             throw new InvalidCredentialsException("Invalid credentials");
         }
 
@@ -336,7 +341,7 @@ public class AuthService {
             throw new ValidationException("Phone number must be exactly 10 digits");
         }
         if (password == null || !PASSWORD_PATTERN.matcher(password).matches()) {
-            throw new ValidationException("Password must be at least 8 characters long and contain uppercase, lowercase, digit, and special character");
+            throw new ValidationException("Password must be at least 8 characters with uppercase, lowercase, and a number");
         }
         if (!password.equals(confirmPassword)) {
             throw new ValidationException("Password and confirm password do not match");
@@ -349,7 +354,12 @@ public class AuthService {
         }
         String clean = deptName.trim();
         return departmentRepository.findByName(clean)
-                .orElseGet(() -> departmentRepository.save(new Department(clean.toUpperCase().replace(" ", "_"), clean)));
+                .orElseGet(() -> {
+                    String rawCode = clean.toUpperCase().replaceAll("[^A-Z0-9_]", "_");
+                    String code = rawCode.length() > 50 ? rawCode.substring(0, 50) : rawCode;
+                    return departmentRepository.findByCode(code)
+                            .orElseGet(() -> departmentRepository.save(new Department(code, clean)));
+                });
     }
 
     private AuthResponse mapToAuthResponse(User user, String token) {
@@ -361,7 +371,8 @@ public class AuthService {
                 user.getEmail(),
                 user.getRole(),
                 user.getDepartment() != null ? user.getDepartment().getName() : "General",
-                user.getPhone()
+                user.getPhone(),
+                user.getSpecialization()
         );
     }
 }

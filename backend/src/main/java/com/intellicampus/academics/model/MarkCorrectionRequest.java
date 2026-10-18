@@ -1,6 +1,8 @@
 package com.intellicampus.academics.model;
 
 import com.intellicampus.user.model.User;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -40,6 +42,7 @@ public class MarkCorrectionRequest {
     private String decisionComment;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
     private CorrectionStatus status = CorrectionStatus.PENDING_HOD;
 

@@ -4,27 +4,33 @@
 -- 1. Users Table
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  user_code VARCHAR(20) NOT NULL UNIQUE,
-  role VARCHAR(12) NOT NULL,
+  user_code VARCHAR(40) NOT NULL UNIQUE,
+  role VARCHAR(20) NOT NULL,
   name VARCHAR(100) NOT NULL,
   email VARCHAR(120) NOT NULL UNIQUE,
-  password_hash VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(120) NOT NULL,
   must_change_password BOOLEAN DEFAULT TRUE,
-  status VARCHAR(10) DEFAULT 'ACTIVE',
+  status VARCHAR(20) DEFAULT 'ACTIVE',
   failed_attempts INT DEFAULT 0,
   locked_until DATETIME(6) NULL,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  INDEX idx_users_role (role)
+  INDEX idx_users_role (role),
+  INDEX idx_users_email (email),
+  INDEX idx_users_user_code (user_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 2. Departments
 CREATE TABLE IF NOT EXISTS departments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  code VARCHAR(20) NOT NULL UNIQUE,
+  code VARCHAR(50) NOT NULL UNIQUE,
   name VARCHAR(100) NOT NULL,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+ALTER TABLE users
+  ADD COLUMN department_id BIGINT UNSIGNED NULL AFTER locked_until,
+  ADD CONSTRAINT fk_users_dept FOREIGN KEY (department_id) REFERENCES departments(id);
 
 -- 3. Divisions
 CREATE TABLE IF NOT EXISTS divisions (
@@ -108,7 +114,7 @@ CREATE TABLE IF NOT EXISTS attendance_sessions (
 CREATE TABLE IF NOT EXISTS session_photos (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   session_id BIGINT UNSIGNED NOT NULL,
-  sha256 CHAR(64) NOT NULL,
+  sha256 VARCHAR(64) NOT NULL,
   phash BIGINT UNSIGNED NOT NULL,
   latitude DOUBLE NOT NULL,
   longitude DOUBLE NOT NULL,
@@ -125,8 +131,8 @@ CREATE TABLE IF NOT EXISTS attendance_records (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   session_id BIGINT UNSIGNED NOT NULL,
   student_id BIGINT UNSIGNED NOT NULL,
-  face_score DECIMAL(4,3) NULL,
-  spoof_score DECIMAL(4,3) NULL,
+  face_score DOUBLE NULL,
+  spoof_score DOUBLE NULL,
   confirmed_at DATETIME(6) NULL,
   confirm_lat DOUBLE NULL,
   confirm_lng DOUBLE NULL,
@@ -145,17 +151,19 @@ CREATE TABLE IF NOT EXISTS attendance_records (
 CREATE TABLE IF NOT EXISTS audit_logs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   actor_id BIGINT UNSIGNED NOT NULL,
+  actor_name VARCHAR(100) NOT NULL,
   action VARCHAR(50) NOT NULL,
   entity_type VARCHAR(50) NOT NULL,
-  entity_id BIGINT UNSIGNED NOT NULL,
-  old_value JSON NULL,
-  new_value JSON NULL,
+  entity_id VARCHAR(64) NOT NULL,
+  old_value TEXT NULL,
+  new_value TEXT NULL,
   reason VARCHAR(500) NOT NULL,
-  prev_hash CHAR(64) NOT NULL,
-  entry_hash CHAR(64) NOT NULL UNIQUE,
+  prev_hash VARCHAR(64) NOT NULL,
+  entry_hash VARCHAR(64) NOT NULL UNIQUE,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
-  CONSTRAINT fk_audit_actor FOREIGN KEY (actor_id) REFERENCES users(id),
-  INDEX idx_audit_entity (entity_type, entity_id)
+  INDEX idx_audit_entity (entity_type, entity_id),
+  INDEX idx_audit_entry_hash (entry_hash),
+  INDEX idx_audit_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 12. Internal Marks Entries
@@ -164,8 +172,8 @@ CREATE TABLE IF NOT EXISTS mark_entries (
   student_id BIGINT UNSIGNED NOT NULL,
   subject_id BIGINT UNSIGNED NOT NULL,
   exam VARCHAR(50) NOT NULL,
-  marks DECIMAL(5,2) NOT NULL,
-  max_marks DECIMAL(5,2) NOT NULL,
+  marks DOUBLE NOT NULL,
+  max_marks DOUBLE NOT NULL,
   status VARCHAR(12) DEFAULT 'DRAFT',
   corrected_by BIGINT UNSIGNED NULL,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -180,7 +188,7 @@ CREATE TABLE IF NOT EXISTS issued_documents (
   code VARCHAR(64) NOT NULL UNIQUE,
   type VARCHAR(50) NOT NULL,
   student_id BIGINT UNSIGNED NOT NULL,
-  file_hash CHAR(64) NOT NULL,
+  file_hash VARCHAR(64) NOT NULL,
   status VARCHAR(20) DEFAULT 'ISSUED',
   revoked_reason VARCHAR(255) NULL,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -200,10 +208,3 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   CONSTRAINT fk_leave_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
--- 15. Initial Genesis Audit Block
-INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, reason, prev_hash, entry_hash)
-VALUES (
-  1, 1, 'GENESIS_INITIALIZATION', 'SYSTEM', 0, 'Initial setup of IntelliCampus audit chain',
-  '0000000000000000000000000000000000000000000000000000000000000000',
-  'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
-) ON DUPLICATE KEY UPDATE id=id;

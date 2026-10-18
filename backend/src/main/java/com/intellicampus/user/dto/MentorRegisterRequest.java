@@ -1,15 +1,18 @@
 package com.intellicampus.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.*;
 
 public class MentorRegisterRequest {
 
     @NotBlank(message = "Full name is required")
     @Size(min = 3, max = 100, message = "Full name must be between 3 and 100 characters")
+    @JsonAlias({"name", "fullName"})
     private String fullName;
 
     @NotBlank(message = "Mentor ID is required")
     @Size(min = 2, max = 40, message = "Mentor ID must be between 2 and 40 characters")
+    @JsonAlias({"employeeId", "mentorId"})
     private String mentorId;
 
     @NotBlank(message = "Email is required")
@@ -26,21 +29,40 @@ public class MentorRegisterRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 8, message = "Password must be at least 8 characters long")
     @Pattern(
-        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)(?=.*[@$!%*?&#^()_+=\\-\\[\\]{};':\"\\\\|,.<>\\/?]).{8,}$",
-        message = "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character"
+        regexp = "^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d).{8,}$",
+        message = "Password must be at least 8 characters with uppercase, lowercase, and a number"
     )
     private String password;
 
     @NotBlank(message = "Confirm password is required")
     private String confirmPassword;
 
+    private String specialization;
+
     public MentorRegisterRequest() {}
 
     public String getFullName() { return fullName; }
     public void setFullName(String fullName) { this.fullName = fullName; }
 
+    public String getName() { return fullName; }
+    public void setName(String name) {
+        if (this.fullName == null || this.fullName.isBlank()) {
+            this.fullName = name;
+        }
+    }
+
     public String getMentorId() { return mentorId; }
     public void setMentorId(String mentorId) { this.mentorId = mentorId; }
+
+    public String getEmployeeId() { return mentorId; }
+    public void setEmployeeId(String employeeId) {
+        if (this.mentorId == null || this.mentorId.isBlank()) {
+            this.mentorId = employeeId;
+        }
+    }
+
+    public String getSpecialization() { return specialization; }
+    public void setSpecialization(String specialization) { this.specialization = specialization; }
 
     public String getEmail() { return email; }
     public void setEmail(String email) { this.email = email; }

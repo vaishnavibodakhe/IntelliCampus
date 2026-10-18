@@ -157,7 +157,11 @@ export default function RegisterPage({
         return;
       }
 
-      setErrorMessage(data.message || 'Registration failed. Please verify your details.');
+      const extractedError = data.message ||
+        (data.errors && typeof data.errors === 'object' ? Object.values(data.errors).join(', ') : null) ||
+        data.error ||
+        'Registration failed. Please verify your details.';
+      setErrorMessage(extractedError);
     } catch (networkErr) {
       console.error('[Registration Network Error]:', networkErr);
       setErrorMessage('Unable to connect to registration server. Please verify backend status.');

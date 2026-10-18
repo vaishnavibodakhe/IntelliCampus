@@ -1,6 +1,8 @@
 package com.intellicampus.credential.model;
 
 import com.intellicampus.user.model.StudentProfile;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -47,6 +49,7 @@ public class VerifiableDocument {
     private String fileHash;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private DocumentStatus status = DocumentStatus.VALID;
 

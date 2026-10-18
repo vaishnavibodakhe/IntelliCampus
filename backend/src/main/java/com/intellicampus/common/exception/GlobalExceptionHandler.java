@@ -27,11 +27,13 @@ public class GlobalExceptionHandler {
             fieldErrors.put(error.getField(), error.getDefaultMessage());
         }
 
+        String firstError = fieldErrors.values().stream().findFirst().orElse("Validation failed for one or more fields");
+
         Map<String, Object> body = new HashMap<>();
         body.put("success", false);
         body.put("status", HttpStatus.BAD_REQUEST.value());
         body.put("error", "Bad Request");
-        body.put("message", "Validation failed for one or more fields");
+        body.put("message", firstError);
         body.put("errors", fieldErrors);
         body.put("timestamp", LocalDateTime.now());
 

@@ -153,7 +153,7 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_DATABASE: intellicampus_db
+      MYSQL_DATABASE: intellicampus
       MYSQL_USER: campus_admin
       MYSQL_PASSWORD: SecureCampusPassword2026!
       MYSQL_ROOT_PASSWORD: RootSecurePassword2026!

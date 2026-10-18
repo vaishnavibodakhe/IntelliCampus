@@ -1,6 +1,8 @@
 package com.intellicampus.ai.model;
 
 import com.intellicampus.user.model.StudentProfile;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -24,10 +26,12 @@ public class RiskAssessmentRecord {
     private Double riskScore;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
     private RiskLevel level;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(length = 20)
     private RiskTrend trend = RiskTrend.STABLE;
 

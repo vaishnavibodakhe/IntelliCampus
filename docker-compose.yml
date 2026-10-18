@@ -25,13 +25,13 @@ services:
     environment:
       - DB_HOST=db
       - DB_PORT=3306
-      - DB_NAME=intellicampus_db
-      - DB_USER=campus_admin
-      - DB_PASSWORD=SecureCampusPassword2026!
+      - DB_NAME=intellicampus
+      - DB_USER=${DB_USER:-campus_admin}
+      - DB_PASSWORD=${DB_PASSWORD:-SecureCampusPassword2026!}
       - REDIS_HOST=redis
       - REDIS_PORT=6379
       - AI_SERVICE_URL=http://ai:8000
-      - JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
+      - JWT_SECRET=${JWT_SECRET:-4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1}
     depends_on:
       db:
         condition: service_healthy
@@ -63,15 +63,15 @@ services:
     ports:
       - "3306:3306"
     environment:
-      MYSQL_ROOT_PASSWORD: RootSecurePassword2026!
-      MYSQL_DATABASE: intellicampus_db
-      MYSQL_USER: campus_admin
-      MYSQL_PASSWORD: SecureCampusPassword2026!
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-RootSecurePassword2026!}
+      MYSQL_DATABASE: intellicampus
+      MYSQL_USER: ${DB_USER:-campus_admin}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-SecureCampusPassword2026!}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./docker/mysql/init.sql:/docker-entrypoint-initdb.d/init.sql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "campus_admin", "-pSecureCampusPassword2026!"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "campus_admin", "-p${DB_PASSWORD:-SecureCampusPassword2026!}"]
       interval: 5s
       timeout: 5s
       retries: 5

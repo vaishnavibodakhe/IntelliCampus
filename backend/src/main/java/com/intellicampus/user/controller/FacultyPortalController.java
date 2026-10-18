@@ -66,6 +66,7 @@ public class FacultyPortalController {
         dto.setDepartment(faculty.getDepartment() != null ? faculty.getDepartment().getName() : "Computer Science");
         dto.setStatus(faculty.getStatus());
         dto.setPhone(faculty.getPhone());
+        dto.setEmployeeId(faculty.getUserCode());
 
         return ResponseEntity.ok(ApiResponse.success("Faculty profile loaded", dto));
     }

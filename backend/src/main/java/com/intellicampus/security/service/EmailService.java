@@ -28,8 +28,8 @@ public class EmailService {
     }
 
     public void sendPasswordResetEmail(String toEmail, String recipientName, String rawToken, String role) {
-        String resetUrl = String.format("%s/reset-password?token=%s&role=%s",
-                frontendUrl, rawToken, role != null ? role.toUpperCase() : "FACULTY");
+        String roleSegment = (role != null && role.equalsIgnoreCase("MENTOR")) ? "mentor" : "faculty";
+        String resetUrl = String.format("%s/%s/reset-password/%s", frontendUrl, roleSegment, rawToken);
 
         log.info("Sending password reset email to '{}'. Reset URL: {}", toEmail, resetUrl);
 

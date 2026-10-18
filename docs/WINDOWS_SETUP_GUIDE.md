@@ -35,20 +35,20 @@ This comprehensive guide covers installing prerequisites, initializing the MySQL
 Open **MySQL Workbench** or MySQL Command Line Client, and run:
 
 ```sql
-CREATE DATABASE IF NOT EXISTS intellicampus_db
+CREATE DATABASE IF NOT EXISTS intellicampus
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
 -- Optional: Create dedicated service user if not using root
 CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' IDENTIFIED BY 'SecureCampusPassword2026!';
-GRANT ALL PRIVILEGES ON intellicampus_db.* TO 'campus_admin'@'localhost';
+GRANT ALL PRIVILEGES ON intellicampus.* TO 'campus_admin'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
 > **Note on Migrations**: Flyway will automatically execute migrations (`V1`, `V2`, and `V3__auth_faculty_mentor.sql`) when the Spring Boot backend boots.  
 > Alternatively, you can run the standalone schema script manually:
 > ```powershell
-> mysql -u campus_admin -p intellicampus_db < backend/sql/auth_faculty_mentor_schema.sql
+> mysql -u campus_admin -p intellicampus < backend/sql/auth_faculty_mentor_schema.sql
 > ```
 
 ---
@@ -77,7 +77,7 @@ Populate `.env` with your credentials:
 ```ini
 DB_HOST=localhost
 DB_PORT=3306
-DB_NAME=intellicampus_db
+DB_NAME=intellicampus
 DB_USER=campus_admin
 DB_PASSWORD=SecureCampusPassword2026!
 JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
@@ -93,7 +93,7 @@ MAIL_FROM=noreply@intellicampus.edu
 ```powershell
 $env:DB_HOST="localhost"
 $env:DB_PORT="3306"
-$env:DB_NAME="intellicampus_db"
+$env:DB_NAME="intellicampus"
 $env:DB_USER="campus_admin"
 $env:DB_PASSWORD="SecureCampusPassword2026!"
 $env:JWT_SECRET="4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1"

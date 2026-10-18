@@ -217,11 +217,11 @@ Cryptographically hash-chained, insert-only administrative modification log.
 
 ```sql
 -- Create Database
-CREATE DATABASE IF NOT EXISTS intellicampus_db
+CREATE DATABASE IF NOT EXISTS intellicampus
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE intellicampus_db;
+USE intellicampus;
 
 -- 1. Users
 CREATE TABLE IF NOT EXISTS users (
@@ -348,6 +348,6 @@ In MySQL 8.0, 512-dimensional facial embeddings and RAG document vectors are sup
 3. **Audit Log Table Security**:
    - The application database user is granted strictly `INSERT` and `SELECT` rights on `audit_logs` to prevent any runtime modification or deletion:
      ```sql
-     GRANT SELECT, INSERT ON intellicampus_db.audit_logs TO 'campus_admin'@'%';
-     REVOKE UPDATE, DELETE ON intellicampus_db.audit_logs FROM 'campus_admin'@'%';
+     GRANT SELECT, INSERT ON intellicampus.audit_logs TO 'campus_admin'@'%';
+     REVOKE UPDATE, DELETE ON intellicampus.audit_logs FROM 'campus_admin'@'%';
      ```

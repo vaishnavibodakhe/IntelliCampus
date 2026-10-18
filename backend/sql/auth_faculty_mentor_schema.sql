@@ -3,7 +3,7 @@
 -- Standalone SQL script for MySQL 8+
 -- ============================================================================
 
-USE intellicampus_db;
+USE intellicampus;
 
 -- 1. Ensure phone column exists on users table
 SET @col_exists = (

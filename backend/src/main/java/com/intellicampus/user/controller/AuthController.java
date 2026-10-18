@@ -8,7 +8,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/auth")
 @CrossOrigin(origins = "*")
 public class AuthController {
 
@@ -19,73 +18,96 @@ public class AuthController {
     }
 
     /**
-     * Faculty Registration
+     * Faculty Registration (supports /api/auth/faculty/register and alias /api/faculty/register)
      */
-    @PostMapping("/faculty/register")
+    @PostMapping({"/api/auth/faculty/register", "/api/faculty/register"})
     public ResponseEntity<AuthResponse> registerFaculty(@Valid @RequestBody FacultyRegisterRequest request) {
         AuthResponse response = authService.registerFaculty(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
-     * Mentor Registration
+     * Mentor Registration (supports /api/auth/mentor/register and alias /api/mentor/register)
      */
-    @PostMapping("/mentor/register")
+    @PostMapping({"/api/auth/mentor/register", "/api/mentor/register"})
     public ResponseEntity<AuthResponse> registerMentor(@Valid @RequestBody MentorRegisterRequest request) {
         AuthResponse response = authService.registerMentor(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
-     * Faculty Login
+     * Faculty Login (supports /api/auth/faculty/login and alias /api/faculty/login)
      */
-    @PostMapping("/faculty/login")
+    @PostMapping({"/api/auth/faculty/login", "/api/faculty/login"})
     public ResponseEntity<AuthResponse> loginFaculty(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.loginFaculty(request);
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Mentor Login
+     * Mentor Login (supports /api/auth/mentor/login and alias /api/mentor/login)
      */
-    @PostMapping("/mentor/login")
+    @PostMapping({"/api/auth/mentor/login", "/api/mentor/login"})
     public ResponseEntity<AuthResponse> loginMentor(@Valid @RequestBody LoginRequest request) {
         AuthResponse response = authService.loginMentor(request);
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Logout: blacklists token so it can no longer be used
+     * Logout: blacklists token so it can no longer be used (supports /api/auth/logout and alias /api/logout)
      */
-    @PostMapping("/logout")
+    @PostMapping({"/api/auth/logout", "/api/logout"})
     public ResponseEntity<ApiResponse> logout(@RequestHeader(value = "Authorization", required = false) String authHeader) {
         authService.logout(authHeader);
         return ResponseEntity.ok(new ApiResponse(true, "Successfully logged out. Token has been invalidated."));
     }
 
     /**
-     * Request Password Reset Link
+     * Request Password Reset Link (supports /api/auth/forgot-password, /api/faculty/forgot-password, /api/mentor/forgot-password)
      */
-    @PostMapping("/forgot-password")
+    @PostMapping({"/api/auth/forgot-password", "/api/faculty/forgot-password", "/api/mentor/forgot-password"})
     public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         ApiResponse response = authService.requestForgotPassword(request);
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Validate Reset Token (returns 200 if valid, 400 if expired or used)
+     * Validate Reset Token via query param (returns 200 if valid, 400 if expired or used)
      */
-    @GetMapping("/validate-reset-token")
+    @GetMapping("/api/auth/validate-reset-token")
     public ResponseEntity<ApiResponse> validateResetToken(@RequestParam String token) {
         ApiResponse response = authService.validateResetToken(token);
         return ResponseEntity.ok(response);
     }
 
     /**
-     * Reset Password using Token
+     * Validate Reset Token via path variable (supports /api/faculty/reset-password/{token} and /api/mentor/reset-password/{token})
      */
-    @PostMapping("/reset-password")
+    @GetMapping({"/api/faculty/reset-password/{token}", "/api/mentor/reset-password/{token}"})
+    public ResponseEntity<ApiResponse> validateResetTokenPath(@PathVariable("token") String token) {
+        ApiResponse response = authService.validateResetToken(token);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Reset Password using Token in JSON body
+     */
+    @PostMapping("/api/auth/reset-password")
     public ResponseEntity<ApiResponse> resetPassword(@Valid @RequestBody ResetPasswordRequest request) {
+        ApiResponse response = authService.resetPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Reset Password using Token in Path (supports /api/faculty/reset-password/{token} and /api/mentor/reset-password/{token})
+     */
+    @PostMapping({"/api/faculty/reset-password/{token}", "/api/mentor/reset-password/{token}"})
+    public ResponseEntity<ApiResponse> resetPasswordPath(
+            @PathVariable("token") String token,
+            @RequestBody ResetPasswordRequest request) {
+        if (request.getToken() == null || request.getToken().isBlank()) {
+            request.setToken(token);
+        }
         ApiResponse response = authService.resetPassword(request);
         return ResponseEntity.ok(response);
     }

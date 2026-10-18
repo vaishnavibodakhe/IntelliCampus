@@ -1,5 +1,7 @@
 package com.intellicampus.attendance.model;
 
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import com.intellicampus.user.model.StudentProfile;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
@@ -45,6 +47,7 @@ public class AttendanceRecord {
     private Double confirmLng;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(name = "final_status", nullable = false, length = 16)
     private AttendanceStatus finalStatus = AttendanceStatus.PENDING;
 

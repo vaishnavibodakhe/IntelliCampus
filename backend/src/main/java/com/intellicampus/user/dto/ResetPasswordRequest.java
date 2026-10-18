@@ -34,6 +34,13 @@ public class ResetPasswordRequest {
     public String getNewPassword() { return newPassword; }
     public void setNewPassword(String newPassword) { this.newPassword = newPassword; }
 
+    public String getPassword() { return newPassword; }
+    public void setPassword(String password) {
+        if (this.newPassword == null || this.newPassword.isBlank()) {
+            this.newPassword = password;
+        }
+    }
+
     public String getConfirmPassword() { return confirmPassword; }
     public void setConfirmPassword(String confirmPassword) { this.confirmPassword = confirmPassword; }
 }

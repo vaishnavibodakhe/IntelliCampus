@@ -4,6 +4,8 @@ import com.intellicampus.academic.model.Classroom;
 import com.intellicampus.academic.model.Division;
 import com.intellicampus.academic.model.Subject;
 import com.intellicampus.user.model.User;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -39,6 +41,7 @@ public class AttendanceSession {
     private String challengeCode;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
     private SessionStatus status = SessionStatus.OPEN;
 

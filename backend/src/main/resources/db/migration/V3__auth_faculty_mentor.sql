@@ -9,7 +9,7 @@ ALTER TABLE users
 CREATE TABLE IF NOT EXISTS password_reset_tokens (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   user_id BIGINT UNSIGNED NOT NULL,
-  token_hash CHAR(64) NOT NULL,
+  token_hash VARCHAR(64) NOT NULL,
   expires_at DATETIME(6) NOT NULL,
   used BOOLEAN NOT NULL DEFAULT FALSE,
   created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
 -- 3. Revoked / Blacklisted JWT Tokens Table for Logout
 CREATE TABLE IF NOT EXISTS revoked_tokens (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  token_hash CHAR(64) NOT NULL UNIQUE,
+  token_hash VARCHAR(64) NOT NULL UNIQUE,
   revoked_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6),
   expires_at DATETIME(6) NOT NULL,
   INDEX idx_revoked_token_hash (token_hash),

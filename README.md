@@ -174,7 +174,7 @@ npm run build
 
 ## 🔐 Independent Faculty & Mentor Portals Architecture
 
-The Faculty and Mentor portals operate on completely separated, dedicated routes, database collections, and role-guarded pipelines.
+The Faculty and Mentor portals operate on completely separated, dedicated routes and role-guarded pipelines backed by Spring Boot 3 & MySQL 8.
 
 ### Route Breakdown
 
@@ -186,17 +186,22 @@ The Faculty and Mentor portals operate on completely separated, dedicated routes
 ### Environment Variables (`.env`)
 
 ```env
-PORT=5000
 CLIENT_URL=http://localhost:5173
-MONGODB_URI=mongodb://127.0.0.1:27017/intellicampus_db
-JWT_SECRET=4f92a105c3b4e78912345678abcdef0123456789abcdef0123456789abcdef2026
+JWT_SECRET=4c8a91f2b6e3d7a8c1f4e5a9b2d8c3e7f1a5b9c2d8e4f1a7b3c9d5e2f8a4b6c1
 
-# Nodemailer Real SMTP Configuration
-EMAIL_HOST=smtp.gmail.com
-EMAIL_PORT=587
-EMAIL_USER=your_email@gmail.com
-EMAIL_PASS=your_gmail_16_digit_app_password
-EMAIL_FROM="IntelliCampus Security" <noreply@intellicampus.edu>
+# MySQL Database Configuration
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=intellicampus
+DB_USER=campus_admin
+DB_PASSWORD=SecureCampusPassword2026!
+
+# Spring Mail SMTP Configuration
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USERNAME=your_email@gmail.com
+SMTP_PASSWORD=your_gmail_16_digit_app_password
+MAIL_FROM=noreply@intellicampus.edu
 ```
 
 #### How to Generate a Gmail App Password
@@ -204,18 +209,19 @@ EMAIL_FROM="IntelliCampus Security" <noreply@intellicampus.edu>
 2. Ensure **2-Step Verification** is enabled.
 3. Search for **App Passwords** in the search bar.
 4. Create a new App Password named `IntelliCampus`.
-5. Copy the generated 16-character code into `EMAIL_PASS` in `.env`.
+5. Copy the generated 16-character code into `SMTP_PASSWORD` in `.env`.
 
 ### Quick Setup Steps
-1. Install dependencies:
+1. Install frontend dependencies:
    ```bash
    npm install
    ```
-2. Start the backend API server:
+2. Start the Spring Boot backend API server (port 8080):
    ```bash
-   npm run server
+   cd backend
+   ./mvnw spring-boot:run
    ```
-3. Start the Vite development frontend:
+3. Start the Vite development frontend (port 5173):
    ```bash
    npm run dev
    ```

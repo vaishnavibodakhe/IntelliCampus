@@ -1,6 +1,8 @@
 package com.intellicampus.user.model;
 
 import com.intellicampus.academic.model.Department;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 
@@ -20,6 +22,7 @@ public class User {
     private String userCode;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private Role role;
 
@@ -32,10 +35,14 @@ public class User {
     @Column(length = 20)
     private String phone;
 
+    @Column(length = 100)
+    private String specialization;
+
     @Column(name = "password_hash", nullable = false, length = 120)
     private String passwordHash;
 
     @Enumerated(EnumType.STRING)
+    @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 20)
     private UserStatus status = UserStatus.ACTIVE;
 
@@ -100,6 +107,9 @@ public class User {
 
     public String getPhone() { return phone; }
     public void setPhone(String phone) { this.phone = phone; }
+
+    public String getSpecialization() { return specialization; }
+    public void setSpecialization(String specialization) { this.specialization = specialization; }
 
     public String getPasswordHash() { return passwordHash; }
     public void setPasswordHash(String passwordHash) { this.passwordHash = passwordHash; }
