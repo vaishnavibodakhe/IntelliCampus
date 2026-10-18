@@ -4,7 +4,12 @@ import {
   validateStudentRegistration,
   calculateCosineSimilarity,
   computeAverageEmbedding,
-  checkDuplicateFace
+  checkDuplicateFace,
+  validateImageBrightness,
+  estimateImageSharpness,
+  validatePoseConsistency,
+  validateFrameUniqueness,
+  checkCameraSecurityEnvironment
 } from '../../utils/cryptoAndGeo.js';
 
 describe('Student Authentication & Registration - Field Validation', () => {
@@ -248,5 +253,112 @@ describe('Session Security - Token Invalidation on Logout', () => {
     denylist.invalidateToken(testToken);
 
     assert.strictEqual(denylist.isTokenRevoked(testToken), true);
+  });
+});
+
+describe('Frontend Biometric Quality & Security Helpers', () => {
+  it('should validate image brightness within [40, 220] range and flag too dark / too bright', () => {
+    // 10x10 dark image (all pixels ~ 20)
+    const darkPixels = new Uint8ClampedArray(10 * 10 * 4);
+    for (let i = 0; i < darkPixels.length; i += 4) {
+      darkPixels[i] = 20;
+      darkPixels[i + 1] = 20;
+      darkPixels[i + 2] = 20;
+      darkPixels[i + 3] = 255;
+    }
+    const darkRes = validateImageBrightness(darkPixels);
+    assert.strictEqual(darkRes.valid, false);
+    assert.strictEqual(darkRes.status, 'TOO_DARK');
+
+    // 10x10 bright image (all pixels ~ 240)
+    const brightPixels = new Uint8ClampedArray(10 * 10 * 4);
+    for (let i = 0; i < brightPixels.length; i += 4) {
+      brightPixels[i] = 240;
+      brightPixels[i + 1] = 240;
+      brightPixels[i + 2] = 240;
+      brightPixels[i + 3] = 255;
+    }
+    const brightRes = validateImageBrightness(brightPixels);
+    assert.strictEqual(brightRes.valid, false);
+    assert.strictEqual(brightRes.status, 'TOO_BRIGHT');
+
+    // 10x10 optimal image (all pixels ~ 128)
+    const optimalPixels = new Uint8ClampedArray(10 * 10 * 4);
+    for (let i = 0; i < optimalPixels.length; i += 4) {
+      optimalPixels[i] = 128;
+      optimalPixels[i + 1] = 128;
+      optimalPixels[i + 2] = 128;
+      optimalPixels[i + 3] = 255;
+    }
+    const optRes = validateImageBrightness(optimalPixels);
+    assert.strictEqual(optRes.valid, true);
+    assert.strictEqual(optRes.status, 'OPTIMAL');
+  });
+
+  it('should estimate image sharpness via Laplacian variance and identify blurry frames', () => {
+    // Uniform flat image has variance 0.0 < 10.0 (BLURRY)
+    const flatPixels = new Uint8ClampedArray(20 * 20 * 4);
+    flatPixels.fill(100);
+    const flatRes = estimateImageSharpness(flatPixels, 20, 20);
+    assert.strictEqual(flatRes.valid, false);
+    assert.strictEqual(flatRes.status, 'BLURRY');
+
+    // High frequency pattern (checkerboard) has high variance (SHARP)
+    const sharpPixels = new Uint8ClampedArray(20 * 20 * 4);
+    for (let y = 0; y < 20; y++) {
+      for (let x = 0; x < 20; x++) {
+        const idx = (y * 20 + x) * 4;
+        const val = (x + y) % 2 === 0 ? 0 : 255;
+        sharpPixels[idx] = val;
+        sharpPixels[idx + 1] = val;
+        sharpPixels[idx + 2] = val;
+        sharpPixels[idx + 3] = 255;
+      }
+    }
+    const sharpRes = estimateImageSharpness(sharpPixels, 20, 20);
+    assert.strictEqual(sharpRes.valid, true);
+    assert.strictEqual(sharpRes.status, 'SHARP');
+    assert.ok(sharpRes.sharpness >= 10.0);
+  });
+
+  it('should validate pose consistency across front, left, and right camera poses', () => {
+    // Valid: all pairwise similarities >= 0.50
+    const passingPoses = [0.75, 0.68, 0.62];
+    const passRes = validatePoseConsistency(passingPoses, 0.50);
+    assert.strictEqual(passRes.valid, true);
+
+    // Failing: one pose similarity is 0.35 < 0.50
+    const failingPoses = [0.72, 0.35, 0.60];
+    const failRes = validatePoseConsistency(failingPoses, 0.50);
+    assert.strictEqual(failRes.valid, false);
+    assert.ok(failRes.error.includes('Pose consistency check failed'));
+  });
+
+  it('should reject duplicate frames by validating SHA-256 hash uniqueness', () => {
+    // 3 unique hashes
+    const uniqueHashes = ['hash-front-111', 'hash-left-222', 'hash-right-333'];
+    const uniqueRes = validateFrameUniqueness(uniqueHashes);
+    assert.strictEqual(uniqueRes.valid, true);
+    assert.strictEqual(uniqueRes.uniqueCount, 3);
+
+    // Repeated frame hash
+    const repeatedHashes = ['hash-front-111', 'hash-front-111', 'hash-right-333'];
+    const repeatRes = validateFrameUniqueness(repeatedHashes);
+    assert.strictEqual(repeatRes.valid, false);
+    assert.ok(repeatRes.error.includes('Duplicate frames detected'));
+  });
+
+  it('should permit camera streaming on localhost or HTTPS and restrict remote HTTP', () => {
+    // Localhost allowed
+    assert.strictEqual(checkCameraSecurityEnvironment('localhost', false).isSecure, true);
+    assert.strictEqual(checkCameraSecurityEnvironment('127.0.0.1', false).isSecure, true);
+
+    // Remote HTTPS allowed
+    assert.strictEqual(checkCameraSecurityEnvironment('campus.edu', true).isSecure, true);
+
+    // Remote HTTP restricted
+    const remoteInsecure = checkCameraSecurityEnvironment('campus.edu', false);
+    assert.strictEqual(remoteInsecure.isSecure, false);
+    assert.ok(remoteInsecure.error.includes('HTTPS'));
   });
 });

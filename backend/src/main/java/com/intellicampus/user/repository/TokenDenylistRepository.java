@@ -12,4 +12,5 @@ public interface TokenDenylistRepository extends JpaRepository<TokenDenylist, Lo
     boolean existsByToken(String token);
     Optional<TokenDenylist> findByToken(String token);
     void deleteByExpiresAtBefore(LocalDateTime now);
+    void deleteByUserId(Long userId);
 }

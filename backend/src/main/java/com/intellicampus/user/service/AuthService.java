@@ -11,10 +11,12 @@ import com.intellicampus.user.model.Role;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.TokenDenylist;
 import com.intellicampus.user.model.User;
+import com.intellicampus.user.model.UserStatus;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.TokenDenylistRepository;
 import com.intellicampus.user.repository.UserRepository;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -113,6 +115,7 @@ public class AuthService {
         String passwordHash = passwordEncoder.encode(req.getPassword());
 
         User user = new User(userCode, Role.STUDENT, name, email, passwordHash, dept);
+        user.setStatus(UserStatus.PENDING);
         User savedUser = userRepository.save(user);
 
         StudentProfile profile = new StudentProfile(savedUser, rollNo, division, null);
@@ -146,6 +149,10 @@ public class AuthService {
         String identifier = req.getIdentifier().trim();
         User user = findUserByIdentifier(identifier)
                 .orElseThrow(() -> new IllegalArgumentException("Invalid credentials. Please verify your email/roll number and password."));
+
+        if (user.getStatus() == UserStatus.PENDING) {
+            throw new IllegalStateException("Account registration is pending biometric face enrollment. Please complete face enrollment before logging in.");
+        }
 
         // Check account lockout
         if (user.getLockedUntil() != null) {
@@ -321,5 +328,19 @@ public class AuthService {
         map.put("consentAt", profile.getConsentAt());
         map.put("consentVersion", profile.getConsentVersion());
         return map;
+    }
+
+    @Scheduled(cron = "${app.cleanup.pending-cron:0 0 * * * *}")
+    public int cleanupPendingAccountsOlderThan24Hours() {
+        LocalDateTime cutoff = LocalDateTime.now().minusHours(24);
+        java.util.List<User> pendingUsers = userRepository.findByStatusAndCreatedAtBefore(UserStatus.PENDING, cutoff);
+        int count = 0;
+        for (User u : pendingUsers) {
+            studentProfileRepository.findByUser(u).ifPresent(studentProfileRepository::delete);
+            tokenDenylistRepository.deleteByUserId(u.getId());
+            userRepository.delete(u);
+            count++;
+        }
+        return count;
     }
 }

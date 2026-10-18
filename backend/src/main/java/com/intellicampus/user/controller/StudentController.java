@@ -1,17 +1,14 @@
 package com.intellicampus.user.controller;
 
+import com.intellicampus.user.dto.CaptureTokenResponseDto;
+import com.intellicampus.user.dto.FaceEnrollmentRequestDto;
 import com.intellicampus.user.model.StudentProfile;
-import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import com.intellicampus.user.service.FaceEnrollmentService;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.List;
@@ -36,13 +33,30 @@ public class StudentController {
         this.userRepository = userRepository;
     }
 
-    @PostMapping(value = "/{studentId}/face-enroll", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    /**
+     * Issues a one-time capture token bound to pending student account and client IP (5 min TTL).
+     */
+    @PostMapping("/{studentId}/capture-token")
+    public ResponseEntity<CaptureTokenResponseDto> issueCaptureToken(
+            @PathVariable Long studentId,
+            HttpServletRequest request) {
+        String clientIp = extractClientIp(request);
+        CaptureTokenResponseDto tokenDto = faceEnrollmentService.issueCaptureToken(studentId, clientIp);
+        return ResponseEntity.ok(tokenDto);
+    }
+
+    /**
+     * Completes biometric face enrollment using 3 live camera frames (front, left, right),
+     * one-time capture token, and liveness result.
+     */
+    @PostMapping("/{studentId}/face-enroll")
     public ResponseEntity<Map<String, Object>> enrollFace(
             @PathVariable Long studentId,
-            @RequestParam("photo") MultipartFile photo,
-            @RequestParam(value = "consentVersion", required = false, defaultValue = "1.0") String consentVersion) {
+            @RequestBody FaceEnrollmentRequestDto req,
+            HttpServletRequest request) {
 
-        StudentProfile profile = faceEnrollmentService.enrollStudentFace(studentId, photo, consentVersion);
+        String clientIp = extractClientIp(request);
+        StudentProfile profile = faceEnrollmentService.enrollStudentFace(studentId, req, clientIp);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "SUCCESS");
@@ -51,29 +65,9 @@ public class StudentController {
         response.put("faceEnrolled", profile.getFaceEnrolled());
         response.put("consentAt", profile.getConsentAt());
         response.put("consentVersion", profile.getConsentVersion());
-        response.put("message", "Biometric face template enrolled successfully.");
+        response.put("message", "Biometric face template enrolled successfully from live camera.");
 
         return ResponseEntity.ok(response);
-    }
-
-    @GetMapping("/{studentId}/face-photo")
-    public ResponseEntity<Resource> getFacePhoto(
-            @PathVariable Long studentId,
-            @RequestParam(value = "requesterId", required = false) Long requesterId) {
-
-        User requester = null;
-        if (requesterId != null) {
-            requester = userRepository.findById(requesterId).orElse(null);
-        }
-
-        Resource resource = faceEnrollmentService.loadStudentFacePhoto(studentId, requester);
-        String filename = resource.getFilename() != null ? resource.getFilename() : "photo.jpg";
-        MediaType mediaType = filename.endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG;
-
-        return ResponseEntity.ok()
-                .contentType(mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
-                .body(resource);
     }
 
     @GetMapping("/{studentId}")
@@ -89,6 +83,16 @@ public class StudentController {
                 .map(this::mapStudentToSafeDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(result);
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        if (request == null) return "127.0.0.1";
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String remoteAddr = request.getRemoteAddr();
+        return (remoteAddr != null && !remoteAddr.isBlank()) ? remoteAddr : "127.0.0.1";
     }
 
     private Map<String, Object> mapStudentToSafeDto(StudentProfile p) {

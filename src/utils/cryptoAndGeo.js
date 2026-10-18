@@ -356,5 +356,206 @@ export function checkDuplicateFace(
   };
 }
 
+/**
+ * Validates image brightness from raw pixel RGBA data.
+ * Ideal average luminance should be between 40 (too dark) and 220 (too bright).
+ */
+export function validateImageBrightness(rgbaData) {
+  if (!rgbaData || rgbaData.length < 4) {
+    return { valid: false, brightness: 0, status: 'INVALID', error: 'No image data provided.' };
+  }
+
+  let totalLuminance = 0;
+  const pixelCount = Math.floor(rgbaData.length / 4);
+
+  // Sample pixels (every 4th pixel for speed if large)
+  const step = pixelCount > 10000 ? 4 : 1;
+  let sampledCount = 0;
+
+  for (let i = 0; i < rgbaData.length; i += 4 * step) {
+    const r = rgbaData[i];
+    const g = rgbaData[i + 1];
+    const b = rgbaData[i + 2];
+    // Standard relative luminance
+    const lum = 0.299 * r + 0.587 * g + 0.114 * b;
+    totalLuminance += lum;
+    sampledCount++;
+  }
+
+  const avgBrightness = sampledCount > 0 ? totalLuminance / sampledCount : 0;
+  const rounded = Math.round(avgBrightness);
+
+  if (rounded < 40) {
+    return {
+      valid: false,
+      brightness: rounded,
+      status: 'TOO_DARK',
+      error: `Lighting is too dark (${rounded}/255). Please ensure your face is well illuminated.`
+    };
+  }
+
+  if (rounded > 220) {
+    return {
+      valid: false,
+      brightness: rounded,
+      status: 'TOO_BRIGHT',
+      error: `Lighting is overexposed (${rounded}/255). Please avoid direct backlight.`
+    };
+  }
+
+  return {
+    valid: true,
+    brightness: rounded,
+    status: 'OPTIMAL',
+    error: null
+  };
+}
+
+/**
+ * Estimates image sharpness via Laplacian variance approximation.
+ * Sharpness variance score >= 10.0 passes the blur threshold.
+ */
+export function estimateImageSharpness(rgbaData, width, height) {
+  if (!rgbaData || !width || !height || width < 3 || height < 3) {
+    return { valid: false, sharpness: 0, status: 'INVALID', error: 'Invalid frame dimensions.' };
+  }
+
+  // Convert to grayscale matrix
+  const gray = new Float32Array(width * height);
+  for (let i = 0, p = 0; i < rgbaData.length; i += 4, p++) {
+    gray[p] = 0.299 * rgbaData[i] + 0.587 * rgbaData[i + 1] + 0.114 * rgbaData[i + 2];
+  }
+
+  // Discrete Laplacian 3x3 kernel: [[0, 1, 0], [1, -4, 1], [0, 1, 0]]
+  let sum = 0;
+  let sumSq = 0;
+  let count = 0;
+
+  for (let y = 1; y < height - 1; y++) {
+    const rowOffset = y * width;
+    for (let x = 1; x < width - 1; x++) {
+      const idx = rowOffset + x;
+      const lap =
+        gray[idx - width] +
+        gray[idx - 1] -
+        4 * gray[idx] +
+        gray[idx + 1] +
+        gray[idx + width];
+
+      sum += lap;
+      sumSq += lap * lap;
+      count++;
+    }
+  }
+
+  if (count === 0) {
+    return { valid: false, sharpness: 0, status: 'INVALID', error: 'Insufficient pixels for sharpness check.' };
+  }
+
+  const mean = sum / count;
+  const variance = sumSq / count - mean * mean;
+  const sharpness = parseFloat(Math.max(0, variance).toFixed(2));
+
+  if (sharpness < 10.0) {
+    return {
+      valid: false,
+      sharpness,
+      status: 'BLURRY',
+      error: `Frame is blurry (sharpness score ${sharpness.toFixed(1)} < 10.0). Please hold your device steady.`
+    };
+  }
+
+  return {
+    valid: true,
+    sharpness,
+    status: 'SHARP',
+    error: null
+  };
+}
+
+/**
+ * Validates pose consistency across pairwise frame cosine similarities.
+ * Enforces pairwise cosine >= minThreshold (default 0.5).
+ */
+export function validatePoseConsistency(pairwiseSimilarities, minThreshold = 0.5) {
+  if (!pairwiseSimilarities || pairwiseSimilarities.length === 0) {
+    return { valid: false, minSimilarity: 0, error: 'No pose similarities provided.' };
+  }
+
+  let minSim = 1.0;
+  for (const sim of pairwiseSimilarities) {
+    if (typeof sim !== 'number') continue;
+    if (sim < minSim) minSim = sim;
+  }
+
+  const minRounded = parseFloat(minSim.toFixed(4));
+  if (minRounded < minThreshold) {
+    return {
+      valid: false,
+      minSimilarity: minRounded,
+      error: `Pose consistency check failed: Pairwise similarity (${minRounded}) is below required minimum threshold (${minThreshold}). Frames must belong to the same person.`
+    };
+  }
+
+  return {
+    valid: true,
+    minSimilarity: minRounded,
+    error: null
+  };
+}
+
+/**
+ * Validates uniqueness of frame SHA-256 hashes across the 3 capture poses.
+ */
+export function validateFrameUniqueness(frameHashes) {
+  if (!frameHashes || frameHashes.length !== 3) {
+    return {
+      valid: false,
+      uniqueCount: frameHashes ? frameHashes.length : 0,
+      error: `Enrollment requires exactly 3 distinct frame hashes. Received: ${frameHashes ? frameHashes.length : 0}`
+    };
+  }
+
+  const set = new Set(frameHashes);
+  if (set.size !== 3) {
+    return {
+      valid: false,
+      uniqueCount: set.size,
+      error: 'Duplicate frames detected: All 3 capture poses (front, left, right) must be distinct live camera frames.'
+    };
+  }
+
+  return {
+    valid: true,
+    uniqueCount: 3,
+    error: null
+  };
+}
+
+/**
+ * Verifies that the client execution environment permits getUserMedia camera streaming
+ * (HTTPS or localhost per W3C Media Capture and Streams specification).
+ */
+export function checkCameraSecurityEnvironment(hostname = 'localhost', isSecureContext = true) {
+  const isLocal =
+    hostname === 'localhost' ||
+    hostname === '127.0.0.1' ||
+    hostname === '[::1]' ||
+    hostname === '0.0.0.0';
+
+  if (!isSecureContext && !isLocal) {
+    return {
+      isSecure: false,
+      error: 'Camera access is restricted. Live facial capture requires a secure HTTPS connection or localhost origin.'
+    };
+  }
+
+  return {
+    isSecure: true,
+    error: null
+  };
+}
+
+
 
 
