@@ -133,29 +133,31 @@ export default function StudentLogin({ onSwitchToRegister, onLoginSuccess }) {
             </div>
           </div>
 
-          {/* Quick Demo Pre-fills */}
-          <div className="demo-credentials-box">
-            <span className="demo-hint-title">
-              <Sparkles size={14} className="text-accent" />
-              Quick Fill Demo Accounts:
-            </span>
-            <div className="demo-pill-group">
-              <button
-                type="button"
-                className="demo-pill"
-                onClick={() => handleQuickDemo('aarav.cs24@intellicampus.edu', 'Welcome2026!')}
-              >
-                Aarav Shah (CS-104)
-              </button>
-              <button
-                type="button"
-                className="demo-pill"
-                onClick={() => handleQuickDemo('CS-105', 'Welcome2026!')}
-              >
-                Priya Nair (CS-105)
-              </button>
+          {/* Quick Demo Pre-fills (default off; gated behind VITE_DEMO_MODE=true) */}
+          {import.meta.env?.VITE_DEMO_MODE === 'true' && (
+            <div className="demo-credentials-box">
+              <span className="demo-hint-title">
+                <Sparkles size={14} className="text-accent" />
+                Quick Fill Demo Accounts:
+              </span>
+              <div className="demo-pill-group">
+                <button
+                  type="button"
+                  className="demo-pill"
+                  onClick={() => handleQuickDemo('aarav.cs24@intellicampus.edu', 'Welcome2026!')}
+                >
+                  Aarav Shah (CS-104)
+                </button>
+                <button
+                  type="button"
+                  className="demo-pill"
+                  onClick={() => handleQuickDemo('CS-105', 'Welcome2026!')}
+                >
+                  Priya Nair (CS-105)
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Submit Button */}
           <button

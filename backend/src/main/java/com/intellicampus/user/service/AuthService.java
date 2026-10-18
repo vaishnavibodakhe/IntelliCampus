@@ -15,6 +15,7 @@ import com.intellicampus.user.model.UserStatus;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.TokenDenylistRepository;
 import com.intellicampus.user.repository.UserRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -27,6 +28,8 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.regex.Pattern;
+
+import com.intellicampus.audit.service.AuditChainService;
 
 @Service
 @Transactional
@@ -43,6 +46,8 @@ public class AuthService {
     private final TokenDenylistRepository tokenDenylistRepository;
     private final JwtService jwtService;
     private final PasswordEncoder passwordEncoder;
+    private final IpRateLimiterService ipRateLimiterService;
+    private final AuditChainService auditChainService;
 
     @Value("${app.jwt.lockout-max-attempts:5}")
     private int lockoutMaxAttempts = 5;
@@ -58,6 +63,21 @@ public class AuthService {
             TokenDenylistRepository tokenDenylistRepository,
             JwtService jwtService,
             PasswordEncoder passwordEncoder) {
+        this(userRepository, studentProfileRepository, departmentRepository, divisionRepository,
+                tokenDenylistRepository, jwtService, passwordEncoder, null, null);
+    }
+
+    @Autowired
+    public AuthService(
+            UserRepository userRepository,
+            StudentProfileRepository studentProfileRepository,
+            DepartmentRepository departmentRepository,
+            DivisionRepository divisionRepository,
+            TokenDenylistRepository tokenDenylistRepository,
+            JwtService jwtService,
+            PasswordEncoder passwordEncoder,
+            IpRateLimiterService ipRateLimiterService,
+            AuditChainService auditChainService) {
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.departmentRepository = departmentRepository;
@@ -65,6 +85,8 @@ public class AuthService {
         this.tokenDenylistRepository = tokenDenylistRepository;
         this.jwtService = jwtService;
         this.passwordEncoder = passwordEncoder;
+        this.ipRateLimiterService = ipRateLimiterService;
+        this.auditChainService = auditChainService;
     }
 
     public AuthResponseDto registerStudent(StudentRegisterRequestDto req) {
@@ -126,6 +148,20 @@ public class AuthService {
                 : "1.0");
         StudentProfile savedProfile = studentProfileRepository.save(profile);
 
+        // Record backend audit entry for registration
+        if (auditChainService != null) {
+            auditChainService.recordEntry(
+                    savedUser.getId(),
+                    savedUser.getName(),
+                    "STUDENT_REGISTRATION",
+                    "USER",
+                    String.valueOf(savedUser.getId()),
+                    "{}",
+                    "{\"status\":\"PENDING\",\"rollNo\":\"" + savedProfile.getRollNo() + "\"}",
+                    "Student registration initiated with DPDP Act 2023 biometric consent"
+            );
+        }
+
         // Generate JWT token
         String token = jwtService.generateToken(savedUser);
 
@@ -139,6 +175,14 @@ public class AuthService {
     }
 
     public AuthResponseDto login(LoginRequestDto req) {
+        return login(req, "127.0.0.1");
+    }
+
+    public AuthResponseDto login(LoginRequestDto req, String clientIp) {
+        if (ipRateLimiterService != null && !ipRateLimiterService.isLoginIpAllowed(clientIp)) {
+            throw new IllegalStateException("Too many failed login attempts from this IP address. Please try again after 10 minutes.");
+        }
+
         if (req == null || req.getIdentifier() == null || req.getIdentifier().isBlank()) {
             throw new IllegalArgumentException("Email or Roll Number is required.");
         }
@@ -147,8 +191,14 @@ public class AuthService {
         }
 
         String identifier = req.getIdentifier().trim();
-        User user = findUserByIdentifier(identifier)
-                .orElseThrow(() -> new IllegalArgumentException("Invalid credentials. Please verify your email/roll number and password."));
+        User user = findUserByIdentifier(identifier).orElse(null);
+
+        if (user == null) {
+            if (ipRateLimiterService != null) {
+                ipRateLimiterService.recordFailedLogin(clientIp);
+            }
+            throw new IllegalArgumentException("Invalid credentials. Please verify your email/roll number and password.");
+        }
 
         if (user.getStatus() == UserStatus.PENDING) {
             throw new IllegalStateException("Account registration is pending biometric face enrollment. Please complete face enrollment before logging in.");
@@ -169,6 +219,9 @@ public class AuthService {
 
         // Validate password
         if (!passwordEncoder.matches(req.getPassword(), user.getPasswordHash())) {
+            if (ipRateLimiterService != null) {
+                ipRateLimiterService.recordFailedLogin(clientIp);
+            }
             int failed = (user.getFailedAttempts() != null ? user.getFailedAttempts() : 0) + 1;
             user.setFailedAttempts(failed);
 
@@ -183,11 +236,28 @@ public class AuthService {
             }
         }
 
-        // Successful login: reset failed attempts
+        // Successful login: reset failed attempts and IP rate limiting
+        if (ipRateLimiterService != null) {
+            ipRateLimiterService.resetLoginIp(clientIp);
+        }
         if (user.getFailedAttempts() != null && user.getFailedAttempts() > 0) {
             user.setFailedAttempts(0);
             user.setLockedUntil(null);
             userRepository.save(user);
+        }
+
+        // Record backend audit entry for login
+        if (auditChainService != null) {
+            auditChainService.recordEntry(
+                    user.getId(),
+                    user.getName(),
+                    "STUDENT_LOGIN",
+                    "USER",
+                    String.valueOf(user.getId()),
+                    "{}",
+                    "{\"email\":\"" + user.getEmail() + "\",\"role\":\"" + user.getRole().name() + "\"}",
+                    "Student " + user.getName() + " signed in successfully via JWT token"
+            );
         }
 
         String token = jwtService.generateToken(user);
@@ -207,12 +277,13 @@ public class AuthService {
 
     public Map<String, Object> logout(String authHeader) {
         String token = extractTokenFromHeader(authHeader);
+        User user = null;
         if (token != null && !token.isBlank()) {
             try {
                 if (jwtService.isTokenValid(token)) {
                     LocalDateTime expiresAt = jwtService.extractExpirationAsLocalDateTime(token);
                     String email = jwtService.extractEmail(token);
-                    User user = userRepository.findByEmail(email).orElse(null);
+                    user = userRepository.findByEmail(email).orElse(null);
 
                     if (!tokenDenylistRepository.existsByToken(token)) {
                         TokenDenylist denylistEntry = new TokenDenylist(token, user, expiresAt);
@@ -222,6 +293,22 @@ public class AuthService {
             } catch (Exception e) {
                 // If token cannot be decoded, still proceed with logout
             }
+        }
+
+        if (auditChainService != null) {
+            Long actorId = user != null ? user.getId() : 0L;
+            String actorName = user != null ? user.getName() : "Unknown";
+            String email = user != null ? user.getEmail() : "unknown";
+            auditChainService.recordEntry(
+                    actorId,
+                    actorName,
+                    "USER_LOGOUT",
+                    "USER",
+                    String.valueOf(actorId),
+                    "{\"email\":\"" + email + "\"}",
+                    "{\"session\":\"TERMINATED\"}",
+                    "Student " + actorName + " logged out; session token revoked and denylisted"
+            );
         }
 
         Map<String, Object> resp = new HashMap<>();

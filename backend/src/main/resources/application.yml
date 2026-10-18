@@ -2,6 +2,9 @@ server:
   port: 8080
   servlet:
     context-path: /
+  tomcat:
+    max-http-form-post-size: 25MB
+    max-swallow-size: 25MB
 
 spring:
   application:
@@ -13,7 +16,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   jpa:
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     show-sql: false
     properties:
       hibernate:

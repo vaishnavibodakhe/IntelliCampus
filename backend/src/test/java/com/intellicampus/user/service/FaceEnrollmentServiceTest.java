@@ -146,9 +146,9 @@ class FaceEnrollmentServiceTest {
         List<Double> e2 = new ArrayList<>(Collections.nCopies(512, 0.04419));
         List<Double> e3 = new ArrayList<>(Collections.nCopies(512, 0.04419));
 
-        String aiResponse1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e1) + ",\"quality\":0.96}";
-        String aiResponse2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e2) + ",\"quality\":0.95}";
-        String aiResponse3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e3) + ",\"quality\":0.97}";
+        String aiResponse1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e1) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiResponse2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e2) + ",\"quality\":0.95,\"yaw\":-18.0}";
+        String aiResponse3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e3) + ",\"quality\":0.97,\"yaw\":18.0}";
 
         when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(new ResponseEntity<>(aiResponse1, HttpStatus.OK))
@@ -210,8 +210,13 @@ class FaceEnrollmentServiceTest {
         List<Double> baseA = createUnitVector(0); // [1, 0, 0, ...]
         List<Double> baseB = createSimilarVector(baseA, 0.85); // similarity 0.85 with baseA
 
-        String aiResponseA = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseA) + ",\"quality\":0.96}";
-        String aiResponseB = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseB) + ",\"quality\":0.96}";
+        String aiRespA1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseA) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiRespA2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseA) + ",\"quality\":0.96,\"yaw\":-18.0}";
+        String aiRespA3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseA) + ",\"quality\":0.96,\"yaw\":18.0}";
+
+        String aiRespB1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseB) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiRespB2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseB) + ",\"quality\":0.96,\"yaw\":-18.0}";
+        String aiRespB3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(baseB) + ",\"quality\":0.96,\"yaw\":18.0}";
 
         // Student A (id 50) and Student B (id 60)
         User userB = new User("Rohan Deshmukh", "rohan@intellicampus.edu", "pass", Role.STUDENT, "STU-202");
@@ -229,7 +234,9 @@ class FaceEnrollmentServiceTest {
         CaptureTokenResponseDto tokenA = faceEnrollmentService.issueCaptureToken(50L, "127.0.0.1");
 
         when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(new ResponseEntity<>(aiResponseA, HttpStatus.OK));
+                .thenReturn(new ResponseEntity<>(aiRespA1, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiRespA2, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiRespA3, HttpStatus.OK));
 
         FaceEnrollmentRequestDto reqA = new FaceEnrollmentRequestDto();
         reqA.setToken(tokenA.getToken());
@@ -258,7 +265,9 @@ class FaceEnrollmentServiceTest {
         CaptureTokenResponseDto tokenB = faceEnrollmentService.issueCaptureToken(60L, "127.0.0.1");
 
         when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
-                .thenReturn(new ResponseEntity<>(aiResponseB, HttpStatus.OK));
+                .thenReturn(new ResponseEntity<>(aiRespB1, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiRespB2, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiRespB3, HttpStatus.OK));
 
         FaceEnrollmentRequestDto reqB = new FaceEnrollmentRequestDto();
         reqB.setToken(tokenB.getToken());
@@ -284,9 +293,9 @@ class FaceEnrollmentServiceTest {
         List<Double> eLeft = createUnitVector(1); // orthogonal to front!
         List<Double> eRight = createUnitVector(0);
 
-        String aiResp1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eFront) + ",\"quality\":0.96}";
-        String aiResp2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eLeft) + ",\"quality\":0.96}";
-        String aiResp3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eRight) + ",\"quality\":0.96}";
+        String aiResp1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eFront) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiResp2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eLeft) + ",\"quality\":0.96,\"yaw\":-18.0}";
+        String aiResp3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(eRight) + ",\"quality\":0.96,\"yaw\":18.0}";
 
         when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
                 .thenReturn(new ResponseEntity<>(aiResp1, HttpStatus.OK))
@@ -465,5 +474,100 @@ class FaceEnrollmentServiceTest {
 
         assertTrue(ex.getMessage().contains("Face photo is too blurry"));
         assertFalse(studentProfile.getFaceEnrolled());
+    }
+
+    @Test
+    @DisplayName("Liveness Test 1: Missing liveness field passes when 3 frames show distinct server-verified poses")
+    void testEnrollment_MissingLivenessField_Success() throws Exception {
+        when(studentProfileRepository.findById(50L)).thenReturn(Optional.of(studentProfile));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(studentProfileRepository.findAll()).thenReturn(Collections.emptyList());
+
+        CaptureTokenResponseDto token = faceEnrollmentService.issueCaptureToken(50L, "127.0.0.1");
+
+        List<Double> e = new ArrayList<>(Collections.nCopies(512, 0.04419));
+        String aiResp1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiResp2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.95,\"yaw\":-18.0}";
+        String aiResp3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.97,\"yaw\":18.0}";
+
+        when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(aiResp1, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp2, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp3, HttpStatus.OK));
+
+        FaceEnrollmentRequestDto req = new FaceEnrollmentRequestDto();
+        req.setToken(token.getToken());
+        req.setFrames(List.of(createDummyBase64Frame((byte) 101), createDummyBase64Frame((byte) 102), createDummyBase64Frame((byte) 103)));
+        req.setLiveness(null); // Missing liveness field from client trust path
+        req.setConsentVersion("1.0");
+
+        StudentProfile enrolled = faceEnrollmentService.enrollStudentFace(50L, req, "127.0.0.1");
+        assertTrue(enrolled.getFaceEnrolled(), "Enrollment should succeed despite missing client-sent liveness field");
+        assertEquals(UserStatus.ACTIVE, studentUser.getStatus());
+    }
+
+    @Test
+    @DisplayName("Liveness Test 2: 3 near-identical frames reject on server-side head yaw difference (< minYawDiff)")
+    void testEnrollment_NearIdenticalFrames_YawDiffFails() throws Exception {
+        when(studentProfileRepository.findById(50L)).thenReturn(Optional.of(studentProfile));
+        CaptureTokenResponseDto token = faceEnrollmentService.issueCaptureToken(50L, "127.0.0.1");
+
+        List<Double> e = new ArrayList<>(Collections.nCopies(512, 0.04419));
+        // Near-identical poses: yaw differences are only 2.0 and 1.5 degrees (< minYawDiff = 10.0 deg)
+        String aiResp1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiResp2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.95,\"yaw\":2.0}";
+        String aiResp3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.97,\"yaw\":1.5}";
+
+        when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(aiResp1, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp2, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp3, HttpStatus.OK));
+
+        FaceEnrollmentRequestDto req = new FaceEnrollmentRequestDto();
+        req.setToken(token.getToken());
+        req.setFrames(List.of(createDummyBase64Frame((byte) 111), createDummyBase64Frame((byte) 112), createDummyBase64Frame((byte) 113)));
+        req.setLiveness(true); // Even if client claims liveness is true, server rejects!
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                faceEnrollmentService.enrollStudentFace(50L, req, "127.0.0.1")
+        );
+
+        assertTrue(ex.getMessage().contains("Pose verification failed") || ex.getMessage().contains("Distinct head poses required"),
+                "Expected yaw pose rejection, got: " + ex.getMessage());
+        assertFalse(studentProfile.getFaceEnrolled());
+        verify(auditChainService).recordEntry(eq(20L), eq("Priya Sharma"), eq("ENROLL_REJECTED_QUALITY/LIVENESS"), eq("STUDENT_BIOMETRIC"), eq("50"), anyString(), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("Liveness Test 3: Correct distinct poses (yaw differences >= minYawDiff) succeed and activate user")
+    void testEnrollment_CorrectPoses_Success() throws Exception {
+        when(studentProfileRepository.findById(50L)).thenReturn(Optional.of(studentProfile));
+        when(studentProfileRepository.save(any(StudentProfile.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(studentProfileRepository.findAll()).thenReturn(Collections.emptyList());
+
+        CaptureTokenResponseDto token = faceEnrollmentService.issueCaptureToken(50L, "127.0.0.1");
+
+        List<Double> e = new ArrayList<>(Collections.nCopies(512, 0.04419));
+        // Valid distinct poses: Front (0 deg), Left (-15 deg), Right (+15 deg)
+        String aiResp1 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.96,\"yaw\":0.0}";
+        String aiResp2 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.95,\"yaw\":-15.0}";
+        String aiResp3 = "{\"faceDetected\":true,\"faceCount\":1,\"embedding\":" + objectMapper.writeValueAsString(e) + ",\"quality\":0.97,\"yaw\":15.0}";
+
+        when(restTemplate.postForEntity(contains("/ai/enroll"), any(HttpEntity.class), eq(String.class)))
+                .thenReturn(new ResponseEntity<>(aiResp1, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp2, HttpStatus.OK))
+                .thenReturn(new ResponseEntity<>(aiResp3, HttpStatus.OK));
+
+        FaceEnrollmentRequestDto req = new FaceEnrollmentRequestDto();
+        req.setToken(token.getToken());
+        req.setFrames(List.of(createDummyBase64Frame((byte) 121), createDummyBase64Frame((byte) 122), createDummyBase64Frame((byte) 123)));
+        req.setConsentVersion("1.0");
+
+        StudentProfile enrolled = faceEnrollmentService.enrollStudentFace(50L, req, "127.0.0.1");
+        assertTrue(enrolled.getFaceEnrolled());
+        assertEquals(UserStatus.ACTIVE, studentUser.getStatus());
+        verify(auditChainService).recordEntry(eq(20L), eq("Priya Sharma"), eq("ENROLL_SUCCESS"), eq("STUDENT_BIOMETRIC"), eq("50"), anyString(), anyString(), anyString());
     }
 }

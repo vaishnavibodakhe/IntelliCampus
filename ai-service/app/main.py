@@ -162,10 +162,31 @@ async def enroll_student_face(
     if embedding is None:
         embedding = face.embedding / np.linalg.norm(face.embedding)
 
+    yaw = 0.0
+    pitch = 0.0
+    roll = 0.0
+    if hasattr(face, "pose") and face.pose is not None:
+        try:
+            pitch = float(face.pose[0])
+            yaw = float(face.pose[1])
+            roll = float(face.pose[2])
+        except Exception:
+            pass
+    elif hasattr(face, "kps") and face.kps is not None and len(face.kps) >= 3:
+        # Fallback landmark-based yaw estimation
+        d_l = face.kps[2][0] - face.kps[0][0]
+        d_r = face.kps[1][0] - face.kps[2][0]
+        eye_dist = face.kps[1][0] - face.kps[0][0]
+        if eye_dist > 0:
+            yaw = float(((d_l - d_r) / eye_dist) * 90.0)
+
     return {
         "status": "SUCCESS",
         "embedding": embedding.tolist(),
         "bbox": bbox,
+        "yaw": round(float(yaw), 2),
+        "pitch": round(float(pitch), 2),
+        "roll": round(float(roll), 2),
         "quality": float(round(float(face.det_score), 4)),
         "message": "Face enrollment biometric template extracted successfully."
     }

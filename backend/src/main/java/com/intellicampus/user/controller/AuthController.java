@@ -33,9 +33,22 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponseDto> login(@RequestBody LoginRequestDto req) {
-        AuthResponseDto resp = authService.login(req);
+    public ResponseEntity<AuthResponseDto> login(
+            @RequestBody LoginRequestDto req,
+            jakarta.servlet.http.HttpServletRequest request) {
+        String clientIp = extractClientIp(request);
+        AuthResponseDto resp = authService.login(req, clientIp);
         return ResponseEntity.ok(resp);
+    }
+
+    private String extractClientIp(jakarta.servlet.http.HttpServletRequest request) {
+        if (request == null) return "127.0.0.1";
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String remoteAddr = request.getRemoteAddr();
+        return (remoteAddr != null && !remoteAddr.isBlank()) ? remoteAddr : "127.0.0.1";
     }
 
     @PostMapping("/logout")

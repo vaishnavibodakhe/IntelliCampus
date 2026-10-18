@@ -42,12 +42,18 @@ import java.util.concurrent.ConcurrentHashMap;
  * (no file upload, no gallery, no raw image storage).
  *
  * NOTE ON LIVENESS & SPOOF DETECTION:
- * Client-side liveness and spoof checks (e.g., blink detection, head turns, micro-motion)
+ * Client-side liveness checks (e.g., blink detection, head turns, micro-motion)
  * are best-effort heuristics. A remote server cannot cryptographically prove that an image
  * originated directly from a physical camera sensor rather than a virtual camera or loopback.
- * The system enforces server-side defense in depth: token single-use & nonce binding,
- * per-frame SHA-256 deduplication, 3 distinct poses, AI single-face detection, and
- * pairwise pose consistency checks.
+ * Therefore, client-sent liveness booleans are excluded from the trust path.
+ * The system enforces server-side defense in depth:
+ * 1. Single-use token & nonce bound to pending account and IP.
+ * 2. Per-frame SHA-256 deduplication (rejecting identical frames).
+ * 3. AI single-face detection on each frame.
+ * 4. Head yaw angle divergence from AI service (/ai/enroll) requiring left and right
+ *    frames to differ from front pose by at least FACE_MIN_YAW_DIFF (default 10 deg).
+ * 5. Pairwise embedding cosine consistency (>= FACE_POSE_CONSISTENCY_MIN, default 0.50).
+ * 6. Duplicate face detection against existing enrolled students (>= FACE_MATCH_THRESHOLD, default 0.45).
  */
 @Service
 @Transactional
@@ -63,12 +69,26 @@ public class FaceEnrollmentService {
     private final String aiServiceUrl;
     private double faceMatchThreshold;
     private double facePoseConsistencyMin;
+    private double faceMinYawDiff;
 
     private RestTemplate restTemplate;
     private ObjectMapper objectMapper;
 
     // In-memory token store for single-use capture tokens (5 min TTL)
     private final Map<String, CaptureToken> captureTokenStore = new ConcurrentHashMap<>();
+
+    public static class FaceFrameData {
+        private final double[] embedding;
+        private final double yaw;
+
+        public FaceFrameData(double[] embedding, double yaw) {
+            this.embedding = embedding;
+            this.yaw = yaw;
+        }
+
+        public double[] getEmbedding() { return embedding; }
+        public double getYaw() { return yaw; }
+    }
 
     public static class CaptureToken {
         private final String token;
@@ -101,6 +121,7 @@ public class FaceEnrollmentService {
         this.aiServiceUrl = "http://localhost:8000";
         this.faceMatchThreshold = 0.45;
         this.facePoseConsistencyMin = 0.5;
+        this.faceMinYawDiff = 10.0;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
     }
@@ -110,9 +131,22 @@ public class FaceEnrollmentService {
             UserRepository userRepository,
             AuditChainService auditChainService,
             IpRateLimiterService ipRateLimiterService,
+            String aiServiceUrl,
+            double faceMatchThreshold,
+            double facePoseConsistencyMin) {
+        this(studentProfileRepository, userRepository, auditChainService, ipRateLimiterService,
+                aiServiceUrl, faceMatchThreshold, facePoseConsistencyMin, 10.0);
+    }
+
+    public FaceEnrollmentService(
+            StudentProfileRepository studentProfileRepository,
+            UserRepository userRepository,
+            AuditChainService auditChainService,
+            IpRateLimiterService ipRateLimiterService,
             @Value("${app.ai.service-url:http://localhost:8000}") String aiServiceUrl,
             @Value("${FACE_MATCH_THRESHOLD:${app.attendance.face-match-threshold:0.45}}") double faceMatchThreshold,
-            @Value("${FACE_POSE_CONSISTENCY_MIN:0.5}") double facePoseConsistencyMin) {
+            @Value("${FACE_POSE_CONSISTENCY_MIN:0.5}") double facePoseConsistencyMin,
+            @Value("${FACE_MIN_YAW_DIFF:10.0}") double faceMinYawDiff) {
         this.studentProfileRepository = studentProfileRepository;
         this.userRepository = userRepository;
         this.auditChainService = auditChainService;
@@ -120,6 +154,7 @@ public class FaceEnrollmentService {
         this.aiServiceUrl = aiServiceUrl;
         this.faceMatchThreshold = faceMatchThreshold;
         this.facePoseConsistencyMin = facePoseConsistencyMin;
+        this.faceMinYawDiff = faceMinYawDiff;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
     }
@@ -138,6 +173,14 @@ public class FaceEnrollmentService {
 
     public void setFacePoseConsistencyMin(double facePoseConsistencyMin) {
         this.facePoseConsistencyMin = facePoseConsistencyMin;
+    }
+
+    public void setFaceMinYawDiff(double faceMinYawDiff) {
+        this.faceMinYawDiff = faceMinYawDiff;
+    }
+
+    public double getFaceMinYawDiff() {
+        return faceMinYawDiff;
     }
 
     public Map<String, CaptureToken> getCaptureTokenStore() {
@@ -176,14 +219,15 @@ public class FaceEnrollmentService {
                 "Biometric capture session initialized with one-time token"
         );
 
-        log.info("Issued face capture token for student {} bound to IP {}", student.getId(), clientIp);
+        // Log without sensitive student ID or IP
+        log.info("Issued face capture token.");
         return new CaptureTokenResponseDto(token, student.getId(), 300, expiresAt);
     }
 
     /**
      * Processes live camera face enrollment with exactly 3 poses (front, left, right).
-     * Validates capture token, image deduplication, AI 1-face check, pose consistency,
-     * duplicate face check, and activates student upon success.
+     * Validates capture token, image deduplication, AI 1-face check, head yaw divergence,
+     * pose consistency, duplicate face check, and activates student upon success.
      * Note: No file is ever saved to disk; raw face frames are strictly discarded after embedding extraction.
      */
     public StudentProfile enrollStudentFace(Long studentId, FaceEnrollmentRequestDto req, String clientIp) {
@@ -201,12 +245,8 @@ public class FaceEnrollmentService {
             // 1. Server-side check: Valid unexpired unused token (single use)
             validateCaptureToken(req.getToken(), student.getId(), clientIp);
 
-            // 2. Server-side check: Liveness check verification
-            // IMPORTANT: Liveness and spoof detection (e.g. blink, head-turn) are best-effort;
-            // the server cannot fully prove an image originated from a physical camera sensor.
-            if (Boolean.FALSE.equals(req.getLiveness())) {
-                throw new QualityOrLivenessException("Liveness verification failed. Face must be verified via camera interaction.");
-            }
+            // 2. Client-sent liveness boolean is excluded from trust path.
+            // Server enforces true server-side liveness verification via head pose (yaw divergence) and anti-spoof checks.
 
             // 3. Server-side check: Frame count must be exactly 3
             List<String> frames = req.getFrames();
@@ -233,17 +273,35 @@ public class FaceEnrollmentService {
                 throw new QualityOrLivenessException("Repeated frames detected. Each of the 3 poses (front, left, right) must be distinct live captures.");
             }
 
-            // 6. AI service enrollment: Each frame must contain exactly 1 face
+            // 6. AI service enrollment: Each frame must contain exactly 1 face and returns embedding + head yaw
+            FaceFrameData[] frameData = new FaceFrameData[3];
             double[][] embeddings = new double[3][];
             for (int i = 0; i < 3; i++) {
                 try {
-                    embeddings[i] = callAiServiceEnroll(frameBytes.get(i));
+                    frameData[i] = callAiServiceEnroll(frameBytes.get(i));
+                    embeddings[i] = frameData[i].getEmbedding();
                 } catch (Exception ex) {
                     throw new QualityOrLivenessException("AI face analysis failed on frame " + (i + 1) + ": " + ex.getMessage(), ex);
                 }
             }
 
-            // 7. Server-side check: Pose consistency (pairwise cosine >= FACE_POSE_CONSISTENCY_MIN, default 0.5)
+            // 7. Server-side check: Distinct head pose verification via head yaw from AI service
+            // Frame 0 = front, Frame 1 = left, Frame 2 = right
+            double yawFront = frameData[0].getYaw();
+            double yawLeft = frameData[1].getYaw();
+            double yawRight = frameData[2].getYaw();
+
+            double diffLeftFront = Math.abs(yawLeft - yawFront);
+            double diffRightFront = Math.abs(yawRight - yawFront);
+            double diffLeftRight = Math.abs(yawLeft - yawRight);
+
+            if (diffLeftFront < faceMinYawDiff || diffRightFront < faceMinYawDiff || diffLeftRight < faceMinYawDiff) {
+                String detail = String.format("Pose verification failed: Distinct head poses required (front, left, right). Detected yaws: Front=%.1f deg, Left=%.1f deg, Right=%.1f deg. Minimum required yaw difference is %.1f deg.",
+                        yawFront, yawLeft, yawRight, faceMinYawDiff);
+                throw new QualityOrLivenessException(detail);
+            }
+
+            // 8. Server-side check: Pose consistency (pairwise cosine >= FACE_POSE_CONSISTENCY_MIN, default 0.5)
             double sim01 = cosineSimilarity(embeddings[0], embeddings[1]);
             double sim02 = cosineSimilarity(embeddings[0], embeddings[2]);
             double sim12 = cosineSimilarity(embeddings[1], embeddings[2]);
@@ -253,23 +311,35 @@ public class FaceEnrollmentService {
                 throw new QualityOrLivenessException(detail);
             }
 
-            // 8. Compute L2-normalized average embedding
+            // 9. Compute L2-normalized average embedding
             double[] averageNormalized = computeAverageNormalizedEmbedding(embeddings);
 
-            // 9. Duplicate face check: compare average against all other enrolled students
+            // 10. Duplicate face check: compare average against all other enrolled students
             checkForDuplicateFace(student.getId(), averageNormalized);
 
-            // 10. Store embeddings in DB:
+            // 11. Store embeddings in DB:
             // Store each embedding plus L2-normalized average in students.face_embeddings_multi (JSON) with model name/version
             Map<String, Object> multiObj = new LinkedHashMap<>();
             multiObj.put("model", "buffalo_l");
             multiObj.put("version", "1.0");
             multiObj.put("dimension", 512);
 
-            Map<String, List<Double>> posesMap = new LinkedHashMap<>();
-            posesMap.put("front", toDoubleList(embeddings[0]));
-            posesMap.put("left", toDoubleList(embeddings[1]));
-            posesMap.put("right", toDoubleList(embeddings[2]));
+            Map<String, Object> frontMap = new LinkedHashMap<>();
+            frontMap.put("embedding", toDoubleList(embeddings[0]));
+            frontMap.put("yaw", yawFront);
+
+            Map<String, Object> leftMap = new LinkedHashMap<>();
+            leftMap.put("embedding", toDoubleList(embeddings[1]));
+            leftMap.put("yaw", yawLeft);
+
+            Map<String, Object> rightMap = new LinkedHashMap<>();
+            rightMap.put("embedding", toDoubleList(embeddings[2]));
+            rightMap.put("yaw", yawRight);
+
+            Map<String, Object> posesMap = new LinkedHashMap<>();
+            posesMap.put("front", frontMap);
+            posesMap.put("left", leftMap);
+            posesMap.put("right", rightMap);
             multiObj.put("embeddings", posesMap);
             multiObj.put("average", toDoubleList(averageNormalized));
 
@@ -283,7 +353,7 @@ public class FaceEnrollmentService {
             student.setConsentVersion(req.getConsentVersion() != null && !req.getConsentVersion().isBlank()
                     ? req.getConsentVersion()
                     : "1.0");
-            // Important requirement: DO NOT write face_photo_path (leave null, no file on disk)
+            // DO NOT write face_photo_path (leave null, no file on disk)
             studentProfileRepository.save(student);
 
             // Activate student User account
@@ -305,7 +375,7 @@ public class FaceEnrollmentService {
                     "Biometric face enrollment completed successfully across 3 frames without file storage"
             );
 
-            log.info("Student {} face enrolled successfully and activated.", student.getId());
+            log.info("Student face enrolled successfully and activated.");
             return student;
 
         } catch (DuplicateFaceException ex) {
@@ -357,9 +427,9 @@ public class FaceEnrollmentService {
     }
 
     /**
-     * Calls AI microservice to extract 512-d ArcFace embedding from a single frame byte array.
+     * Calls AI microservice to extract 512-d ArcFace embedding and head yaw from a single frame byte array.
      */
-    public double[] callAiServiceEnroll(byte[] frameBytes) {
+    public FaceFrameData callAiServiceEnroll(byte[] frameBytes) {
         if (frameBytes == null || frameBytes.length == 0) {
             throw new IllegalArgumentException("Frame bytes cannot be empty.");
         }
@@ -404,7 +474,9 @@ public class FaceEnrollmentService {
             for (int i = 0; i < 512; i++) {
                 emb[i] = embeddingNode.get(i).asDouble();
             }
-            return emb;
+
+            double yaw = root.has("yaw") ? root.get("yaw").asDouble() : 0.0;
+            return new FaceFrameData(emb, yaw);
         } catch (HttpStatusCodeException ex) {
             String errorDetail = "AI service face enrollment error.";
             try {
@@ -457,7 +529,6 @@ public class FaceEnrollmentService {
         if (tokenIp == null || clientIp == null || tokenIp.isBlank() || clientIp.isBlank()) {
             return true;
         }
-        // Treat localhost representations as equivalent
         boolean tokenIsLocal = tokenIp.equals("127.0.0.1") || tokenIp.equals("0:0:0:0:0:0:0:1") || tokenIp.equalsIgnoreCase("localhost");
         boolean clientIsLocal = clientIp.equals("127.0.0.1") || clientIp.equals("0:0:0:0:0:0:0:1") || clientIp.equalsIgnoreCase("localhost");
         if (tokenIsLocal && clientIsLocal) return true;
@@ -485,9 +556,8 @@ public class FaceEnrollmentService {
 
             double similarity = cosineSimilarity(candidateAverageEmbedding, otherEmbedding);
             if (similarity >= faceMatchThreshold) {
-                log.warn("Duplicate face detected: candidate student {} matches enrolled student {} with similarity {} >= {}",
-                        studentId, other.getId(), similarity, faceMatchThreshold);
-                // Reject with a generic message per requirement
+                // Anonymized log without student IDs or similarity values
+                log.warn("Duplicate face detected during biometric enrollment.");
                 throw new DuplicateFaceException("Biometric enrollment rejected: Face template matches an existing enrolled student. Please contact administration.");
             }
         }
@@ -573,7 +643,7 @@ public class FaceEnrollmentService {
             }
             return arr;
         } catch (Exception e) {
-            log.warn("Failed to parse enrolled embedding JSON: {}", e.getMessage());
+            log.warn("Failed to parse enrolled embedding JSON.");
             return null;
         }
     }

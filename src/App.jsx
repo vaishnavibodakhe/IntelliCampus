@@ -104,15 +104,6 @@ export default function App() {
       setCurrentRole(authData.user.role || 'STUDENT');
       setAuthNotification({ type: 'success', message: `Welcome back, ${authData.user.name}!` });
       setTimeout(() => setAuthNotification(null), 4000);
-
-      handleAddAuditLog({
-        action: 'STUDENT_LOGIN',
-        entityType: 'USER',
-        entityId: String(authData.user.id),
-        oldValue: '{}',
-        newValue: JSON.stringify({ email: authData.user.email, role: authData.user.role }),
-        reason: `Student ${authData.user.name} signed in successfully via JWT token`
-      });
     }
   };
 
@@ -139,15 +130,6 @@ export default function App() {
       setCurrentRole('STUDENT');
       setAuthNotification({ type: 'success', message: `Registration complete! Welcome, ${newUser.name}.` });
       setTimeout(() => setAuthNotification(null), 5000);
-
-      handleAddAuditLog({
-        action: 'STUDENT_REGISTRATION',
-        entityType: 'USER',
-        entityId: String(newUser.id),
-        oldValue: '{}',
-        newValue: JSON.stringify({ email: newUser.email, rollNo: newUser.rollNo }),
-        reason: `Student registered with DPDP Act 2023 biometric consent`
-      });
     }
   };
 
@@ -158,22 +140,10 @@ export default function App() {
       console.warn('Logout API call:', err);
     } finally {
       clearAuthSession();
-      const prevUser = authenticatedUser;
       setAuthenticatedUser(null);
       setAuthMode('LOGIN');
       setAuthNotification({ type: 'info', message: 'You have been securely signed out. Session token invalidated.' });
       setTimeout(() => setAuthNotification(null), 4000);
-
-      if (prevUser) {
-        handleAddAuditLog({
-          action: 'USER_LOGOUT',
-          entityType: 'USER',
-          entityId: String(prevUser.id),
-          oldValue: JSON.stringify({ email: prevUser.email }),
-          newValue: '{}',
-          reason: `Student ${prevUser.name} logged out; session token revoked and denylisted`
-        });
-      }
     }
   };
 
