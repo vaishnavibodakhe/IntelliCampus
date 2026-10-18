@@ -64,3 +64,6 @@ yarn-error.log*
 
 # MySQL local data
 mysql_data/
+
+# Uploaded face photos and media
+uploads/
