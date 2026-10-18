@@ -3,6 +3,43 @@
  * Connects frontend to Spring Boot backend via Vite proxy (/api -> http://localhost:8080)
  */
 
+export function getToken() {
+  try {
+    return sessionStorage.getItem('intellicampus_jwt_token');
+  } catch (e) {
+    return null;
+  }
+}
+
+export function setToken(token) {
+  try {
+    if (token) {
+      sessionStorage.setItem('intellicampus_jwt_token', token);
+    } else {
+      sessionStorage.removeItem('intellicampus_jwt_token');
+    }
+  } catch (e) {
+    console.warn('Failed to store token in sessionStorage:', e);
+  }
+}
+
+export function clearToken() {
+  try {
+    sessionStorage.removeItem('intellicampus_jwt_token');
+  } catch (e) {
+    console.warn('Failed to clear token from sessionStorage:', e);
+  }
+}
+
+export async function authFetch(url, options = {}) {
+  const token = getToken();
+  const headers = new Headers(options.headers || {});
+  if (token && !headers.has('Authorization')) {
+    headers.set('Authorization', `Bearer ${token}`);
+  }
+  return fetch(url, { ...options, headers });
+}
+
 async function handleResponse(response) {
   if (!response.ok) {
     let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
@@ -12,7 +49,9 @@ async function handleResponse(response) {
     } catch {
       // not JSON
     }
-    throw new Error(errorMsg);
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
   }
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {
@@ -22,9 +61,46 @@ async function handleResponse(response) {
 }
 
 export const api = {
+  // Authentication & Self-Service
+  async login({ loginCode, password }) {
+    const res = await authFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ loginCode, password }),
+    });
+    return handleResponse(res);
+  },
+
+  async register(formData) {
+    const res = await authFetch('/api/auth/register', {
+      method: 'POST',
+      // Notice: No 'Content-Type' header when body is FormData
+      body: formData,
+    });
+    return handleResponse(res);
+  },
+
+  async forgotPassword({ loginCodeOrEmail }) {
+    const res = await authFetch('/api/auth/forgot-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ loginCodeOrEmail }),
+    });
+    return handleResponse(res);
+  },
+
+  async resetPassword({ code, newPassword, confirmPassword, loginCode }) {
+    const res = await authFetch('/api/auth/reset-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code, newPassword, confirmPassword, loginCode }),
+    });
+    return handleResponse(res);
+  },
+
   // Attendance Sessions
   async startSession({ facultyId = 3, subjectId, divisionId = 1, roomId, challengeCode, photoWindowMinutes = 10 }) {
-    const res = await fetch('/api/attendance/sessions', {
+    const res = await authFetch('/api/attendance/sessions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -40,7 +116,7 @@ export const api = {
   },
 
   async getSession(sessionId) {
-    const res = await fetch(`/api/attendance/sessions/${sessionId}`);
+    const res = await authFetch(`/api/attendance/sessions/${sessionId}`);
     return handleResponse(res);
   },
 
@@ -51,7 +127,7 @@ export const api = {
     if (longitude != null) formData.append('longitude', longitude);
     if (accuracyM != null) formData.append('accuracyM', accuracyM);
 
-    const res = await fetch(`/api/attendance/sessions/${sessionId}/photo`, {
+    const res = await authFetch(`/api/attendance/sessions/${sessionId}/photo`, {
       method: 'POST',
       body: formData,
     });
@@ -59,7 +135,7 @@ export const api = {
   },
 
   async updateSessionStatus(sessionId, status) {
-    const res = await fetch(`/api/attendance/sessions/${sessionId}/status?status=${encodeURIComponent(status)}`, {
+    const res = await authFetch(`/api/attendance/sessions/${sessionId}/status?status=${encodeURIComponent(status)}`, {
       method: 'PUT',
     });
     return handleResponse(res);
@@ -70,7 +146,7 @@ export const api = {
   },
 
   async overrideAttendanceRecord(sessionId, studentId, status, reason) {
-    const res = await fetch(`/api/attendance/sessions/${sessionId}/records/${studentId}/override`, {
+    const res = await authFetch(`/api/attendance/sessions/${sessionId}/records/${studentId}/override`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status, reason }),
@@ -79,13 +155,13 @@ export const api = {
   },
 
   async getActiveSession(divisionId) {
-    const res = await fetch(`/api/attendance/sessions/active?divisionId=${divisionId}`);
+    const res = await authFetch(`/api/attendance/sessions/active?divisionId=${divisionId}`);
     if (res.status === 204) return null;
     return handleResponse(res);
   },
 
   async getStudentAttendanceRecords(studentId) {
-    const res = await fetch(`/api/attendance/sessions/records/student/${studentId}`);
+    const res = await authFetch(`/api/attendance/sessions/records/student/${studentId}`);
     return handleResponse(res);
   },
 
@@ -95,7 +171,7 @@ export const api = {
     formData.append('photo', fileOrBlob, `student_${studentId}.jpg`);
     formData.append('consentVersion', consentVersion);
 
-    const res = await fetch(`/api/students/${studentId}/face-enroll`, {
+    const res = await authFetch(`/api/students/${studentId}/face-enroll`, {
       method: 'POST',
       body: formData,
     });
@@ -107,12 +183,12 @@ export const api = {
   },
 
   async getStudent(studentId) {
-    const res = await fetch(`/api/students/${studentId}`);
+    const res = await authFetch(`/api/students/${studentId}`);
     return handleResponse(res);
   },
 
   async getStudentsByDivision(divisionId) {
-    const res = await fetch(`/api/students/division/${divisionId}`);
+    const res = await authFetch(`/api/students/division/${divisionId}`);
     return handleResponse(res);
   },
 
@@ -122,12 +198,12 @@ export const api = {
     if (search) params.append('search', search);
     if (role && role !== 'ALL') params.append('role', role);
     const qs = params.toString() ? `?${params.toString()}` : '';
-    const res = await fetch(`/api/users${qs}`);
+    const res = await authFetch(`/api/users${qs}`);
     return handleResponse(res);
   },
 
   async createUser(userData) {
-    const res = await fetch('/api/users', {
+    const res = await authFetch('/api/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(userData),

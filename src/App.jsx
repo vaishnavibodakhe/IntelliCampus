@@ -10,6 +10,7 @@ import PublicVerifierView from './components/PublicVerifierView';
 import AuditChainModal from './components/AuditChainModal';
 import ChatbotDrawer from './components/ChatbotDrawer';
 import LoginView from './components/LoginView';
+import { clearToken } from './api/client';
 
 import {
   INITIAL_USERS,
@@ -134,6 +135,7 @@ export default function App() {
     setLoggedInUser(null);
     try {
       sessionStorage.removeItem('intellicampus_user');
+      clearToken();
     } catch (e) {
       console.warn('Failed to clear sessionStorage:', e);
     }
