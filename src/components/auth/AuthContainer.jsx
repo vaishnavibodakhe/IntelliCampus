@@ -14,14 +14,14 @@ export default function AuthContainer({
     <div className="auth-module-wrapper">
       {authView === 'login' && (
         <LoginPage
-          initialRole={activeRole}
+          role={activeRole}
           onLoginSuccess={onLoginSuccess}
           onNavigateRegister={(r) => {
-            setActiveRole(r);
+            if (r) setActiveRole(r);
             setAuthView('register');
           }}
           onNavigateForgotPassword={(r) => {
-            setActiveRole(r);
+            if (r) setActiveRole(r);
             setAuthView('forgot');
           }}
         />
@@ -29,12 +29,12 @@ export default function AuthContainer({
 
       {authView === 'register' && (
         <RegisterPage
-          initialRole={activeRole}
-          onRegisterSuccess={(newUser) => {
+          role={activeRole}
+          onRegisterSuccess={() => {
             setAuthView('login');
           }}
           onNavigateLogin={(r) => {
-            setActiveRole(r);
+            if (r) setActiveRole(r);
             setAuthView('login');
           }}
         />
@@ -42,9 +42,9 @@ export default function AuthContainer({
 
       {authView === 'forgot' && (
         <ForgotPasswordPage
-          initialRole={activeRole}
+          role={activeRole}
           onNavigateLogin={(r) => {
-            setActiveRole(r);
+            if (r) setActiveRole(r);
             setAuthView('login');
           }}
           onResetSuccess={() => {

@@ -16,6 +16,7 @@ import ForgotPasswordPage from './components/auth/ForgotPasswordPage';
 import ResetPasswordPage from './components/auth/ResetPasswordPage';
 import RoleRoute from './components/auth/RoleRoute';
 import UnauthorizedPage from './components/auth/UnauthorizedPage';
+import PortalSelectionCards from './components/PortalSelectionCards';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import {
@@ -163,30 +164,15 @@ function MainAppContent() {
   const pathname = (currentPath || window.location.pathname).split('?')[0];
 
   // =========================================================================
-  // AUTH ROUTES DISPATCHER
+  // FACULTY AUTHENTICATION ROUTES
   // =========================================================================
   if (pathname === '/faculty/login') {
     return (
       <LoginPage
-        initialRole="FACULTY"
-        onLoginSuccess={(data) => {
-          navigate('/faculty/dashboard');
-        }}
+        role="FACULTY"
+        onLoginSuccess={() => navigate('/faculty/dashboard')}
         onNavigateRegister={() => navigate('/faculty/register')}
-        onNavigateForgotPassword={() => navigate('/forgot-password?role=FACULTY')}
-      />
-    );
-  }
-
-  if (pathname === '/mentor/login') {
-    return (
-      <LoginPage
-        initialRole="MENTOR"
-        onLoginSuccess={(data) => {
-          navigate('/mentor/dashboard');
-        }}
-        onNavigateRegister={() => navigate('/mentor/register')}
-        onNavigateForgotPassword={() => navigate('/forgot-password?role=MENTOR')}
+        onNavigateForgotPassword={() => navigate('/faculty/forgot-password')}
       />
     );
   }
@@ -194,9 +180,36 @@ function MainAppContent() {
   if (pathname === '/faculty/register') {
     return (
       <RegisterPage
-        initialRole="FACULTY"
+        role="FACULTY"
         onRegisterSuccess={() => navigate('/faculty/login')}
         onNavigateLogin={() => navigate('/faculty/login')}
+      />
+    );
+  }
+
+  if (pathname === '/faculty/forgot-password') {
+    return (
+      <ForgotPasswordPage
+        role="FACULTY"
+        onNavigateLogin={() => navigate('/faculty/login')}
+      />
+    );
+  }
+
+  if (pathname === '/faculty/reset-password' || pathname.startsWith('/faculty/reset-password/')) {
+    return <ResetPasswordPage role="FACULTY" />;
+  }
+
+  // =========================================================================
+  // MENTOR AUTHENTICATION ROUTES
+  // =========================================================================
+  if (pathname === '/mentor/login') {
+    return (
+      <LoginPage
+        role="MENTOR"
+        onLoginSuccess={() => navigate('/mentor/dashboard')}
+        onNavigateRegister={() => navigate('/mentor/register')}
+        onNavigateForgotPassword={() => navigate('/mentor/forgot-password')}
       />
     );
   }
@@ -204,23 +217,40 @@ function MainAppContent() {
   if (pathname === '/mentor/register') {
     return (
       <RegisterPage
-        initialRole="MENTOR"
+        role="MENTOR"
         onRegisterSuccess={() => navigate('/mentor/login')}
         onNavigateLogin={() => navigate('/mentor/login')}
       />
     );
   }
 
-  if (pathname === '/forgot-password') {
+  if (pathname === '/mentor/forgot-password') {
     return (
       <ForgotPasswordPage
-        onNavigateLogin={(role) => navigate(role === 'MENTOR' ? '/mentor/login' : '/faculty/login')}
+        role="MENTOR"
+        onNavigateLogin={() => navigate('/mentor/login')}
+      />
+    );
+  }
+
+  if (pathname === '/mentor/reset-password' || pathname.startsWith('/mentor/reset-password/')) {
+    return <ResetPasswordPage role="MENTOR" />;
+  }
+
+  // Fallback and Unauthorized Routes
+  if (pathname === '/forgot-password') {
+    const isMentor = (new URLSearchParams(window.location.search).get('role') || '').toUpperCase() === 'MENTOR';
+    return (
+      <ForgotPasswordPage
+        role={isMentor ? 'MENTOR' : 'FACULTY'}
+        onNavigateLogin={() => navigate(isMentor ? '/mentor/login' : '/faculty/login')}
       />
     );
   }
 
   if (pathname === '/reset-password') {
-    return <ResetPasswordPage />;
+    const isMentor = (new URLSearchParams(window.location.search).get('role') || '').toUpperCase() === 'MENTOR';
+    return <ResetPasswordPage role={isMentor ? 'MENTOR' : 'FACULTY'} />;
   }
 
   if (pathname === '/unauthorized') {
@@ -345,6 +375,8 @@ function MainAppContent() {
 
       {/* Main Role-Based Workflow Viewport */}
       <main className="main-viewport">
+        {/* Institutional Portal Selection Cards (Faculty & Mentor) */}
+        {!isAuthenticated && <PortalSelectionCards />}
         {currentRole === 'ADMIN' && (
           <AdminView 
             users={users}

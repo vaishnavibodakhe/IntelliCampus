@@ -8,20 +8,18 @@ import {
   AlertCircle 
 } from 'lucide-react';
 import { isValidEmail } from './authUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function ForgotPasswordPage({
-  initialRole = 'FACULTY',
+  role = 'FACULTY',
+  apiEndpoint,
   onNavigateLogin
 }) {
-  const [role, setRole] = useState(() => {
-    // Check if role is in URL query parameters
-    const params = new URLSearchParams(window.location.search);
-    const r = params.get('role');
-    if (r && (r.toUpperCase() === 'MENTOR' || r.toUpperCase() === 'FACULTY')) {
-      return r.toUpperCase();
-    }
-    return initialRole;
-  });
+  const { navigate } = useAuth();
+  const isFaculty = role.toUpperCase() === 'FACULTY';
+  const resolvedRole = isFaculty ? 'FACULTY' : 'MENTOR';
+  const roleClass = isFaculty ? 'faculty' : 'mentor';
+  const resolvedEndpoint = apiEndpoint || (isFaculty ? '/api/faculty/forgot-password' : '/api/mentor/forgot-password');
 
   const [email, setEmail] = useState('');
   const [touched, setTouched] = useState(false);
@@ -34,8 +32,6 @@ export default function ForgotPasswordPage({
     ? 'Please enter a valid institutional email address'
     : '';
 
-  const isFaculty = role === 'FACULTY';
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     setTouched(true);
@@ -47,46 +43,44 @@ export default function ForgotPasswordPage({
     setSuccessMessage('');
 
     try {
-      const response = await fetch('/api/auth/forgot-password', {
+      const response = await fetch(resolvedEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           email: email.trim().toLowerCase(),
-          role
-        })
+        }),
       });
 
       const data = await response.json().catch(() => ({}));
 
-      // In accordance with security specifications, always show neutral success feedback
+      // Security standard: generic message prevents user enumeration
       setSuccessMessage(
-        data.message || 'If this email is registered in our system, a password reset link has been dispatched to your inbox.'
+        data.message || 'If this email exists, a reset link has been sent.'
       );
       setIsSubmitted(true);
     } catch (networkErr) {
-      console.warn('Backend unavailable, showing fallback message:', networkErr);
-      setSuccessMessage(
-        'If this email is registered in our system, a password reset link has been dispatched to your inbox.'
-      );
-      setIsSubmitted(true);
+      console.error('[Forgot Password Error]:', networkErr);
+      setErrorMessage('Failed to connect to the reset service. Please ensure server is active.');
     } finally {
       setIsLoading(false);
     }
   };
 
+  const handleReturnToLogin = () => {
+    if (onNavigateLogin) {
+      onNavigateLogin();
+    } else {
+      navigate(isFaculty ? '/faculty/login' : '/mentor/login');
+    }
+  };
+
   return (
     <AuthLayout
-      role={role}
-      onRoleChange={(newRole) => {
-        setRole(newRole);
-        setErrorMessage('');
-        setSuccessMessage('');
-        setIsSubmitted(false);
-      }}
+      role={resolvedRole}
       title="Reset Your Password"
-      subtitle={`Enter your institutional email to receive a password reset link for the ${isFaculty ? 'Faculty' : 'Mentor'} portal`}
+      subtitle={`Enter your official institutional email to receive a password reset link for the ${isFaculty ? 'Faculty' : 'Mentor'} portal`}
     >
-      {/* Alert Banners */}
+      {/* Alert Error Banner */}
       {errorMessage && (
         <div className="auth-alert error" role="alert">
           <AlertCircle size={18} style={{ flexShrink: 0, marginTop: '1px' }} />
@@ -96,7 +90,17 @@ export default function ForgotPasswordPage({
 
       {isSubmitted ? (
         <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-          <div style={{ display: 'inline-flex', padding: '16px', background: 'rgba(16, 185, 129, 0.12)', borderRadius: '50%', color: '#10b981', marginBottom: '1.25rem', border: '1px solid rgba(16, 185, 129, 0.25)' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              padding: '16px',
+              background: isFaculty ? 'rgba(6, 182, 212, 0.12)' : 'rgba(16, 185, 129, 0.12)',
+              borderRadius: '50%',
+              color: isFaculty ? 'var(--accent-cyan)' : 'var(--accent-emerald)',
+              marginBottom: '1.25rem',
+              border: `1px solid ${isFaculty ? 'rgba(6, 182, 212, 0.3)' : 'rgba(16, 185, 129, 0.3)'}`,
+            }}
+          >
             <CheckCircle2 size={44} />
           </div>
 
@@ -108,15 +112,25 @@ export default function ForgotPasswordPage({
             {successMessage}
           </p>
 
-          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', background: 'var(--bg-surface)', padding: '0.75rem', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-medium)', marginBottom: '1.75rem' }}>
-            The link is valid for <strong>15 minutes</strong> and can only be used once. Please also inspect your spam folder if the email does not appear in your primary inbox.
+          <p
+            style={{
+              fontSize: '0.8rem',
+              color: 'var(--text-secondary)',
+              background: 'var(--bg-surface)',
+              padding: '0.75rem',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-medium)',
+              marginBottom: '1.75rem',
+            }}
+          >
+            The link is valid for <strong>15 minutes</strong> and can only be used once. Please also inspect your spam/junk folder.
           </p>
 
           <button
             type="button"
-            className={`auth-submit-btn ${isFaculty ? 'faculty' : 'mentor'}`}
+            className={`auth-submit-btn ${roleClass}`}
             style={{ width: '100%', justifyContent: 'center' }}
-            onClick={() => onNavigateLogin && onNavigateLogin(role)}
+            onClick={handleReturnToLogin}
           >
             <ArrowLeft size={16} />
             <span>Return to {isFaculty ? 'Faculty' : 'Mentor'} Sign In</span>
@@ -124,14 +138,16 @@ export default function ForgotPasswordPage({
         </div>
       ) : (
         <form className="auth-form" onSubmit={handleSubmit} noValidate>
-          <div className="form-group">
-            <label className="form-label" htmlFor="forgot-email">
-              <span>Official Institutional Email <span className="form-label-required">*</span></span>
+          <div className="auth-field">
+            <label htmlFor={`forgot-email-${roleClass}`}>
+              <span>Official Institutional Email <span className="auth-label-required">*</span></span>
             </label>
-            <div className="input-icon-wrap">
-              <Mail size={17} className="input-leading-icon" />
+            <div className="auth-input-wrap">
+              <span className="auth-input-icon">
+                <Mail size={18} />
+              </span>
               <input
-                id="forgot-email"
+                id={`forgot-email-${roleClass}`}
                 name="email"
                 type="email"
                 autoComplete="email"
@@ -139,25 +155,25 @@ export default function ForgotPasswordPage({
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onBlur={() => setTouched(true)}
-                className={`auth-input ${isFaculty ? 'faculty' : 'mentor'} ${emailError ? 'has-error' : ''}`}
+                className={`auth-input ${roleClass} ${emailError ? 'has-error' : ''}`}
                 aria-invalid={!!emailError}
-                aria-describedby={emailError ? 'email-error' : undefined}
+                aria-describedby={emailError ? `forgot-email-error-${roleClass}` : undefined}
                 required
               />
             </div>
             {emailError && (
-              <div id="email-error" className="form-error-text" role="alert">
+              <p id={`forgot-email-error-${roleClass}`} className="auth-error" role="alert">
                 <AlertCircle size={13} />
                 <span>{emailError}</span>
-              </div>
+              </p>
             )}
           </div>
 
           <button
             type="submit"
-            id="forgot-password-submit-btn"
+            id={`forgot-password-submit-btn-${roleClass}`}
             disabled={!isValidEmail(email) || isLoading}
-            className={`auth-submit-btn ${isFaculty ? 'faculty' : 'mentor'}`}
+            className={`auth-submit-btn ${roleClass}`}
           >
             {isLoading ? (
               <>
@@ -177,10 +193,10 @@ export default function ForgotPasswordPage({
               type="button"
               className="auth-link"
               style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-              onClick={() => onNavigateLogin && onNavigateLogin(role)}
+              onClick={handleReturnToLogin}
             >
               <ArrowLeft size={14} />
-              <span>Back to Sign In</span>
+              <span>Back to {isFaculty ? 'Faculty' : 'Mentor'} Sign In</span>
             </button>
           </div>
         </form>

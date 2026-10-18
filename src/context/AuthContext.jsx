@@ -3,55 +3,68 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [token, setToken] = useState(() => localStorage.getItem('intellicampus_token') || null);
+  // Check persistent localStorage first, then session-scoped sessionStorage
+  const [token, setToken] = useState(() => {
+    return localStorage.getItem('intellicampus_token') || sessionStorage.getItem('intellicampus_token') || null;
+  });
+
   const [currentUser, setCurrentUser] = useState(() => {
     try {
-      const stored = localStorage.getItem('intellicampus_user');
+      const stored = localStorage.getItem('intellicampus_user') || sessionStorage.getItem('intellicampus_user');
       return stored ? JSON.parse(stored) : null;
     } catch {
       return null;
     }
   });
+
   const [isAuthLoading, setIsAuthLoading] = useState(true);
   const [currentPath, setCurrentPath] = useState(() => window.location.pathname + window.location.search);
 
   // Synchronize authentication on initial mount and on pageshow (bfcache restoration)
   useEffect(() => {
     const syncAuth = () => {
-      const storedToken = localStorage.getItem('intellicampus_token');
-      const storedUser = localStorage.getItem('intellicampus_user');
+      const storedToken = localStorage.getItem('intellicampus_token') || sessionStorage.getItem('intellicampus_token');
+      const storedUser = localStorage.getItem('intellicampus_user') || sessionStorage.getItem('intellicampus_user');
+
       if (storedToken && storedUser) {
         try {
           const parsed = JSON.parse(storedUser);
+          const normalizedRole = (parsed.role || '').toUpperCase();
+          parsed.role = normalizedRole;
+
           setToken(storedToken);
           setCurrentUser(parsed);
 
-          // Asynchronously refresh real profile from database via me endpoint
-          if (parsed.role === 'FACULTY' || parsed.role === 'MENTOR') {
-            const meUrl = parsed.role === 'MENTOR' ? '/api/mentor/me' : '/api/faculty/me';
+          // Asynchronously verify / refresh profile from database
+          if (normalizedRole === 'FACULTY' || normalizedRole === 'MENTOR') {
+            const meUrl = normalizedRole === 'MENTOR' ? '/api/mentor/me' : '/api/faculty/me';
             fetch(meUrl, {
-              headers: { 'Authorization': `Bearer ${storedToken}` }
+              headers: { Authorization: `Bearer ${storedToken}` },
             })
-            .then(res => {
-              if (res.status === 401) {
-                logout();
-              } else if (res.ok) {
-                return res.json();
-              }
-            })
-            .then(resData => {
-              if (resData && resData.data) {
-                setCurrentUser(resData.data);
-                localStorage.setItem('intellicampus_user', JSON.stringify(resData.data));
-              }
-            })
-            .catch(() => {
-              // Silently retain cached user if offline or starting up
-            });
+              .then((res) => {
+                if (res.status === 401 || res.status === 403) {
+                  logout();
+                } else if (res.ok) {
+                  return res.json();
+                }
+              })
+              .then((resData) => {
+                if (resData && resData.data) {
+                  const updatedUser = { ...resData.data, role: normalizedRole };
+                  setCurrentUser(updatedUser);
+                  const storage = localStorage.getItem('intellicampus_token') ? localStorage : sessionStorage;
+                  storage.setItem('intellicampus_user', JSON.stringify(updatedUser));
+                }
+              })
+              .catch(() => {
+                // Silently retain cached user during network drop
+              });
           }
         } catch {
           localStorage.removeItem('intellicampus_token');
           localStorage.removeItem('intellicampus_user');
+          sessionStorage.removeItem('intellicampus_token');
+          sessionStorage.removeItem('intellicampus_user');
           setToken(null);
           setCurrentUser(null);
         }
@@ -99,44 +112,60 @@ export function AuthProvider({ children }) {
   const login = useCallback((authData) => {
     if (!authData || !authData.token) return;
 
+    const normalizedRole = (authData.role || 'FACULTY').toUpperCase();
     const userProfile = {
-      id: authData.id,
+      id: authData.id || authData._id,
       name: authData.name,
       email: authData.email,
-      userCode: authData.userCode,
-      role: authData.role,
+      employeeId: authData.employeeId,
+      userCode: authData.employeeId || authData.userCode,
+      role: normalizedRole,
       department: authData.department,
-      phone: authData.phone
+      phone: authData.phone,
+      specialization: authData.specialization,
     };
 
     setToken(authData.token);
     setCurrentUser(userProfile);
 
-    localStorage.setItem('intellicampus_token', authData.token);
-    localStorage.setItem('intellicampus_user', JSON.stringify(userProfile));
+    // If "Remember me" is checked, use persistent localStorage; otherwise use sessionStorage
+    if (authData.rememberMe) {
+      localStorage.setItem('intellicampus_token', authData.token);
+      localStorage.setItem('intellicampus_user', JSON.stringify(userProfile));
+      sessionStorage.removeItem('intellicampus_token');
+      sessionStorage.removeItem('intellicampus_user');
+    } else {
+      sessionStorage.setItem('intellicampus_token', authData.token);
+      sessionStorage.setItem('intellicampus_user', JSON.stringify(userProfile));
+      localStorage.removeItem('intellicampus_token');
+      localStorage.removeItem('intellicampus_user');
+    }
   }, []);
 
   const logout = useCallback(async () => {
-    const activeToken = token || localStorage.getItem('intellicampus_token');
-    const userRole = currentUser?.role || 'FACULTY';
+    const activeToken =
+      token || localStorage.getItem('intellicampus_token') || sessionStorage.getItem('intellicampus_token');
+    const userRole = (currentUser?.role || 'FACULTY').toUpperCase();
 
-    // 1. Immediately wipe client credentials from memory & localStorage
+    // 1. Wipe client credentials from memory and all storages
     setToken(null);
     setCurrentUser(null);
     localStorage.removeItem('intellicampus_token');
     localStorage.removeItem('intellicampus_user');
     localStorage.removeItem('intellicampus_token_faculty');
     localStorage.removeItem('intellicampus_token_mentor');
+    sessionStorage.removeItem('intellicampus_token');
+    sessionStorage.removeItem('intellicampus_user');
 
-    // 2. Call backend logout API to blacklist token in database
+    // 2. Call backend logout notification
     if (activeToken) {
       try {
         await fetch('/api/auth/logout', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${activeToken}`,
-            'Content-Type': 'application/json'
-          }
+            Authorization: `Bearer ${activeToken}`,
+            'Content-Type': 'application/json',
+          },
         });
       } catch (err) {
         console.warn('Backend logout notification skipped:', err);
@@ -150,25 +179,29 @@ export function AuthProvider({ children }) {
   }, [token, currentUser]);
 
   // Intercepting fetch that attaches Authorization header and catches 401s
-  const authFetch = useCallback(async (url, options = {}) => {
-    const headers = new Headers(options.headers || {});
-    const activeToken = token || localStorage.getItem('intellicampus_token');
-    if (activeToken) {
-      headers.set('Authorization', `Bearer ${activeToken}`);
-    }
-    if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
-      headers.set('Content-Type', 'application/json');
-    }
+  const authFetch = useCallback(
+    async (url, options = {}) => {
+      const headers = new Headers(options.headers || {});
+      const activeToken =
+        token || localStorage.getItem('intellicampus_token') || sessionStorage.getItem('intellicampus_token');
+      if (activeToken) {
+        headers.set('Authorization', `Bearer ${activeToken}`);
+      }
+      if (!headers.has('Content-Type') && !(options.body instanceof FormData)) {
+        headers.set('Content-Type', 'application/json');
+      }
 
-    const response = await fetch(url, { ...options, headers });
+      const response = await fetch(url, { ...options, headers });
 
-    if (response.status === 401) {
-      console.warn('Received 401 Unauthorized - invalidating token and session');
-      logout();
-    }
+      if (response.status === 401) {
+        console.warn('Received 401 Unauthorized - invalidating token and session');
+        logout();
+      }
 
-    return response;
-  }, [token, logout]);
+      return response;
+    },
+    [token, logout]
+  );
 
   const value = {
     token,
@@ -179,7 +212,7 @@ export function AuthProvider({ children }) {
     login,
     logout,
     navigate,
-    authFetch
+    authFetch,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

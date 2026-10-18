@@ -163,12 +163,79 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 Run the automated test suite:
 
 ```bash
-# Frontend & Component Unit Tests (28 passing tests)
+# Frontend & Component Unit Tests (34 passing tests)
 npm test
 
 # Production Build Validation
 npm run build
 ```
+
+---
+
+## 🔐 Independent Faculty & Mentor Portals Architecture
+
+The Faculty and Mentor portals operate on completely separated, dedicated routes, database collections, and role-guarded pipelines.
+
+### Route Breakdown
+
+| Portal | Login | Registration | Forgot Password | Reset Password | Dashboard (Protected) |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Faculty** | `/faculty/login` | `/faculty/register` | `/faculty/forgot-password` | `/faculty/reset-password/:token` | `/faculty/dashboard` |
+| **Mentor** | `/mentor/login` | `/mentor/register` | `/mentor/forgot-password` | `/mentor/reset-password/:token` | `/mentor/dashboard` |
+
+### Environment Variables (`.env`)
+
+```env
+PORT=5000
+CLIENT_URL=http://localhost:5173
+MONGODB_URI=mongodb://127.0.0.1:27017/intellicampus_db
+JWT_SECRET=4f92a105c3b4e78912345678abcdef0123456789abcdef0123456789abcdef2026
+
+# Nodemailer Real SMTP Configuration
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=your_email@gmail.com
+EMAIL_PASS=your_gmail_16_digit_app_password
+EMAIL_FROM="IntelliCampus Security" <noreply@intellicampus.edu>
+```
+
+#### How to Generate a Gmail App Password
+1. Navigate to your Google Account Security settings (`myaccount.google.com/security`).
+2. Ensure **2-Step Verification** is enabled.
+3. Search for **App Passwords** in the search bar.
+4. Create a new App Password named `IntelliCampus`.
+5. Copy the generated 16-character code into `EMAIL_PASS` in `.env`.
+
+### Quick Setup Steps
+1. Install dependencies:
+   ```bash
+   npm install
+   ```
+2. Start the backend API server:
+   ```bash
+   npm run server
+   ```
+3. Start the Vite development frontend:
+   ```bash
+   npm run dev
+   ```
+
+### End-to-End Testing Workflow
+1. **Registration**:
+   - Open `http://localhost:5173/faculty/register` or `http://localhost:5173/mentor/register`.
+   - Submit real details (Faculty: Full Name, Official Email, Employee ID, Department, Phone, Password; Mentor includes Specialization).
+   - Verify duplicate submission returns an HTTP 409 conflict.
+2. **Login**:
+   - Navigate to `/faculty/login` or `/mentor/login`.
+   - Sign in using either Official Email OR Employee ID with password.
+   - Verify password visibility eye toggle works and icons do not overlap placeholder text.
+   - Successful authentication redirects to the respective role dashboard.
+3. **Route Guard Isolation**:
+   - Attempting to access `/mentor/dashboard` with a Faculty token or `/faculty/dashboard` with a Mentor token triggers the `UnauthorizedPage` guard.
+4. **Forgot & Reset Password**:
+   - Go to `/faculty/forgot-password` or `/mentor/forgot-password`.
+   - Enter registered email address; real HTML email is dispatched (or reset link logged in server console).
+   - Follow reset link to `/faculty/reset-password/<token>` or `/mentor/reset-password/<token>`, set new password, and verify successful sign in with new credentials.
 
 ---
 

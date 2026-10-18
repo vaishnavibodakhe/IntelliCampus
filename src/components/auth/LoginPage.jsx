@@ -9,27 +9,33 @@ import {
   AlertCircle,
   CheckCircle2
 } from 'lucide-react';
-import { isValidEmail } from './authUtils';
+import { useAuth } from '../../context/AuthContext';
 
 export default function LoginPage({
-  initialRole = 'FACULTY',
+  role = 'FACULTY',
+  apiEndpoint,
   onLoginSuccess,
   onNavigateRegister,
   onNavigateForgotPassword
 }) {
-  const [role, setRole] = useState(initialRole);
+  const { login, navigate } = useAuth();
+  const isFaculty = role.toUpperCase() === 'FACULTY';
+  const resolvedRole = isFaculty ? 'FACULTY' : 'MENTOR';
+  const roleClass = isFaculty ? 'faculty' : 'mentor';
+  const resolvedEndpoint = apiEndpoint || (isFaculty ? '/api/faculty/login' : '/api/mentor/login');
+
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Validation & interaction states
+  // Interaction & status states
   const [touched, setTouched] = useState({ identifier: false, password: false });
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Form field validations
+  // Field validations
   const identifierError = touched.identifier && !identifier.trim()
     ? 'Official Email or Employee ID is required'
     : '';
@@ -41,7 +47,7 @@ export default function LoginPage({
   const isFormValid = identifier.trim().length > 0 && password.length > 0;
 
   const handleBlur = (field) => {
-    setTouched(prev => ({ ...prev, [field]: true }));
+    setTouched((prev) => ({ ...prev, [field]: true }));
   };
 
   const handleSubmit = async (e) => {
@@ -55,80 +61,57 @@ export default function LoginPage({
     setSuccessMessage('');
 
     try {
-      const endpoint = role === 'FACULTY' ? '/api/auth/faculty/login' : '/api/auth/mentor/login';
-      const response = await fetch(endpoint, {
+      const response = await fetch(resolvedEndpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          email: identifier.trim(),
-          password
-        })
+          identifier: identifier.trim(),
+          password,
+          rememberMe
+        }),
       });
 
-      if (response.ok) {
-        const data = await response.json();
+      const data = await response.json().catch(() => ({}));
+
+      if (response.ok && data.success) {
         setSuccessMessage('Authentication verified. Access granted.');
-        if (rememberMe && data.token) {
-          localStorage.setItem(`intellicampus_token_${role.toLowerCase()}`, data.token);
+
+        // Pass storage preference to auth context
+        const authPayload = {
+          token: data.data.token,
+          role: resolvedRole,
+          rememberMe,
+          ...data.data.user
+        };
+
+        if (login) {
+          login(authPayload);
         }
+
         setTimeout(() => {
           if (onLoginSuccess) {
-            onLoginSuccess(data);
+            onLoginSuccess(data.data);
+          } else {
+            navigate(isFaculty ? '/faculty/dashboard' : '/mentor/dashboard');
           }
         }, 500);
         return;
       }
 
-      // Handle backend error response
-      if (response.status === 401 || response.status === 400 || response.status === 403) {
-        const errData = await response.json().catch(() => ({}));
-        setErrorMessage(errData.message || 'Invalid credentials. Please verify your credentials.');
-        setIsLoading(false);
-        return;
-      }
-
-      throw new Error('Server error occurred during authentication');
+      // Handle backend error messages (401, 400, 403, 404, 429)
+      const errorMsg = data.message || 'Invalid credentials. Please verify your Email/Employee ID and password.';
+      setErrorMessage(errorMsg);
     } catch (networkErr) {
-      // Standalone / Offline simulated dev fallback
-      console.warn('Backend unavailable, evaluating local credentials fallback:', networkErr);
-
-      // Known seed mock users for testing
-      const isKnownFaculty = role === 'FACULTY' && 
-        (identifier.toLowerCase() === 'v.verma@intellicampus.edu' || identifier.toLowerCase() === 'prof.verma' || identifier.toUpperCase() === 'FAC-102');
-      const isKnownMentor = role === 'MENTOR' && 
-        (identifier.toLowerCase() === 's.mehta@intellicampus.edu' || identifier.toLowerCase() === 'dr.mehta' || identifier.toUpperCase() === 'FAC-201');
-
-      // In local dev, accept standard passwords or known faculty/mentor credentials
-      if ((isKnownFaculty || isKnownMentor || identifier.length >= 3) && password.length >= 6) {
-        setSuccessMessage('Authenticated in local dev mode. Redirecting...');
-        const mockUser = {
-          id: isKnownFaculty ? 3 : isKnownMentor ? 4 : Date.now(),
-          name: isKnownFaculty ? 'Prof. Vikram Verma' : isKnownMentor ? 'Dr. Sunita Mehta' : (identifier.split('@')[0].charAt(0).toUpperCase() + identifier.split('@')[0].slice(1)),
-          email: identifier.includes('@') ? identifier : `${identifier}@intellicampus.edu`,
-          userCode: identifier.split('@')[0],
-          role,
-          department: role === 'FACULTY' ? 'Computer Science & Engineering' : 'Faculty Mentorship'
-        };
-        setTimeout(() => {
-          onLoginSuccess(mockUser);
-        }, 400);
-      } else {
-        setErrorMessage('Invalid credentials. Please verify your Email/Employee ID and Password.');
-      }
+      console.error('[Login Network Error]:', networkErr);
+      setErrorMessage('Unable to connect to the authentication service. Please ensure the backend is running.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const isFaculty = role === 'FACULTY';
-
   return (
     <AuthLayout
-      role={role}
-      onRoleChange={(newRole) => {
-        setRole(newRole);
-        setErrorMessage('');
-      }}
+      role={resolvedRole}
       title="Welcome Back"
       subtitle={`Sign in to access your ${isFaculty ? 'academic instruction' : 'mentorship'} dashboard`}
     >
@@ -149,43 +132,47 @@ export default function LoginPage({
 
       <form className="auth-form" onSubmit={handleSubmit} noValidate>
         {/* Identifier: Official Email or Employee ID */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="login-identifier">
-            <span>Official Email or Employee ID <span className="form-label-required">*</span></span>
+        <div className="auth-field">
+          <label htmlFor={`login-identifier-${roleClass}`}>
+            <span>Official Email or Employee ID <span className="auth-label-required">*</span></span>
           </label>
-          <div className="input-icon-wrap">
-            <Mail size={17} className="input-leading-icon" />
+          <div className="auth-input-wrap">
+            <span className="auth-input-icon">
+              <Mail size={18} />
+            </span>
             <input
-              id="login-identifier"
+              id={`login-identifier-${roleClass}`}
               name="identifier"
               type="text"
               autoComplete="username"
-              placeholder={isFaculty ? 'e.g. v.verma@intellicampus.edu or FAC-102' : 'e.g. s.mehta@intellicampus.edu or FAC-201'}
+              placeholder={isFaculty ? 'e.g. prof.name@intellicampus.edu or FAC-102' : 'e.g. mentor.name@intellicampus.edu or FAC-201'}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               onBlur={() => handleBlur('identifier')}
-              className={`auth-input ${isFaculty ? 'faculty' : 'mentor'} ${identifierError ? 'has-error' : ''}`}
+              className={`auth-input ${roleClass} ${identifierError ? 'has-error' : ''}`}
               aria-invalid={!!identifierError}
-              aria-describedby={identifierError ? 'identifier-error' : undefined}
+              aria-describedby={identifierError ? `identifier-error-${roleClass}` : undefined}
             />
           </div>
           {identifierError && (
-            <div id="identifier-error" className="form-error-text" role="alert">
+            <p id={`identifier-error-${roleClass}`} className="auth-error" role="alert">
               <AlertCircle size={13} />
               <span>{identifierError}</span>
-            </div>
+            </p>
           )}
         </div>
 
         {/* Password */}
-        <div className="form-group">
-          <label className="form-label" htmlFor="login-password">
-            <span>Password <span className="form-label-required">*</span></span>
+        <div className="auth-field">
+          <label htmlFor={`login-password-${roleClass}`}>
+            <span>Password <span className="auth-label-required">*</span></span>
           </label>
-          <div className="input-icon-wrap">
-            <Lock size={17} className="input-leading-icon" />
+          <div className="auth-input-wrap">
+            <span className="auth-input-icon">
+              <Lock size={18} />
+            </span>
             <input
-              id="login-password"
+              id={`login-password-${roleClass}`}
               name="password"
               type={showPassword ? 'text' : 'password'}
               autoComplete="current-password"
@@ -193,32 +180,32 @@ export default function LoginPage({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => handleBlur('password')}
-              className={`auth-input ${isFaculty ? 'faculty' : 'mentor'} ${passwordError ? 'has-error' : ''}`}
+              className={`auth-input ${roleClass} ${passwordError ? 'has-error' : ''}`}
               aria-invalid={!!passwordError}
-              aria-describedby={passwordError ? 'password-error' : undefined}
+              aria-describedby={passwordError ? `password-error-${roleClass}` : undefined}
             />
             <button
               type="button"
-              className="input-trailing-btn"
+              className="auth-eye-btn"
               onClick={() => setShowPassword(!showPassword)}
               aria-label={showPassword ? 'Hide password' : 'Show password'}
             >
-              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           </div>
           {passwordError && (
-            <div id="password-error" className="form-error-text" role="alert">
+            <p id={`password-error-${roleClass}`} className="auth-error" role="alert">
               <AlertCircle size={13} />
               <span>{passwordError}</span>
-            </div>
+            </p>
           )}
         </div>
 
         {/* Remember Me & Forgot Password Row */}
         <div className="form-options-row">
-          <label className="checkbox-label" htmlFor="login-remember">
+          <label className="checkbox-label" htmlFor={`login-remember-${roleClass}`}>
             <input
-              id="login-remember"
+              id={`login-remember-${roleClass}`}
               type="checkbox"
               className="auth-checkbox"
               checked={rememberMe}
@@ -229,9 +216,15 @@ export default function LoginPage({
 
           <button
             type="button"
-            id="login-forgot-password-link"
+            id={`login-forgot-password-link-${roleClass}`}
             className="auth-link"
-            onClick={() => onNavigateForgotPassword && onNavigateForgotPassword(role)}
+            onClick={() => {
+              if (onNavigateForgotPassword) {
+                onNavigateForgotPassword();
+              } else {
+                navigate(isFaculty ? '/faculty/forgot-password' : '/mentor/forgot-password');
+              }
+            }}
           >
             Forgot password?
           </button>
@@ -240,9 +233,9 @@ export default function LoginPage({
         {/* Submit Button */}
         <button
           type="submit"
-          id="login-submit-btn"
+          id={`login-submit-btn-${roleClass}`}
           disabled={!isFormValid || isLoading}
-          className={`auth-submit-btn ${isFaculty ? 'faculty' : 'mentor'}`}
+          className={`auth-submit-btn ${roleClass}`}
         >
           {isLoading ? (
             <>
@@ -263,9 +256,15 @@ export default function LoginPage({
         <span>Don't have an account? </span>
         <button
           type="button"
-          id="login-register-link"
+          id={`login-register-link-${roleClass}`}
           className="auth-link"
-          onClick={() => onNavigateRegister && onNavigateRegister(role)}
+          onClick={() => {
+            if (onNavigateRegister) {
+              onNavigateRegister();
+            } else {
+              navigate(isFaculty ? '/faculty/register' : '/mentor/register');
+            }
+          }}
         >
           Register as {isFaculty ? 'Faculty' : 'Mentor'}
         </button>
