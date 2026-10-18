@@ -109,8 +109,10 @@ public class AuthService {
         String deptName = req.getDepartment() != null && !req.getDepartment().isBlank()
                 ? req.getDepartment().trim()
                 : "Computer Science";
+        String rawCode = deptName.toUpperCase().replaceAll("[^A-Z0-9]", "_").replaceAll("_+", "_");
+        String deptCode = rawCode.length() > 20 ? rawCode.substring(0, 20) : rawCode;
         Department dept = departmentRepository.findByName(deptName)
-                .orElseGet(() -> departmentRepository.save(new Department(deptName.toUpperCase().replace(" ", "_"), deptName)));
+                .orElseGet(() -> departmentRepository.save(new Department(deptCode, deptName)));
 
         // Find or create division
         String divName = req.getDivision() != null && !req.getDivision().isBlank()
