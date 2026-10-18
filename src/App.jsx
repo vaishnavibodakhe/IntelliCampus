@@ -32,48 +32,47 @@ import { computeAuditEntryHash } from './utils/cryptoAndGeo';
 export default function App() {
   const isStudentOnly = isStudentOnlyMode();
 
-  const [loggedInUser, setLoggedInUser] = useState(() => {
+  // Separate session state for the Student Portal
+  const [studentUser, setStudentUser] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('intellicampus_user');
+      const saved = sessionStorage.getItem('intellicampus_student_user');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (isStudentOnly && parsed?.role !== 'STUDENT') {
-          sessionStorage.removeItem('intellicampus_user');
-          clearToken();
-          return null;
-        }
-        return parsed;
+        if (parsed?.role === 'STUDENT') return parsed;
+      }
+      const legacy = sessionStorage.getItem('intellicampus_user');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (parsed?.role === 'STUDENT') return parsed;
       }
       return null;
     } catch (e) {
-      console.warn('Failed to restore user from sessionStorage:', e);
+      console.warn('Failed to restore studentUser from sessionStorage:', e);
       return null;
     }
   });
 
-  const [currentRole, setCurrentRole] = useState(() => {
-    if (isStudentOnly) {
-      try {
-        const saved = sessionStorage.getItem('intellicampus_user');
-        if (saved) {
-          const parsed = JSON.parse(saved);
-          if (parsed?.role === 'STUDENT') return 'STUDENT';
-        }
-      } catch (e) {
-        // fallback
-      }
-      return 'LOGIN';
-    }
+  // Separate session state for staff roles (Faculty, HOD, Admin, Mentor)
+  const [staffUsers, setStaffUsers] = useState(() => {
     try {
-      const saved = sessionStorage.getItem('intellicampus_user');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.role) return parsed.role;
+      const saved = sessionStorage.getItem('intellicampus_staff_users');
+      if (saved) return JSON.parse(saved);
+      const legacy = sessionStorage.getItem('intellicampus_user');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (parsed?.role && parsed.role !== 'STUDENT') {
+          return { [parsed.role]: parsed };
+        }
       }
+      return {};
     } catch (e) {
-      // fallback
+      return {};
     }
-    return 'LOGIN';
+  });
+
+  const [currentRole, setCurrentRole] = useState(() => {
+    if (isStudentOnly) return 'STUDENT';
+    return 'FACULTY'; // Default active workflow in multi-role mode
   });
   const [theme, setTheme] = useState('dark');
 
@@ -100,30 +99,54 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Synchronize loggedInUser to sessionStorage and enforce student-only policy
+  // Synchronize student session to sessionStorage
   useEffect(() => {
     try {
-      if (loggedInUser) {
-        if (isStudentOnly && loggedInUser.role !== 'STUDENT') {
-          sessionStorage.removeItem('intellicampus_user');
-          clearToken();
-          setLoggedInUser(null);
-          setCurrentRole('LOGIN');
-          return;
-        }
-        sessionStorage.setItem('intellicampus_user', JSON.stringify(loggedInUser));
+      if (studentUser) {
+        sessionStorage.setItem('intellicampus_student_user', JSON.stringify(studentUser));
       } else {
-        sessionStorage.removeItem('intellicampus_user');
+        sessionStorage.removeItem('intellicampus_student_user');
       }
     } catch (e) {
-      console.warn('Failed to persist user in sessionStorage:', e);
+      console.warn('Failed to persist studentUser in sessionStorage:', e);
     }
-  }, [loggedInUser, isStudentOnly]);
+  }, [studentUser]);
+
+  // Synchronize staff sessions to sessionStorage
+  useEffect(() => {
+    try {
+      if (staffUsers && Object.keys(staffUsers).length > 0) {
+        sessionStorage.setItem('intellicampus_staff_users', JSON.stringify(staffUsers));
+      } else {
+        sessionStorage.removeItem('intellicampus_staff_users');
+      }
+    } catch (e) {
+      console.warn('Failed to persist staffUsers in sessionStorage:', e);
+    }
+  }, [staffUsers]);
+
+  // Enforce student-only constraints when VITE_STUDENT_ONLY=true
+  useEffect(() => {
+    if (isStudentOnly) {
+      if (staffUsers && Object.keys(staffUsers).length > 0) {
+        setStaffUsers({});
+        sessionStorage.removeItem('intellicampus_staff_users');
+      }
+      try {
+        const legacy = sessionStorage.getItem('intellicampus_user');
+        if (legacy) {
+          const parsed = JSON.parse(legacy);
+          if (parsed?.role !== 'STUDENT') {
+            sessionStorage.removeItem('intellicampus_user');
+            clearToken();
+          }
+        }
+      } catch (e) {}
+    }
+  }, [isStudentOnly, staffUsers]);
 
   // Current active student (for Student Role simulation)
-  const currentStudent = (loggedInUser && loggedInUser.role === 'STUDENT')
-    ? loggedInUser
-    : (users.find(u => u.userCode === 'student.aarav') || users[4]);
+  const currentStudent = studentUser || (users.find(u => u.userCode === 'student.aarav') || users[4]);
 
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
@@ -155,29 +178,51 @@ export default function App() {
     setAuditLogs(prev => [...prev, completedBlock]);
   };
 
-  const handleLogin = (user) => {
-    if (isStudentOnly && user?.role !== 'STUDENT') {
-      handleLogout();
-      return;
-    }
-    setLoggedInUser(user);
-    if (isStudentOnly) {
-      setCurrentRole('STUDENT');
-    } else if (user?.role) {
+  const handleStudentLogin = (user) => {
+    if (user?.role === 'STUDENT') {
+      setStudentUser(user);
+    } else {
+      // If a staff user authenticated through a login form, store in staff sessions
+      setStaffUsers(prev => ({ ...prev, [user.role]: user }));
       setCurrentRole(user.role);
     }
   };
 
-  const handleLogout = () => {
-    setLoggedInUser(null);
+  const handleStudentLogout = () => {
+    setStudentUser(null);
     try {
-      sessionStorage.removeItem('intellicampus_user');
-      clearToken();
+      sessionStorage.removeItem('intellicampus_student_user');
+      const legacy = sessionStorage.getItem('intellicampus_user');
+      if (legacy) {
+        const parsed = JSON.parse(legacy);
+        if (parsed?.role === 'STUDENT') {
+          sessionStorage.removeItem('intellicampus_user');
+          clearToken();
+        }
+      }
     } catch (e) {
-      console.warn('Failed to clear sessionStorage:', e);
+      console.warn('Failed to clear student session:', e);
     }
-    setCurrentRole('LOGIN');
   };
+
+  const handleStaffLogout = (role) => {
+    setStaffUsers(prev => {
+      const updated = { ...prev };
+      delete updated[role];
+      return updated;
+    });
+  };
+
+  const handleActiveLogout = () => {
+    if (currentRole === 'STUDENT') {
+      handleStudentLogout();
+    } else {
+      handleStaffLogout(currentRole);
+    }
+  };
+
+  // The navbar user chip and Logout button appear only for the role that is currently open and logged in
+  const activeUser = currentRole === 'STUDENT' ? studentUser : (staffUsers[currentRole] || null);
 
   return (
     <div className="app-wrapper">
@@ -191,19 +236,23 @@ export default function App() {
         onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
         notificationCount={notices.length}
-        loggedInUser={loggedInUser}
-        onLogout={handleLogout}
-        onLoginClick={() => setCurrentRole('LOGIN')}
+        loggedInUser={activeUser}
+        onLogout={handleActiveLogout}
+        onLoginClick={() => {
+          if (currentRole !== 'STUDENT') {
+            setCurrentRole('STUDENT');
+          }
+        }}
         studentOnly={isStudentOnly}
       />
 
       {/* Main Role-Based Workflow Viewport */}
       <main className="main-viewport">
         {isStudentOnly ? (
-          !loggedInUser ? (
+          !studentUser ? (
             <LoginView 
               users={users}
-              onLogin={handleLogin}
+              onLogin={handleStudentLogin}
             />
           ) : (
             <StudentView 
@@ -218,87 +267,81 @@ export default function App() {
               issuedDocuments={issuedDocuments}
               onOpenChat={() => setIsChatbotOpen(true)}
               onAddAuditLog={handleAddAuditLog}
-              onLogout={handleLogout}
+              onLogout={handleStudentLogout}
             />
           )
         ) : (
-          !loggedInUser ? (
-            currentRole === 'PUBLIC' ? (
+          <>
+            {currentRole === 'PUBLIC' && (
               <PublicVerifierView 
                 issuedDocuments={issuedDocuments}
               />
-            ) : (
-              <LoginView 
+            )}
+
+            {currentRole === 'ADMIN' && (
+              <AdminView 
                 users={users}
-                onLogin={handleLogin}
+                setUsers={setUsers}
+                rooms={rooms}
+                setRooms={setRooms}
+                subjects={subjects}
+                setSubjects={setSubjects}
+                notices={notices}
+                setNotices={setNotices}
+                issuedDocuments={issuedDocuments}
+                setIssuedDocuments={setIssuedDocuments}
+                knowledgeDocs={knowledgeDocs}
+                setKnowledgeDocs={setKnowledgeDocs}
+                onAddAuditLog={handleAddAuditLog}
               />
-            )
-          ) : (
-            <>
-              {currentRole === 'PUBLIC' && (
-                <PublicVerifierView 
-                  issuedDocuments={issuedDocuments}
-                />
-              )}
+            )}
 
-              {currentRole === 'ADMIN' && loggedInUser.role === 'ADMIN' && (
-                <AdminView 
+            {currentRole === 'HOD' && (
+              <HodView 
+                leaveRequests={leaveRequests}
+                setLeaveRequests={setLeaveRequests}
+                markCorrections={markCorrections}
+                setMarkCorrections={setMarkCorrections}
+                marks={marks}
+                setMarks={setMarks}
+                users={users}
+                onAddAuditLog={handleAddAuditLog}
+              />
+            )}
+
+            {currentRole === 'FACULTY' && (
+              <FacultyView 
+                sessions={sessions}
+                setSessions={setSessions}
+                subjects={subjects}
+                rooms={rooms}
+                users={users}
+                marks={marks}
+                setMarks={setMarks}
+                markCorrections={markCorrections}
+                setMarkCorrections={setMarkCorrections}
+                onAddAuditLog={handleAddAuditLog}
+              />
+            )}
+
+            {currentRole === 'MENTOR' && (
+              <MentorView 
+                riskStudents={riskStudents}
+                setRiskStudents={setRiskStudents}
+                leaveRequests={leaveRequests}
+                setLeaveRequests={setLeaveRequests}
+                users={users}
+                onAddAuditLog={handleAddAuditLog}
+              />
+            )}
+
+            {currentRole === 'STUDENT' && (
+              !studentUser ? (
+                <LoginView 
                   users={users}
-                  setUsers={setUsers}
-                  rooms={rooms}
-                  setRooms={setRooms}
-                  subjects={subjects}
-                  setSubjects={setSubjects}
-                  notices={notices}
-                  setNotices={setNotices}
-                  issuedDocuments={issuedDocuments}
-                  setIssuedDocuments={setIssuedDocuments}
-                  knowledgeDocs={knowledgeDocs}
-                  setKnowledgeDocs={setKnowledgeDocs}
-                  onAddAuditLog={handleAddAuditLog}
+                  onLogin={handleStudentLogin}
                 />
-              )}
-
-              {currentRole === 'HOD' && loggedInUser.role === 'HOD' && (
-                <HodView 
-                  leaveRequests={leaveRequests}
-                  setLeaveRequests={setLeaveRequests}
-                  markCorrections={markCorrections}
-                  setMarkCorrections={setMarkCorrections}
-                  marks={marks}
-                  setMarks={setMarks}
-                  users={users}
-                  onAddAuditLog={handleAddAuditLog}
-                />
-              )}
-
-              {currentRole === 'FACULTY' && loggedInUser.role === 'FACULTY' && (
-                <FacultyView 
-                  sessions={sessions}
-                  setSessions={setSessions}
-                  subjects={subjects}
-                  rooms={rooms}
-                  users={users}
-                  marks={marks}
-                  setMarks={setMarks}
-                  markCorrections={markCorrections}
-                  setMarkCorrections={setMarkCorrections}
-                  onAddAuditLog={handleAddAuditLog}
-                />
-              )}
-
-              {currentRole === 'MENTOR' && loggedInUser.role === 'MENTOR' && (
-                <MentorView 
-                  riskStudents={riskStudents}
-                  setRiskStudents={setRiskStudents}
-                  leaveRequests={leaveRequests}
-                  setLeaveRequests={setLeaveRequests}
-                  users={users}
-                  onAddAuditLog={handleAddAuditLog}
-                />
-              )}
-
-              {currentRole === 'STUDENT' && loggedInUser.role === 'STUDENT' && (
+              ) : (
                 <StudentView 
                   currentUser={currentStudent}
                   activeSession={activeSession}
@@ -311,11 +354,11 @@ export default function App() {
                   issuedDocuments={issuedDocuments}
                   onOpenChat={() => setIsChatbotOpen(true)}
                   onAddAuditLog={handleAddAuditLog}
-                  onLogout={handleLogout}
+                  onLogout={handleStudentLogout}
                 />
-              )}
-            </>
-          )
+              )
+            )}
+          </>
         )}
       </main>
 

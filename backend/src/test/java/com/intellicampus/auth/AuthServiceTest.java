@@ -180,8 +180,26 @@ class AuthServiceTest {
     }
 
     @Test
-    @DisplayName("Login - Student-only portal rejects staff user with generic error and counts failed attempt")
-    void testLogin_StaffUserRejected() {
+    @DisplayName("Login - Student logs in successfully on student portal")
+    void testLogin_StudentOnStudentPortal_Success() {
+        LoginRequestDto req = new LoginRequestDto("student.aarav", "ValidPass123!", "STUDENT");
+
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordEncoder.matches("ValidPass123!", studentUser.getPasswordHash())).thenReturn(true);
+        when(jwtTokenProvider.generateToken(studentUser)).thenReturn("mock.jwt.token");
+        when(jwtTokenProvider.getExpirationSeconds()).thenReturn(900L);
+        when(studentProfileRepository.findByUser(studentUser)).thenReturn(Optional.of(studentProfile));
+
+        AuthResponseDto resp = authService.login(req);
+
+        assertNotNull(resp);
+        assertEquals("mock.jwt.token", resp.getAccessToken());
+        assertEquals(Role.STUDENT, resp.getUser().getRole());
+    }
+
+    @Test
+    @DisplayName("Login - Faculty logs in successfully on faculty portal")
+    void testLogin_FacultyOnFacultyPortal_Success() {
         User facultyUser = new User();
         facultyUser.setId(3L);
         facultyUser.setUserCode("prof.verma");
@@ -192,6 +210,48 @@ class AuthServiceTest {
         facultyUser.setStatus(UserStatus.ACTIVE);
         facultyUser.setFailedAttempts(0);
 
+        LoginRequestDto req = new LoginRequestDto("prof.verma", "ValidPass123!", "FACULTY");
+
+        when(userRepository.findByUserCode("prof.verma")).thenReturn(Optional.of(facultyUser));
+        when(passwordEncoder.matches("ValidPass123!", facultyUser.getPasswordHash())).thenReturn(true);
+        when(jwtTokenProvider.generateToken(facultyUser)).thenReturn("mock.faculty.jwt");
+        when(jwtTokenProvider.getExpirationSeconds()).thenReturn(900L);
+
+        AuthResponseDto resp = authService.login(req);
+
+        assertNotNull(resp);
+        assertEquals("mock.faculty.jwt", resp.getAccessToken());
+        assertEquals("prof.verma", resp.getUser().getUserCode());
+        assertEquals(Role.FACULTY, resp.getUser().getRole());
+    }
+
+    @Test
+    @DisplayName("Login - Student cannot log in on faculty portal and receives generic error")
+    void testLogin_StudentCannotLoginOnFacultyPortal() {
+        LoginRequestDto req = new LoginRequestDto("student.aarav", "ValidPass123!", "FACULTY");
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+
+        BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> authService.login(req));
+        assertEquals("Invalid login code or password.", ex.getMessage());
+        assertEquals(1, studentUser.getFailedAttempts());
+        verify(userRepository).save(studentUser);
+        verify(jwtTokenProvider, never()).generateToken(any());
+    }
+
+    @Test
+    @DisplayName("Login - Faculty user cannot log in on student portal and receives generic error")
+    void testLogin_StaffUserRejectedOnStudentPortal() {
+        User facultyUser = new User();
+        facultyUser.setId(3L);
+        facultyUser.setUserCode("prof.verma");
+        facultyUser.setName("Prof. Vikram Verma");
+        facultyUser.setEmail("v.verma@intellicampus.edu");
+        facultyUser.setPasswordHash("$2a$10$hashedPasswordPlaceholder");
+        facultyUser.setRole(Role.FACULTY);
+        facultyUser.setStatus(UserStatus.ACTIVE);
+        facultyUser.setFailedAttempts(0);
+
+        // Omitting portal defaults to STUDENT
         LoginRequestDto req = new LoginRequestDto("prof.verma", "ValidPass123!");
         when(userRepository.findByUserCode("prof.verma")).thenReturn(Optional.of(facultyUser));
 
@@ -215,7 +275,7 @@ class AuthServiceTest {
         adminUser.setStatus(UserStatus.ACTIVE);
         adminUser.setFailedAttempts(4);
 
-        LoginRequestDto req = new LoginRequestDto("admin.patel", "AnyPassword");
+        LoginRequestDto req = new LoginRequestDto("admin.patel", "AnyPassword", "STUDENT");
         when(userRepository.findByUserCode("admin.patel")).thenReturn(Optional.of(adminUser));
 
         BadCredentialsException ex = assertThrows(BadCredentialsException.class, () -> authService.login(req));

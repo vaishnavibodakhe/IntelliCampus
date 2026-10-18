@@ -5,6 +5,8 @@ public class LoginRequestDto {
     private String userCode;
     private String loginCode;
     private String password;
+    private String portal;
+    private String expectedRole;
 
     public LoginRequestDto() {}
 
@@ -12,6 +14,14 @@ public class LoginRequestDto {
         this.userCode = userCode;
         this.loginCode = userCode;
         this.password = password;
+    }
+
+    public LoginRequestDto(String userCode, String password, String expectedRole) {
+        this.userCode = userCode;
+        this.loginCode = userCode;
+        this.password = password;
+        this.expectedRole = expectedRole;
+        this.portal = expectedRole;
     }
 
     public String getUserCode() {
@@ -40,5 +50,30 @@ public class LoginRequestDto {
 
     public void setPassword(String password) {
         this.password = password;
+    }
+
+    public String getPortal() {
+        return portal;
+    }
+
+    public void setPortal(String portal) {
+        this.portal = portal;
+        if (this.expectedRole == null) {
+            this.expectedRole = portal;
+        }
+    }
+
+    public String getExpectedRole() {
+        if (expectedRole != null && !expectedRole.isBlank()) {
+            return expectedRole;
+        }
+        return portal;
+    }
+
+    public void setExpectedRole(String expectedRole) {
+        this.expectedRole = expectedRole;
+        if (this.portal == null) {
+            this.portal = expectedRole;
+        }
     }
 }

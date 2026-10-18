@@ -12,14 +12,103 @@ import { INITIAL_USERS } from '../../data/mockData.js';
 
 describe('Student-Only Portal Access Control & Viewport Resolution', () => {
 
-  describe('When VITE_STUDENT_ONLY=true (Default Student-Only Mode)', () => {
+  describe('Default Multi-Role Mode (VITE_STUDENT_ONLY=false or undefined)', () => {
+    const studentOnly = false;
+
+    it('defaults to false when flag is undefined, empty or set to false', () => {
+      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: undefined }), false);
+      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: 'false' }), false);
+      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: false }), false);
+      assert.strictEqual(isStudentOnlyMode({}), false);
+    });
+
+    it('demo codes list includes all accounts in multi-role configuration', () => {
+      const demoCodes = getDemoCodes(studentOnly);
+      assert.deepStrictEqual(demoCodes, ALL_DEMO_CODES);
+      assert.strictEqual(demoCodes.length, 8);
+      assert.ok(demoCodes.includes('student.aarav'));
+      assert.ok(demoCodes.includes('prof.verma'));
+      assert.ok(demoCodes.includes('dr.mehta'));
+      assert.ok(demoCodes.includes('admin.patel'));
+      assert.ok(demoCodes.includes('hod.sharma'));
+    });
+
+    it('student demo accounts list is strictly student-only', () => {
+      assert.deepStrictEqual(STUDENT_DEMO_CODES, [
+        'student.aarav',
+        'student.priya',
+        'student.rohan',
+        'student.kavya'
+      ]);
+    });
+
+    it('renders role-appropriate views for Faculty, HOD, Admin, Mentor, and Public Verifier directly', () => {
+      assert.strictEqual(
+        resolveActiveViewport({ studentOnly, currentRole: 'FACULTY' }),
+        'FACULTY'
+      );
+      assert.strictEqual(
+        resolveActiveViewport({ studentOnly, currentRole: 'HOD' }),
+        'HOD'
+      );
+      assert.strictEqual(
+        resolveActiveViewport({ studentOnly, currentRole: 'ADMIN' }),
+        'ADMIN'
+      );
+      assert.strictEqual(
+        resolveActiveViewport({ studentOnly, currentRole: 'MENTOR' }),
+        'MENTOR'
+      );
+      assert.strictEqual(
+        resolveActiveViewport({ studentOnly, currentRole: 'PUBLIC' }),
+        'PUBLIC'
+      );
+    });
+
+    it('renders LoginView when student is not logged in, and StudentView after student logs in', () => {
+      const viewLoggedOut = resolveActiveViewport({
+        studentOnly,
+        studentUser: null,
+        currentRole: 'STUDENT'
+      });
+      assert.strictEqual(viewLoggedOut, 'LOGIN', 'Unauthenticated student role must render LoginView');
+
+      const studentUser = { id: 5, userCode: 'student.aarav', name: 'Aarav Shah', role: 'STUDENT' };
+      const viewLoggedIn = resolveActiveViewport({
+        studentOnly,
+        studentUser,
+        currentRole: 'STUDENT'
+      });
+      assert.strictEqual(viewLoggedIn, 'STUDENT', 'Authenticated student role must render StudentView');
+    });
+
+    it('staff UI elements in Navbar (Role Switcher, Live Badge, Audit Chain) are enabled', () => {
+      const shouldShowRoleSwitcher = !studentOnly;
+      const shouldShowAuditChain = !studentOnly;
+      const shouldShowLiveBadge = !studentOnly;
+
+      assert.strictEqual(shouldShowRoleSwitcher, true, 'Role Switcher must be rendered');
+      assert.strictEqual(shouldShowAuditChain, true, 'Audit Chain button must be rendered');
+      assert.strictEqual(shouldShowLiveBadge, true, 'Live session badge must be rendered');
+    });
+
+    it('permits all authenticated roles in session storage in multi-role mode', () => {
+      const adminUser = { role: 'ADMIN' };
+      const facultyUser = { role: 'FACULTY' };
+      const studentUser = { role: 'STUDENT' };
+
+      assert.strictEqual(isSessionPermitted(adminUser, studentOnly), true);
+      assert.strictEqual(isSessionPermitted(facultyUser, studentOnly), true);
+      assert.strictEqual(isSessionPermitted(studentUser, studentOnly), true);
+    });
+  });
+
+  describe('When VITE_STUDENT_ONLY=true (Student-Only Mode Override)', () => {
     const studentOnly = true;
 
-    it('defaults to true when flag is undefined or set to true', () => {
-      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: undefined }), true);
+    it('resolves flag to true when VITE_STUDENT_ONLY is "true" or true', () => {
       assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: 'true' }), true);
       assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: true }), true);
-      assert.strictEqual(isStudentOnlyMode({}), true);
     });
 
     it('demo codes list contains exclusively student accounts and excludes staff', () => {
@@ -53,52 +142,49 @@ describe('Student-Only Portal Access Control & Viewport Resolution', () => {
       assert.strictEqual(isSessionPermitted(null, studentOnly), false);
     });
 
-    it('renders only LoginView when logged out, even if currentRole is PUBLIC', () => {
+    it('renders only LoginView when logged out, even if currentRole is PUBLIC or FACULTY', () => {
       const viewLoggedOut = resolveActiveViewport({
         studentOnly,
-        loggedInUser: null,
+        studentUser: null,
         currentRole: 'LOGIN'
       });
       assert.strictEqual(viewLoggedOut, 'LOGIN');
 
       const viewPublicAttempt = resolveActiveViewport({
         studentOnly,
-        loggedInUser: null,
+        studentUser: null,
         currentRole: 'PUBLIC'
       });
       assert.strictEqual(viewPublicAttempt, 'LOGIN');
+
+      const viewFacultyAttempt = resolveActiveViewport({
+        studentOnly,
+        studentUser: null,
+        currentRole: 'FACULTY'
+      });
+      assert.strictEqual(viewFacultyAttempt, 'LOGIN');
     });
 
-    it('always renders StudentView after student login and never renders staff views or modals', () => {
+    it('always renders StudentView after student login and never renders staff views', () => {
       const studentUser = { id: 5, userCode: 'student.aarav', name: 'Aarav Shah', role: 'STUDENT' };
       
       const viewStudent = resolveActiveViewport({
         studentOnly,
-        loggedInUser: studentUser,
+        studentUser,
         currentRole: 'STUDENT'
       });
       assert.strictEqual(viewStudent, 'STUDENT');
 
       // Attempting to set staff roles while logged in as student still resolves to STUDENT
-      const viewWithAdminRole = resolveActiveViewport({
+      const viewWithFacultyRole = resolveActiveViewport({
         studentOnly,
-        loggedInUser: studentUser,
-        currentRole: 'ADMIN'
+        studentUser,
+        currentRole: 'FACULTY'
       });
-      assert.strictEqual(viewWithAdminRole, 'STUDENT');
-
-      // Staff user in storage cannot render staff view; resolves to LOGIN
-      const adminUser = { id: 1, userCode: 'admin.patel', name: 'Rajesh Patel', role: 'ADMIN' };
-      const viewStaffStored = resolveActiveViewport({
-        studentOnly,
-        loggedInUser: adminUser,
-        currentRole: 'ADMIN'
-      });
-      assert.strictEqual(viewStaffStored, 'LOGIN');
+      assert.strictEqual(viewWithFacultyRole, 'STUDENT');
     });
 
     it('staff UI elements in Navbar (Role Switcher, Live Badge, Audit Chain) are disabled', () => {
-      // In studentOnly mode:
       const shouldShowRoleSwitcher = !studentOnly;
       const shouldShowAuditChain = !studentOnly;
       const shouldShowLiveBadge = !studentOnly;
@@ -106,78 +192,6 @@ describe('Student-Only Portal Access Control & Viewport Resolution', () => {
       assert.strictEqual(shouldShowRoleSwitcher, false, 'Role Switcher must not be rendered');
       assert.strictEqual(shouldShowAuditChain, false, 'Audit Chain button must not be rendered');
       assert.strictEqual(shouldShowLiveBadge, false, 'Live session badge must not be rendered');
-    });
-  });
-
-  describe('When VITE_STUDENT_ONLY=false (Multi-Role Mode)', () => {
-    const studentOnly = false;
-
-    it('resolves flag to false when VITE_STUDENT_ONLY is "false" or false', () => {
-      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: 'false' }), false);
-      assert.strictEqual(isStudentOnlyMode({ VITE_STUDENT_ONLY: false }), false);
-    });
-
-    it('demo codes list includes all student and staff accounts', () => {
-      const demoCodes = getDemoCodes(studentOnly);
-      assert.deepStrictEqual(demoCodes, ALL_DEMO_CODES);
-      assert.strictEqual(demoCodes.length, 8);
-      assert.ok(demoCodes.includes('prof.verma'));
-      assert.ok(demoCodes.includes('dr.mehta'));
-      assert.ok(demoCodes.includes('admin.patel'));
-      assert.ok(demoCodes.includes('hod.sharma'));
-    });
-
-    it('permits all authenticated roles in session storage', () => {
-      const adminUser = { role: 'ADMIN' };
-      const facultyUser = { role: 'FACULTY' };
-      const studentUser = { role: 'STUDENT' };
-
-      assert.strictEqual(isSessionPermitted(adminUser, studentOnly), true);
-      assert.strictEqual(isSessionPermitted(facultyUser, studentOnly), true);
-      assert.strictEqual(isSessionPermitted(studentUser, studentOnly), true);
-    });
-
-    it('renders role-appropriate views for Admin, HOD, Faculty, Mentor, Student, and Public Verifier', () => {
-      const adminUser = { role: 'ADMIN' };
-      const facultyUser = { role: 'FACULTY' };
-      const hodUser = { role: 'HOD' };
-      const mentorUser = { role: 'MENTOR' };
-      const studentUser = { role: 'STUDENT' };
-
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: adminUser, currentRole: 'ADMIN' }),
-        'ADMIN'
-      );
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: facultyUser, currentRole: 'FACULTY' }),
-        'FACULTY'
-      );
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: hodUser, currentRole: 'HOD' }),
-        'HOD'
-      );
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: mentorUser, currentRole: 'MENTOR' }),
-        'MENTOR'
-      );
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: studentUser, currentRole: 'STUDENT' }),
-        'STUDENT'
-      );
-      assert.strictEqual(
-        resolveActiveViewport({ studentOnly, loggedInUser: null, currentRole: 'PUBLIC' }),
-        'PUBLIC'
-      );
-    });
-
-    it('staff UI elements in Navbar (Role Switcher, Live Badge, Audit Chain) are enabled', () => {
-      const shouldShowRoleSwitcher = !studentOnly;
-      const shouldShowAuditChain = !studentOnly;
-      const shouldShowLiveBadge = !studentOnly;
-
-      assert.strictEqual(shouldShowRoleSwitcher, true, 'Role Switcher must be rendered');
-      assert.strictEqual(shouldShowAuditChain, true, 'Audit Chain button must be rendered');
-      assert.strictEqual(shouldShowLiveBadge, true, 'Live session badge must be rendered');
     });
   });
 });

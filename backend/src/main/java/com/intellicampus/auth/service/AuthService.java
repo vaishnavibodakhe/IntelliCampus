@@ -94,17 +94,28 @@ public class AuthService {
 
         User user = userOpt.get();
 
-        // 1. Student-only policy: only allow users whose role is STUDENT.
-        // For any other role, return exactly the same generic error as a wrong password ("Invalid login code or password.")
-        // so the response does not reveal the account exists, and count it as a failed attempt.
-        if (user.getRole() != Role.STUDENT) {
+        // 1. Role / portal verification: default to STUDENT if portal/expectedRole is omitted.
+        // The login succeeds only if user.role matches expectedRole.
+        // For any mismatch, return generic error ("Invalid login code or password.") to avoid role leakage,
+        // and record it as a failed attempt.
+        Role expectedRole = Role.STUDENT;
+        String requestedRoleStr = req.getExpectedRole();
+        if (requestedRoleStr != null && !requestedRoleStr.isBlank()) {
+            try {
+                expectedRole = Role.valueOf(requestedRoleStr.trim().toUpperCase());
+            } catch (IllegalArgumentException e) {
+                throw new BadCredentialsException("Invalid login code or password.");
+            }
+        }
+
+        if (user.getRole() != expectedRole) {
             int failed = (user.getFailedAttempts() != null ? user.getFailedAttempts() : 0) + 1;
             user.setFailedAttempts(failed);
             if (failed >= 5) {
                 user.setLockedUntil(LocalDateTime.now().plusMinutes(5));
-                log.warn("Non-student user {} login rejected and locked out after 5 consecutive failed login attempts.", user.getUserCode());
+                log.warn("User {} login rejected for expected role {} and locked out after 5 consecutive failed login attempts.", user.getUserCode(), expectedRole);
             } else {
-                log.warn("Non-student user {} login rejected (role: {}). Attempt {} counted as failed.", user.getUserCode(), user.getRole(), failed);
+                log.warn("User {} login rejected (actual role: {}, expected portal: {}). Attempt {} counted as failed.", user.getUserCode(), user.getRole(), expectedRole, failed);
             }
             userRepository.save(user);
             throw new BadCredentialsException("Invalid login code or password.");

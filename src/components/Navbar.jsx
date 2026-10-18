@@ -81,21 +81,11 @@ export default function Navbar({
             {roles.map(r => {
               const Icon = r.icon;
               const isActive = currentRole === r.id;
-              // When logged in: only user's own role and PUBLIC are enabled
-              // When logged out: only PUBLIC is accessible
-              const isDisabled = loggedInUser
-                ? (r.id !== loggedInUser.role && r.id !== 'PUBLIC')
-                : (r.id !== 'PUBLIC');
-
               return (
                 <button
                   key={r.id}
-                  onClick={() => {
-                    if (!isDisabled) setCurrentRole(r.id);
-                  }}
-                  disabled={isDisabled}
-                  className={`role-pill-btn ${isActive ? 'active' : ''} ${isDisabled ? 'disabled' : ''}`}
-                  title={isDisabled ? (loggedInUser ? `Restricted to ${loggedInUser.role} workflow` : 'Please log in to access this workflow') : undefined}
+                  onClick={() => setCurrentRole(r.id)}
+                  className={`role-pill-btn ${isActive ? 'active' : ''}`}
                   style={{
                     '--accent': r.color
                   }}

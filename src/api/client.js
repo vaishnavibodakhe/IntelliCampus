@@ -62,11 +62,16 @@ async function handleResponse(response) {
 
 export const api = {
   // Authentication & Self-Service
-  async login({ loginCode, password }) {
+  async login({ loginCode, password, portal = 'STUDENT', expectedRole }) {
     const res = await authFetch('/api/auth/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ loginCode, password }),
+      body: JSON.stringify({ 
+        loginCode, 
+        password,
+        portal: portal || expectedRole || 'STUDENT',
+        expectedRole: expectedRole || portal || 'STUDENT'
+      }),
     });
     return handleResponse(res);
   },

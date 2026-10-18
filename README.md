@@ -158,31 +158,34 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 
 ---
 
-## 🎓 Student-Only Portal & Authentication
+## 🎓 Multi-Role Architecture & Per-Role Login
 
-IntelliCampus is configured by default as a **Student-Only Portal** for student workflows: attendance verification, academic marks viewing, multi-tier leave submission, campus notices, verifiable credentials, and AI document chat.
+IntelliCampus features a restored full-role navigation bar with isolated, per-role login and session isolation:
+- **Navigation & Workflow Switching**: The role switcher provides direct access to all roles: **Admin**, **HOD**, **Faculty**, **Mentor**, **Student**, and **Public Verifier**, alongside the Cryptographic Audit Chain Inspector, Live attendance indicator, campus notice alerts, Ask AI chatbot, and theme toggle.
+- **Dedicated Student Login**: Selecting the **Student** workflow displays a dedicated student login page (`LoginView`) featuring Sign In, Self-Registration with biometric photo capture, and Password Reset. When logged in, it transitions to `StudentView` with a personal Welcome header, student user chip, and Logout button.
+- **Direct Access for Existing Views**: Roles without dedicated separate login pages in the repository (Faculty, HOD, Admin, Mentor, and Public Verifier) open directly to their comprehensive workflow dashboards.
+- **Per-Role Session Isolation**: Student sessions (`intellicampus_student_user`) are strictly decoupled from staff sessions (`intellicampus_staff_users`). Logging in or out of the student portal does not invalidate faculty or HOD sessions, and the Navbar user chip and Logout button dynamically reflect only the role that is currently open and logged in.
+- **Backend Portal Authentication**: `POST /api/auth/login` accepts an optional `portal` / `expectedRole` parameter (default `STUDENT`). Authenticating against an incorrect portal returns a generic error (`"Invalid login code or password."`) and registers a failed attempt to prevent role leakage.
 
-### Student-Only Mode Configuration (`VITE_STUDENT_ONLY`)
+### Portal Mode Configuration (`VITE_STUDENT_ONLY`)
 The portal mode is governed by the Vite environment flag `VITE_STUDENT_ONLY`:
-- **`VITE_STUDENT_ONLY=true` (Default)**:
-  - Portal is exclusively accessible to students.
-  - Heading displays **Student Portal** on login.
-  - Staff workflows (`AdminView`, `HodView`, `FacultyView`, `MentorView`, `PublicVerifierView`, and `AuditChainModal`) are completely skipped from rendering.
-  - The Navbar role workflow switcher, Audit Chain button, and Live session challenge badge are removed.
-  - Navbar retains: branding, campus notice alerts, Ask AI chatbot, theme toggle, and logged-in student user chip with Logout button.
-  - Only students can authenticate (`AuthService.login` rejects non-student logins with the generic error `"Invalid login code or password."` to prevent role enumeration).
-  - Any non-student session detected in `sessionStorage` is automatically cleared.
-- **`VITE_STUDENT_ONLY=false`**:
-  - Restores the multi-role environment allowing team members to switch between Admin, HOD, Faculty, Mentor, Student, and Public Verifier workflows.
+- **`VITE_STUDENT_ONLY=false` (Default)**:
+  - Full role navigation bar is enabled for all roles.
+  - Audit Chain Inspector and Live challenge badges are accessible.
+  - Per-role login is active (Student login page for students; direct access for roles without separate login pages).
+- **`VITE_STUDENT_ONLY=true` (Student-Only Mode Override)**:
+  - Builds and serves strictly the student portal.
+  - Role switcher, Audit Chain button, and Live session challenge badges are omitted from the UI.
+  - Staff views are never rendered.
 
 #### How to Switch Portal Modes
 Create or edit your local `.env` file (or export in environment):
 ```bash
-# To run in Student-Only mode (default):
-VITE_STUDENT_ONLY=true
-
-# To switch back to legacy multi-role staff mode:
+# To run in standard multi-role mode with restored navbar (default):
 VITE_STUDENT_ONLY=false
+
+# To build or run in Student-Only mode:
+VITE_STUDENT_ONLY=true
 ```
 Then restart the development server or rebuild:
 ```bash
@@ -201,7 +204,7 @@ Login codes are case-insensitive. Default password for all seeded demo accounts 
 | `student.rohan` | Rohan Deshmukh | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-106) |
 | `student.kavya` | Kavya Iyer | `STUDENT` | Computer Science, Year 3 (TE), Div A (Roll: CS-107) |
 
-*(Note: Seeded staff accounts `prof.verma`, `hod.sharma`, `dr.mehta`, and `admin.patel` remain preserved in the backend database for team development, but are blocked from logging in when student-only mode is active).*
+*(Note: Seeded staff accounts `prof.verma` (Faculty), `hod.sharma` (HOD), `dr.mehta` (Mentor), and `admin.patel` (Admin) authenticate against their respective portals with `CampusPass2026!`).*
 
 ---
 

@@ -205,7 +205,9 @@ export default function LoginView({ users = [], onLogin }) {
       // 1. Attempt backend authentication
       const res = await api.login({
         loginCode: loginCode.trim(),
-        password: loginPassword
+        password: loginPassword,
+        portal: 'STUDENT',
+        expectedRole: 'STUDENT'
       });
 
       if (res && res.user && res.user.role !== 'STUDENT') {
