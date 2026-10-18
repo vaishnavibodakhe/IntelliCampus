@@ -4,10 +4,9 @@ import com.intellicampus.academic.model.Department;
 import com.intellicampus.academic.model.Division;
 import com.intellicampus.academic.repository.DepartmentRepository;
 import com.intellicampus.academic.repository.DivisionRepository;
-import com.intellicampus.auth.dto.AuthResponseDto;
-import com.intellicampus.auth.dto.LoginRequestDto;
-import com.intellicampus.auth.dto.RegisterRequestDto;
-import com.intellicampus.auth.dto.UserSummaryDto;
+import com.intellicampus.auth.dto.*;
+import com.intellicampus.auth.model.PasswordResetToken;
+import com.intellicampus.auth.repository.PasswordResetTokenRepository;
 import com.intellicampus.user.model.Role;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
@@ -15,14 +14,17 @@ import com.intellicampus.user.model.UserStatus;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import com.intellicampus.user.service.FaceEnrollmentService;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
+import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.util.Arrays;
 import java.util.List;
@@ -37,6 +39,7 @@ public class AuthService {
 
     private static final Pattern PASSWORD_PATTERN = Pattern.compile("^(?=.*[A-Za-z])(?=.*\\d).{8,}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9+_.-]+@(.+)$");
+    private static final Pattern CODE_PATTERN = Pattern.compile("^\\d{6}$");
     private static final long MAX_PHOTO_SIZE = 5 * 1024 * 1024; // 5 MB
     private static final List<String> ALLOWED_PHOTO_TYPES = Arrays.asList("image/jpeg", "image/jpg", "image/png");
 
@@ -44,25 +47,31 @@ public class AuthService {
     private final StudentProfileRepository studentProfileRepository;
     private final DepartmentRepository departmentRepository;
     private final DivisionRepository divisionRepository;
+    private final PasswordResetTokenRepository passwordResetTokenRepository;
     private final FaceEnrollmentService faceEnrollmentService;
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider jwtTokenProvider;
+    private final boolean demoResetCodeVisible;
 
     public AuthService(
             UserRepository userRepository,
             StudentProfileRepository studentProfileRepository,
             DepartmentRepository departmentRepository,
             DivisionRepository divisionRepository,
+            PasswordResetTokenRepository passwordResetTokenRepository,
             FaceEnrollmentService faceEnrollmentService,
             PasswordEncoder passwordEncoder,
-            JwtTokenProvider jwtTokenProvider) {
+            JwtTokenProvider jwtTokenProvider,
+            @Value("${app.auth.demo-reset-code-visible:true}") boolean demoResetCodeVisible) {
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.departmentRepository = departmentRepository;
         this.divisionRepository = divisionRepository;
+        this.passwordResetTokenRepository = passwordResetTokenRepository;
         this.faceEnrollmentService = faceEnrollmentService;
         this.passwordEncoder = passwordEncoder;
         this.jwtTokenProvider = jwtTokenProvider;
+        this.demoResetCodeVisible = demoResetCodeVisible;
     }
 
     public AuthResponseDto login(LoginRequestDto req) {
@@ -74,7 +83,6 @@ public class AuthService {
         String code = req.getUserCode().trim();
         Optional<User> userOpt = userRepository.findByUserCode(code);
         if (userOpt.isEmpty()) {
-            // Case-insensitive lookup fallback
             userOpt = userRepository.findAll().stream()
                     .filter(u -> u.getUserCode() != null && u.getUserCode().equalsIgnoreCase(code))
                     .findFirst();
@@ -192,6 +200,160 @@ public class AuthService {
         );
 
         return buildUserSummary(savedUser, enrolledProfile);
+    }
+
+    public ForgotPasswordResponseDto forgotPassword(ForgotPasswordRequestDto req) {
+        final String neutralMessage = "If the account exists, a reset code has been generated.";
+        if (req == null || req.getIdentifier().isBlank()) {
+            return new ForgotPasswordResponseDto(neutralMessage);
+        }
+
+        String identifier = req.getIdentifier().trim();
+        Optional<User> userOpt = userRepository.findByUserCode(identifier);
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findByEmail(identifier.toLowerCase());
+        }
+        if (userOpt.isEmpty()) {
+            userOpt = userRepository.findAll().stream()
+                    .filter(u -> (u.getUserCode() != null && u.getUserCode().equalsIgnoreCase(identifier)) ||
+                                 (u.getEmail() != null && u.getEmail().equalsIgnoreCase(identifier)))
+                    .findFirst();
+        }
+
+        // Constant-time behavior / neutral response if user does not exist
+        if (userOpt.isEmpty()) {
+            return new ForgotPasswordResponseDto(neutralMessage);
+        }
+
+        User user = userOpt.get();
+
+        // Invalidate previous active reset codes for this user
+        List<PasswordResetToken> existing = passwordResetTokenRepository.findByUserAndUsedFalse(user);
+        for (PasswordResetToken t : existing) {
+            t.setUsed(true);
+        }
+        passwordResetTokenRepository.saveAll(existing);
+
+        // Generate 6-digit one-time code
+        String code = String.format("%06d", new SecureRandom().nextInt(1_000_000));
+        String codeHash = DigestUtils.sha256Hex(code);
+
+        PasswordResetToken token = new PasswordResetToken(user, codeHash, LocalDateTime.now().plusMinutes(15));
+        passwordResetTokenRepository.save(token);
+
+        log.info("[DEMO AUTH] Generated 6-digit password reset code for user {}: {}", user.getUserCode(), code);
+
+        if (demoResetCodeVisible) {
+            return new ForgotPasswordResponseDto(neutralMessage, code);
+        }
+        return new ForgotPasswordResponseDto(neutralMessage);
+    }
+
+    @Transactional
+    public ResetPasswordResponseDto resetPassword(ResetPasswordRequestDto req) {
+        if (req == null) {
+            throw new IllegalArgumentException("Reset request is required.");
+        }
+
+        String code = req.getCode();
+        if (code == null || !CODE_PATTERN.matcher(code).matches()) {
+            throw new IllegalArgumentException("Reset code must be a valid 6-digit numerical code.");
+        }
+
+        if (req.getNewPassword() == null || !PASSWORD_PATTERN.matcher(req.getNewPassword()).matches()) {
+            throw new IllegalArgumentException("Password must be at least 8 characters long and contain at least one letter and one number.");
+        }
+
+        if (req.getConfirmPassword() != null && !req.getConfirmPassword().equals(req.getNewPassword())) {
+            throw new IllegalArgumentException("Passwords do not match.");
+        }
+
+        PasswordResetToken token = null;
+        String inputHash = DigestUtils.sha256Hex(code);
+
+        // If user identifier was provided, find through user's active token
+        String userIdentifier = null;
+        if (req.getLoginCode() != null && !req.getLoginCode().isBlank()) {
+            userIdentifier = req.getLoginCode().trim();
+        } else if (req.getEmail() != null && !req.getEmail().isBlank()) {
+            userIdentifier = req.getEmail().trim();
+        }
+
+        if (userIdentifier != null) {
+            final String ident = userIdentifier;
+            Optional<User> userOpt = userRepository.findByUserCode(ident)
+                    .or(() -> userRepository.findByEmail(ident.toLowerCase()));
+
+            if (userOpt.isPresent()) {
+                User user = userOpt.get();
+                Optional<PasswordResetToken> tokenOpt = passwordResetTokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(user);
+                if (tokenOpt.isEmpty()) {
+                    throw new IllegalArgumentException("Invalid or expired reset code.");
+                }
+                token = tokenOpt.get();
+
+                if (token.getAttempts() >= 5) {
+                    token.setUsed(true);
+                    passwordResetTokenRepository.save(token);
+                    throw new IllegalArgumentException("Maximum reset attempts exceeded (5/5). Please request a new code.");
+                }
+
+                if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
+                    throw new IllegalArgumentException("Reset code has expired. Please request a new code.");
+                }
+
+                if (!inputHash.equals(token.getTokenHash())) {
+                    int attempts = token.getAttempts() + 1;
+                    token.setAttempts(attempts);
+                    if (attempts >= 5) {
+                        token.setUsed(true);
+                    }
+                    passwordResetTokenRepository.save(token);
+                    throw new IllegalArgumentException("Invalid reset code. Attempt " + attempts + " of 5.");
+                }
+            }
+        }
+
+        // If not found via user identifier, look up by token hash directly
+        if (token == null) {
+            Optional<PasswordResetToken> tokenOpt = passwordResetTokenRepository.findByTokenHashAndUsedFalse(inputHash);
+            if (tokenOpt.isEmpty()) {
+                Optional<PasswordResetToken> usedOpt = passwordResetTokenRepository.findByTokenHash(inputHash);
+                if (usedOpt.isPresent() && Boolean.TRUE.equals(usedOpt.get().getUsed())) {
+                    throw new IllegalArgumentException("Reset code has already been used.");
+                }
+                throw new IllegalArgumentException("Invalid or expired reset code.");
+            }
+            token = tokenOpt.get();
+
+            if (token.getAttempts() >= 5) {
+                token.setUsed(true);
+                passwordResetTokenRepository.save(token);
+                throw new IllegalArgumentException("Maximum reset attempts exceeded (5/5). Please request a new code.");
+            }
+
+            if (token.getExpiresAt().isBefore(LocalDateTime.now())) {
+                throw new IllegalArgumentException("Reset code has expired. Please request a new code.");
+            }
+        }
+
+        // Update password and reset lockout counters
+        User targetUser = token.getUser();
+        targetUser.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        targetUser.setMustChangePassword(false);
+        targetUser.setFailedAttempts(0);
+        targetUser.setLockedUntil(null);
+        userRepository.save(targetUser);
+
+        // Invalidate all tokens for this user
+        List<PasswordResetToken> allTokens = passwordResetTokenRepository.findByUser(targetUser);
+        for (PasswordResetToken t : allTokens) {
+            t.setUsed(true);
+        }
+        passwordResetTokenRepository.saveAll(allTokens);
+
+        log.info("Password successfully reset for user {}", targetUser.getUserCode());
+        return new ResetPasswordResponseDto(true, "Password reset successfully. You can now log in with your new password.");
     }
 
     private void validateRegistrationFields(RegisterRequestDto req) {

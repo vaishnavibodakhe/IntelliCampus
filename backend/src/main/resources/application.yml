@@ -39,6 +39,9 @@ app:
     refresh-expiration-days: 7
     lockout-max-attempts: 5
     lockout-duration-minutes: 15
+  auth:
+    # Set to true for demo environment without email delivery; MUST be false in production
+    demo-reset-code-visible: ${DEMO_RESET_CODE_VISIBLE:true}
   attendance:
     photo-window-minutes: 10
     confirm-timeout-seconds: 120

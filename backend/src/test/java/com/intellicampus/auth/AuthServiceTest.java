@@ -4,10 +4,9 @@ import com.intellicampus.academic.model.Department;
 import com.intellicampus.academic.model.Division;
 import com.intellicampus.academic.repository.DepartmentRepository;
 import com.intellicampus.academic.repository.DivisionRepository;
-import com.intellicampus.auth.dto.AuthResponseDto;
-import com.intellicampus.auth.dto.LoginRequestDto;
-import com.intellicampus.auth.dto.RegisterRequestDto;
-import com.intellicampus.auth.dto.UserSummaryDto;
+import com.intellicampus.auth.dto.*;
+import com.intellicampus.auth.model.PasswordResetToken;
+import com.intellicampus.auth.repository.PasswordResetTokenRepository;
 import com.intellicampus.auth.service.AuthService;
 import com.intellicampus.auth.service.JwtTokenProvider;
 import com.intellicampus.user.model.Role;
@@ -17,6 +16,7 @@ import com.intellicampus.user.model.UserStatus;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import com.intellicampus.user.service.FaceEnrollmentService;
+import org.apache.commons.codec.digest.DigestUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +29,8 @@ import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalDateTime;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -47,13 +49,14 @@ class AuthServiceTest {
     @Mock
     private DivisionRepository divisionRepository;
     @Mock
+    private PasswordResetTokenRepository passwordResetTokenRepository;
+    @Mock
     private FaceEnrollmentService faceEnrollmentService;
     @Mock
     private PasswordEncoder passwordEncoder;
     @Mock
     private JwtTokenProvider jwtTokenProvider;
 
-    @InjectMocks
     private AuthService authService;
 
     private User studentUser;
@@ -63,6 +66,18 @@ class AuthServiceTest {
 
     @BeforeEach
     void setUp() {
+        authService = new AuthService(
+                userRepository,
+                studentProfileRepository,
+                departmentRepository,
+                divisionRepository,
+                passwordResetTokenRepository,
+                faceEnrollmentService,
+                passwordEncoder,
+                jwtTokenProvider,
+                true
+        );
+
         csDept = new Department("CS", "Computer Science");
         csDept.setId(1L);
 
@@ -309,5 +324,147 @@ class AuthServiceTest {
 
         IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.register(req, photo));
         assertTrue(ex.getMessage().contains("Expected exactly 1 face, but detected 0"));
+    }
+
+    // =========================================================================
+    // Forgot Password & Reset Password Tests
+    // =========================================================================
+
+    @Test
+    @DisplayName("Forgot Password - Returns neutral message and saves 6-digit hashed code when user exists")
+    void testForgotPassword_UserExists() {
+        ForgotPasswordRequestDto req = new ForgotPasswordRequestDto("student.aarav");
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordResetTokenRepository.findByUserAndUsedFalse(studentUser)).thenReturn(Collections.emptyList());
+
+        ForgotPasswordResponseDto resp = authService.forgotPassword(req);
+
+        assertNotNull(resp);
+        assertEquals("If the account exists, a reset code has been generated.", resp.getMessage());
+        assertNotNull(resp.getDemoResetCode());
+        assertEquals(6, resp.getDemoResetCode().length());
+
+        verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
+    }
+
+    @Test
+    @DisplayName("Forgot Password - Returns identical neutral message when user does NOT exist")
+    void testForgotPassword_UserNotFound() {
+        ForgotPasswordRequestDto req = new ForgotPasswordRequestDto("unknown@intellicampus.edu");
+        when(userRepository.findByUserCode("unknown@intellicampus.edu")).thenReturn(Optional.empty());
+        when(userRepository.findByEmail("unknown@intellicampus.edu")).thenReturn(Optional.empty());
+
+        ForgotPasswordResponseDto resp = authService.forgotPassword(req);
+
+        assertNotNull(resp);
+        assertEquals("If the account exists, a reset code has been generated.", resp.getMessage());
+        assertNull(resp.getDemoResetCode());
+        verify(passwordResetTokenRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("Reset Password - Valid code successfully updates password with BCrypt")
+    void testResetPassword_ValidCode_Success() {
+        String rawCode = "123456";
+        String codeHash = DigestUtils.sha256Hex(rawCode);
+
+        PasswordResetToken token = new PasswordResetToken(studentUser, codeHash, LocalDateTime.now().plusMinutes(10));
+        token.setId(1L);
+
+        ResetPasswordRequestDto req = new ResetPasswordRequestDto(rawCode, "NewPassword2026!", "NewPassword2026!");
+        req.setLoginCode("student.aarav");
+
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordResetTokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(studentUser))
+                .thenReturn(Optional.of(token));
+        when(passwordEncoder.encode("NewPassword2026!")).thenReturn("$2a$10$newBcryptHashedPassword");
+        when(passwordResetTokenRepository.findByUser(studentUser)).thenReturn(List.of(token));
+
+        ResetPasswordResponseDto resp = authService.resetPassword(req);
+
+        assertNotNull(resp);
+        assertTrue(resp.isSuccess());
+        assertTrue(resp.getMessage().contains("Password reset successfully"));
+
+        verify(userRepository).save(studentUser);
+        assertEquals("$2a$10$newBcryptHashedPassword", studentUser.getPasswordHash());
+        verify(passwordResetTokenRepository).saveAll(any());
+    }
+
+    @Test
+    @DisplayName("Reset Password - Wrong code increments attempt counter and rejects")
+    void testResetPassword_WrongCode_IncrementsAttempts() {
+        String correctHash = DigestUtils.sha256Hex("654321");
+        PasswordResetToken token = new PasswordResetToken(studentUser, correctHash, LocalDateTime.now().plusMinutes(10));
+        token.setId(1L);
+        token.setAttempts(1);
+
+        ResetPasswordRequestDto req = new ResetPasswordRequestDto("111111", "NewPassword2026!", "NewPassword2026!");
+        req.setLoginCode("student.aarav");
+
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordResetTokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(studentUser))
+                .thenReturn(Optional.of(token));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.resetPassword(req));
+        assertTrue(ex.getMessage().contains("Invalid reset code. Attempt 2 of 5."));
+        assertEquals(2, token.getAttempts());
+        verify(passwordResetTokenRepository).save(token);
+    }
+
+    @Test
+    @DisplayName("Reset Password - Maximum 5 wrong attempts invalidates token")
+    void testResetPassword_Exceeds5Attempts() {
+        String correctHash = DigestUtils.sha256Hex("654321");
+        PasswordResetToken token = new PasswordResetToken(studentUser, correctHash, LocalDateTime.now().plusMinutes(10));
+        token.setAttempts(5);
+
+        ResetPasswordRequestDto req = new ResetPasswordRequestDto("111111", "NewPassword2026!", "NewPassword2026!");
+        req.setLoginCode("student.aarav");
+
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordResetTokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(studentUser))
+                .thenReturn(Optional.of(token));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.resetPassword(req));
+        assertTrue(ex.getMessage().contains("Maximum reset attempts exceeded"));
+        assertTrue(token.getUsed());
+    }
+
+    @Test
+    @DisplayName("Reset Password - Expired code is rejected")
+    void testResetPassword_ExpiredCode() {
+        String code = "123456";
+        String codeHash = DigestUtils.sha256Hex(code);
+
+        PasswordResetToken token = new PasswordResetToken(studentUser, codeHash, LocalDateTime.now().minusMinutes(5));
+
+        ResetPasswordRequestDto req = new ResetPasswordRequestDto(code, "NewPassword2026!", "NewPassword2026!");
+        req.setLoginCode("student.aarav");
+
+        when(userRepository.findByUserCode("student.aarav")).thenReturn(Optional.of(studentUser));
+        when(passwordResetTokenRepository.findTopByUserAndUsedFalseOrderByCreatedAtDesc(studentUser))
+                .thenReturn(Optional.of(token));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.resetPassword(req));
+        assertTrue(ex.getMessage().contains("Reset code has expired"));
+    }
+
+    @Test
+    @DisplayName("Reset Password - Reused code is rejected")
+    void testResetPassword_ReusedCode() {
+        String code = "123456";
+        String codeHash = DigestUtils.sha256Hex(code);
+
+        PasswordResetToken token = new PasswordResetToken(studentUser, codeHash, LocalDateTime.now().plusMinutes(5));
+        token.setUsed(true);
+
+        ResetPasswordRequestDto req = new ResetPasswordRequestDto(code, "NewPassword2026!", "NewPassword2026!");
+
+        when(passwordResetTokenRepository.findByTokenHashAndUsedFalse(codeHash)).thenReturn(Optional.empty());
+        when(passwordResetTokenRepository.findByTokenHash(codeHash)).thenReturn(Optional.of(token));
+
+        IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () -> authService.resetPassword(req));
+        assertTrue(ex.getMessage().contains("Reset code has already been used"));
     }
 }

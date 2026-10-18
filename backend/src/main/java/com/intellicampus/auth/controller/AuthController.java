@@ -1,9 +1,6 @@
 package com.intellicampus.auth.controller;
 
-import com.intellicampus.auth.dto.AuthResponseDto;
-import com.intellicampus.auth.dto.LoginRequestDto;
-import com.intellicampus.auth.dto.RegisterRequestDto;
-import com.intellicampus.auth.dto.UserSummaryDto;
+import com.intellicampus.auth.dto.*;
 import com.intellicampus.auth.service.AuthService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -58,5 +55,17 @@ public class AuthController {
 
         UserSummaryDto createdUser = authService.register(req, photo);
         return ResponseEntity.status(HttpStatus.CREATED).body(createdUser);
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<ForgotPasswordResponseDto> forgotPassword(@RequestBody ForgotPasswordRequestDto forgotRequest) {
+        ForgotPasswordResponseDto response = authService.forgotPassword(forgotRequest);
+        return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<ResetPasswordResponseDto> resetPassword(@RequestBody ResetPasswordRequestDto resetRequest) {
+        ResetPasswordResponseDto response = authService.resetPassword(resetRequest);
+        return ResponseEntity.ok(response);
     }
 }
