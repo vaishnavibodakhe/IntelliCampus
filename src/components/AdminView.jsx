@@ -18,9 +18,17 @@ import {
   MapPin,
   Edit3,
   FileSpreadsheet,
+<<<<<<< HEAD
+  ShieldCheck,
+  LogOut
+} from 'lucide-react';
+import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
+import StaffChangePasswordView from './staff/StaffChangePasswordView';
+=======
   Camera
 } from 'lucide-react';
 import { api } from '../api/client';
+>>>>>>> main
 
 export default function AdminView({
   users,
@@ -35,9 +43,13 @@ export default function AdminView({
   setIssuedDocuments,
   knowledgeDocs,
   setKnowledgeDocs,
-  onAddAuditLog
+  onAddAuditLog,
+  staffSession,
+  onLogout,
+  onChangePassword
 }) {
   const [activeTab, setActiveTab] = useState('users');
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [userSearch, setUserSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('ALL');
   const [deptFilter, setDeptFilter] = useState('ALL');
@@ -548,8 +560,32 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             Centralized governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
           </p>
         </div>
-        <div className="header-meta-badge">
-          <span className="dot online" /> Connected as System Administrator
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className="header-meta-badge">
+            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as System Administrator'}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowChangePasswordModal(true)}
+            className="action-icon-btn"
+            style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+            title="Change Admin Password"
+          >
+            <KeyRound size={15} />
+            <span>Change Password</span>
+          </button>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="action-icon-btn"
+              style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Sign Out of Admin Console"
+            >
+              <LogOut size={15} />
+              <span>Logout</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -584,6 +620,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
           className={`tab-btn ${activeTab === 'knowledge' ? 'active' : ''}`}
         >
           <BrainCircuit size={16} /> Chatbot Knowledge Base ({knowledgeDocs.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('approvals')} 
+          className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
+        >
+          <ShieldCheck size={16} /> Staff Approvals
         </button>
       </div>
 
@@ -1035,6 +1077,13 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
         </div>
       )}
 
+      {/* TAB 6: STAFF APPROVALS */}
+      {activeTab === 'approvals' && (
+        <div className="tab-pane animate-fade-in">
+          <StaffPendingApprovalsView staffSession={staffSession} />
+        </div>
+      )}
+
       {/* Add User Modal */}
       {showAddUserModal && (
         <div className="modal-backdrop">
@@ -1473,6 +1522,33 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <StaffChangePasswordView
+            staffSession={staffSession}
+            onClose={() => setShowChangePasswordModal(false)}
+            onPasswordChanged={() => {
+              setShowChangePasswordModal(false);
+              alert('Password updated successfully!');
+            }}
+          />
         </div>
       )}
     </div>

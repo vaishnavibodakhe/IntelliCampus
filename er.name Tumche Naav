@@ -1,0 +1,5 @@
+5810c80 Intellicampus <intellicampusacc@gmail.com> Add OTP forgot password for Admin and HOD with Gmail SMTP
+45427f0 Tumche Naav <tumcha-email@gmail.com> Add OTP forgot password, SMTP checks and better logging
+ca83938 Vaishnavi <vaishnavibodakhe11@gmail.com> implemented student authentication
+fdcd181 vaishnavibodakhe <vaishnavibodakhe11@gmail.com> Merge pull request #51 from vaishnavibodakhe/docs/mysql-correction
+6db9b8e Vaishnavi <vaishnavibodakhe11@gmail.com> docs: correct database references to MySQL 8
