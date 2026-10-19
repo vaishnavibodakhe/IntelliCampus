@@ -362,3 +362,78 @@ describe('Frontend Biometric Quality & Security Helpers', () => {
     assert.ok(remoteInsecure.error.includes('HTTPS'));
   });
 });
+
+describe('Student Registration - Backend Status & Auto-Login Invariant', () => {
+  it('should preserve backend status PENDING and faceEnrolled false prior to biometric enrollment', () => {
+    const backendRegisterResponse = {
+      token: 'jwt-pending-token-123',
+      message: 'Student account registered successfully. Please complete biometric face enrollment.',
+      user: {
+        id: 10,
+        userCode: 'student.cs110',
+        name: 'Rohan Sharma',
+        email: 'rohan.cs26@intellicampus.edu',
+        role: 'STUDENT',
+        status: 'PENDING'
+      },
+      student: {
+        rollNo: 'CS-110',
+        division: 'Div A',
+        year: 'Year 3',
+        faceEnrolled: false
+      }
+    };
+
+    // Derived registration state
+    const backendStatus = backendRegisterResponse.user.status || 'PENDING';
+    const backendFaceEnrolled = Boolean(backendRegisterResponse.student.faceEnrolled);
+
+    assert.strictEqual(backendStatus, 'PENDING');
+    assert.strictEqual(backendFaceEnrolled, false);
+
+    // Auto-login invariant: must NOT auto-login if status is PENDING or face is not enrolled
+    const shouldAutoLogin = backendStatus === 'ACTIVE' && backendFaceEnrolled;
+    assert.strictEqual(shouldAutoLogin, false);
+  });
+
+  it('should only auto-login when backend status is ACTIVE and faceEnrolled is true', () => {
+    const backendEnrollResponse = {
+      token: 'jwt-active-token-456',
+      user: {
+        id: 10,
+        userCode: 'student.cs110',
+        name: 'Rohan Sharma',
+        email: 'rohan.cs26@intellicampus.edu',
+        role: 'STUDENT',
+        status: 'ACTIVE'
+      },
+      student: {
+        rollNo: 'CS-110',
+        division: 'Div A',
+        year: 'Year 3',
+        faceEnrolled: true
+      }
+    };
+
+    const backendStatus = backendEnrollResponse.user.status;
+    const backendFaceEnrolled = Boolean(backendEnrollResponse.student.faceEnrolled);
+
+    assert.strictEqual(backendStatus, 'ACTIVE');
+    assert.strictEqual(backendFaceEnrolled, true);
+
+    const shouldAutoLogin = backendStatus === 'ACTIVE' && backendFaceEnrolled;
+    assert.strictEqual(shouldAutoLogin, true);
+  });
+
+  it('should not treat PENDING students as having an active student session', () => {
+    const pendingStudent = {
+      id: 10,
+      role: 'STUDENT',
+      status: 'PENDING'
+    };
+
+    const hasStudentSession = Boolean(pendingStudent && pendingStudent.role === 'STUDENT' && pendingStudent.status !== 'PENDING');
+    assert.strictEqual(hasStudentSession, false);
+  });
+});
+

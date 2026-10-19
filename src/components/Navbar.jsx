@@ -10,9 +10,7 @@ import {
   Sun, 
   Moon, 
   Sparkles,
-  BookOpen,
-  LogIn,
-  LogOut
+  BookOpen
 } from 'lucide-react';
 
 export default function Navbar({ 
@@ -23,10 +21,7 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-  notificationCount = 2,
-  authenticatedUser,
-  onLogout,
-  onOpenAuth
+  notificationCount = 2
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
@@ -141,32 +136,6 @@ export default function Navbar({
           <span className="btn-label">Ask AI</span>
         </button>
 
-        {/* Authentication State / Action */}
-        {authenticatedUser ? (
-          <div className="auth-nav-group" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div className="user-profile-badge" title={`Signed in as ${authenticatedUser.name} (${authenticatedUser.email})`}>
-              <UserCheck size={14} className="text-accent" />
-              <span className="user-name-snippet">{authenticatedUser.name?.split(' ')[0] || 'Student'}</span>
-            </div>
-            <button
-              onClick={onLogout}
-              className="action-icon-btn logout-btn"
-              title="Sign Out of IntelliCampus"
-            >
-              <LogOut size={16} />
-              <span className="btn-label">Logout</span>
-            </button>
-          </div>
-        ) : (
-          <button
-            onClick={onOpenAuth}
-            className="action-icon-btn auth-nav-btn"
-            title="Student Registration & Login"
-          >
-            <LogIn size={16} />
-            <span className="btn-label">Sign In / Register</span>
-          </button>
-        )}
 
         {/* Theme Toggle */}
         <button 

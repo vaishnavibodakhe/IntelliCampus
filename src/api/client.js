@@ -84,7 +84,8 @@ export const api = {
     });
     const data = await handleResponse(res);
     if (data.token) {
-      setStoredToken(data.token, data.user);
+      // Keep token for biometric enrollment calls, but do not set user session before enrollment succeeds
+      setStoredToken(data.token, data.user && data.user.status === 'ACTIVE' ? data.user : null);
     }
     return data;
   },
