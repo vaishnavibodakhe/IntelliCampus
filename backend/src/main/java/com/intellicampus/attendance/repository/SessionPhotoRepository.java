@@ -14,4 +14,6 @@ public interface SessionPhotoRepository extends JpaRepository<SessionPhoto, Long
     List<SessionPhoto> findBySessionId(Long sessionId);
     Optional<SessionPhoto> findBySha256(String sha256);
     boolean existsBySessionIdAndSha256(Long sessionId, String sha256);
+    long countBySession(AttendanceSession session);
+    long countBySessionId(Long sessionId);
 }

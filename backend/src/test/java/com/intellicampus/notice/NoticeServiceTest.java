@@ -26,6 +26,7 @@ import org.mockito.Spy;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -98,7 +99,7 @@ class NoticeServiceTest {
                 "All Divisions",
                 "HOD Office",
                 null,
-                LocalDateTime.now().plusDays(3)
+                LocalDate.now().plusDays(3)
         );
         ReflectionTestUtils.setField(csYear3Notice, "id", 2L);
     }
@@ -116,7 +117,7 @@ class NoticeServiceTest {
             // Repository query returns matched notices for Computer Science, Year 3, TE-CS-A
             when(noticeRepository.findTargetedNotices("Computer Science", "Year 3", "TE-CS-A"))
                     .thenReturn(List.of(campusWideNotice, csYear3Notice));
-            when(noticeReadReceiptRepository.countByNotice(any(Notice.class))).thenReturn(5);
+            when(noticeReadReceiptRepository.countByNotice(any(Notice.class))).thenReturn(5L);
 
             List<NoticeDto> feed = noticeService.getFeedForUser(200L);
 
@@ -215,3 +216,6 @@ class NoticeServiceTest {
         }
     }
 }
+
+
+

@@ -15,6 +15,7 @@ public class UserResponseDto {
     private String division;
     private Double attendanceRate;
     private String feeStatus;
+    private Boolean faceEnrolled;
 
     public UserResponseDto() {}
 
@@ -60,4 +61,7 @@ public class UserResponseDto {
 
     public String getFeeStatus() { return feeStatus; }
     public void setFeeStatus(String feeStatus) { this.feeStatus = feeStatus; }
+
+    public Boolean getFaceEnrolled() { return faceEnrolled; }
+    public void setFaceEnrolled(Boolean faceEnrolled) { this.faceEnrolled = faceEnrolled; }
 }

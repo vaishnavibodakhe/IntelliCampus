@@ -13,7 +13,7 @@ public class PublicVerificationResultDto {
     private String department;
     private LocalDate issueDate;
     private String fileHash;
-    private DocumentStatus status;
+    private String status;
     private String revokedReason;
     private String authorizedSignatory;
     private LocalDateTime verifiedAt;
@@ -30,7 +30,7 @@ public class PublicVerificationResultDto {
         dto.setDepartment(department);
         dto.setIssueDate(issueDate);
         dto.setFileHash(fileHash);
-        dto.setStatus(DocumentStatus.VALID);
+        dto.setStatus("VALID");
         dto.setAuthorizedSignatory(authorizedSignatory);
         dto.setVerifiedAt(LocalDateTime.now());
         dto.setMessage("Official document verified successfully against IntelliCampus credential registry.");
@@ -46,7 +46,7 @@ public class PublicVerificationResultDto {
         dto.setDepartment(department);
         dto.setIssueDate(issueDate);
         dto.setFileHash(fileHash);
-        dto.setStatus(DocumentStatus.REVOKED);
+        dto.setStatus("REVOKED");
         dto.setRevokedReason(reason);
         dto.setVerifiedAt(LocalDateTime.now());
         dto.setMessage("Document was REVOKED by issuing authority. Reason: " + reason);
@@ -57,13 +57,16 @@ public class PublicVerificationResultDto {
         PublicVerificationResultDto dto = new PublicVerificationResultDto();
         dto.setValid(false);
         dto.setCode(code);
-        dto.setStatus(DocumentStatus.REVOKED);
+        dto.setStatus("NOT_FOUND");
         dto.setVerifiedAt(LocalDateTime.now());
         dto.setMessage("Invalid verification code. Document record not found in repository.");
         return dto;
     }
 
     public boolean isValid() { return valid; }
+    public boolean getIsValid() { return valid; }
+    public String getSignatory() { return authorizedSignatory; }
+    public String getRevocationReason() { return revokedReason; }
     public void setValid(boolean valid) { this.valid = valid; }
 
     public String getCode() { return code; }
@@ -84,8 +87,9 @@ public class PublicVerificationResultDto {
     public String getFileHash() { return fileHash; }
     public void setFileHash(String fileHash) { this.fileHash = fileHash; }
 
-    public DocumentStatus getStatus() { return status; }
-    public void setStatus(DocumentStatus status) { this.status = status; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public void setStatus(DocumentStatus status) { this.status = status != null ? status.name() : null; }
 
     public String getRevokedReason() { return revokedReason; }
     public void setRevokedReason(String revokedReason) { this.revokedReason = revokedReason; }
@@ -99,3 +103,5 @@ public class PublicVerificationResultDto {
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
 }
+
+

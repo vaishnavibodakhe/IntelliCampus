@@ -41,4 +41,17 @@ public class CreateUserRequestDto {
 
     public String getRawPassword() { return rawPassword; }
     public void setRawPassword(String rawPassword) { this.rawPassword = rawPassword; }
+
+    private Boolean biometricConsent;
+    private String consentVersion;
+    private String facePhotoBase64;
+
+    public Boolean getBiometricConsent() { return biometricConsent; }
+    public void setBiometricConsent(Boolean biometricConsent) { this.biometricConsent = biometricConsent; }
+
+    public String getConsentVersion() { return consentVersion; }
+    public void setConsentVersion(String consentVersion) { this.consentVersion = consentVersion; }
+
+    public String getFacePhotoBase64() { return facePhotoBase64; }
+    public void setFacePhotoBase64(String facePhotoBase64) { this.facePhotoBase64 = facePhotoBase64; }
 }

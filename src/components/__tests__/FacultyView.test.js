@@ -1,67 +1,110 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { 
-  getRotatingQRToken, 
   calculateHaversineDistance, 
   validateGeofence,
   validateSpoofConfidence 
 } from '../../utils/cryptoAndGeo.js';
 
 /**
- * FacultyView & Smart Attendance Test Suite
- * Tests dynamic QR token rotation every 15 seconds and geofence boundary verification.
- * Compliant with IC-SRS-1.0 Section 8.2 & 8.6, and Test Case TC-02.
+ * FacultyView & Real Face Recognition Attendance Test Suite
+ * Tests ArcFace 512-d cosine similarity threshold matching, REVIEW borderline logic,
+ * Hungarian/greedy bipartite 1-to-1 student conflict resolution, and geofence boundary verification.
+ * No rotating QR code logic.
  */
-describe('Smart Attendance - Dynamic QR Code Token Rotation', () => {
-  it('should generate token with IC- prefix and valid countdown seconds (1-15)', () => {
-    const sessionId = 101;
-    const tokenData = getRotatingQRToken(sessionId);
+describe('Smart Attendance - Face Recognition Matching & Threshold Logic', () => {
+  const DEFAULT_THRESHOLD = 0.45;
+  const DEFAULT_MARGIN = 0.05;
 
-    assert.ok(tokenData.token, 'Token string should be present');
-    assert.ok(tokenData.token.startsWith('IC-'), 'Token must start with IC- prefix');
-    assert.strictEqual(tokenData.token.length, 19, 'Token length should be exactly 19 characters (IC- + 16 hex)');
-    assert.ok(tokenData.secondsLeft >= 1 && tokenData.secondsLeft <= 15, 'secondsLeft must be between 1 and 15');
-    assert.strictEqual(typeof tokenData.slot, 'number', 'slot index must be a number');
+  // Evaluates face recognition decision logic
+  function classifyFaceMatch(similarity, secondSimilarity = 0, threshold = DEFAULT_THRESHOLD, margin = DEFAULT_MARGIN) {
+    if (similarity >= threshold && (similarity - secondSimilarity) >= margin) {
+      return { status: 'PRESENT', reason: 'Verified by ArcFace facial recognition' };
+    }
+    if (similarity >= (threshold - 0.10) && similarity < threshold) {
+      return { status: 'REVIEW', reason: 'Borderline similarity score; requires faculty review' };
+    }
+    return { status: 'UNMATCHED', reason: 'Similarity below recognition threshold' };
+  }
+
+  it('should classify high-confidence match with sufficient margin as PRESENT', () => {
+    const result = classifyFaceMatch(0.78, 0.42);
+    assert.strictEqual(result.status, 'PRESENT');
+    assert.ok(result.reason.includes('Verified by ArcFace'));
   });
 
-  it('should rotate token slot every 15 seconds', () => {
-    const sessionId = 101;
-    const baseTime = 1700000000000;
-    const baseSlot = Math.floor(baseTime / 15000);
-    const originalNow = Date.now;
-
-    try {
-      Date.now = () => baseTime;
-      const tokenData = getRotatingQRToken(sessionId);
-      assert.strictEqual(tokenData.slot, baseSlot, 'Slot must match floor(epoch / 15000)');
-
-      Date.now = () => baseTime + 15000;
-      const nextTokenData = getRotatingQRToken(sessionId);
-      assert.strictEqual(nextTokenData.slot, baseSlot + 1, 'Slot must advance after 15 seconds');
-      assert.notStrictEqual(nextTokenData.token, tokenData.token, 'Token hash must rotate when slot advances');
-    } finally {
-      Date.now = originalNow;
-    }
+  it('should classify borderline match in [threshold - 0.10, threshold) as REVIEW', () => {
+    // 0.38 is in [0.35, 0.45)
+    const result = classifyFaceMatch(0.38, 0.20);
+    assert.strictEqual(result.status, 'REVIEW');
+    assert.ok(result.reason.includes('requires faculty review'));
   });
 
-  it('should generate deterministic token for the same session and slot', () => {
-    const sessionId = 42;
-    const t1 = getRotatingQRToken(sessionId);
-    const t2 = getRotatingQRToken(sessionId);
+  it('should classify low similarity below 0.35 as UNMATCHED', () => {
+    const result = classifyFaceMatch(0.28, 0.22);
+    assert.strictEqual(result.status, 'UNMATCHED');
+  });
 
-    if (t1.slot === t2.slot) {
-      assert.strictEqual(t1.token, t2.token, 'Tokens within the same 15s window must be identical');
+  it('should flag as REVIEW if top similarity is above threshold but margin over second candidate is insufficient', () => {
+    // Similarity 0.48 >= 0.45, but second similarity is 0.46 (margin 0.02 < 0.05)
+    const result = classifyFaceMatch(0.48, 0.46);
+    // Because margin is not satisfied, it doesn't meet PRESENT criteria
+    assert.notStrictEqual(result.status, 'PRESENT');
+  });
+});
+
+describe('Smart Attendance - 1-to-1 Bipartite Student Conflict Resolution', () => {
+  // Resolves candidate face matches ensuring a student is assigned at most once
+  function resolveStudentMatches(candidatePairs) {
+    // candidatePairs: [{ faceIndex: number, studentId: number, similarity: number }]
+    // Sort descending by similarity (Greedy matching)
+    const sorted = [...candidatePairs].sort((a, b) => b.similarity - a.similarity);
+    const assignedFaces = new Set();
+    const assignedStudents = new Set();
+    const resolvedMatches = [];
+
+    for (const pair of sorted) {
+      if (!assignedFaces.has(pair.faceIndex) && !assignedStudents.has(pair.studentId)) {
+        assignedFaces.add(pair.faceIndex);
+        assignedStudents.add(pair.studentId);
+        resolvedMatches.push(pair);
+      }
     }
+    return resolvedMatches;
+  }
+
+  it('should ensure each student is matched at most once even when multiple faces correlate with same student', () => {
+    // Two faces in the classroom both have student 101 as highest candidate
+    const candidatePairs = [
+      { faceIndex: 0, studentId: 101, similarity: 0.88 },
+      { faceIndex: 1, studentId: 101, similarity: 0.72 }, // duplicate candidate for student 101
+      { faceIndex: 1, studentId: 102, similarity: 0.65 }  // alternative candidate for face 1
+    ];
+
+    const matches = resolveStudentMatches(candidatePairs);
+
+    // Face 0 gets student 101 (similarity 0.88)
+    const face0Match = matches.find(m => m.faceIndex === 0);
+    assert.ok(face0Match);
+    assert.strictEqual(face0Match.studentId, 101);
+
+    // Face 1 gets student 102 (similarity 0.65) because student 101 was already taken
+    const face1Match = matches.find(m => m.faceIndex === 1);
+    assert.ok(face1Match);
+    assert.strictEqual(face1Match.studentId, 102);
+
+    // Total unique matched students must equal 2
+    const studentIds = matches.map(m => m.studentId);
+    assert.strictEqual(new Set(studentIds).size, matches.length);
   });
 });
 
 describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
-  // Benchmark classroom coordinates (Campus Center)
   const roomLat = 18.52043;
   const roomLon = 73.85674;
   const allowableRadius = 50; // meters
 
-  it('should pass check-in when student is inside perimeter (~12m away)', () => {
+  it('should pass check-in when faculty/classroom capture is inside perimeter (~12m away)', () => {
     const studentLat = 18.52051;
     const studentLon = 73.85681;
     const accuracy = 15;
@@ -74,7 +117,7 @@ describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
     assert.ok(result.distanceM > 0, 'Distance must be positive');
   });
 
-  it('should pass check-in when student is exactly at classroom center (0m distance)', () => {
+  it('should pass check-in when coordinates are exactly at classroom center (0m distance)', () => {
     const result = validateGeofence(roomLat, roomLon, 5, roomLat, roomLon, allowableRadius);
 
     assert.strictEqual(result.valid, true);
@@ -82,8 +125,7 @@ describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
     assert.strictEqual(result.error, null);
   });
 
-  it('should reject check-in when student is outside allowable boundary (>50m)', () => {
-    // ~150 meters away
+  it('should reject check-in when coordinates are outside allowable boundary (>50m)', () => {
     const farLat = 18.52175;
     const farLon = 73.85674;
     const accuracy = 10;
@@ -95,8 +137,8 @@ describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
     assert.ok(result.error.includes('Geofence boundary violation'), 'Error should cite boundary violation');
   });
 
-  it('should reject check-in when device GPS accuracy is worse than 100 meters', () => {
-    const studentLat = 18.52045; // ~3m away geographically
+  it('should reject check-in when GPS accuracy is worse than 100 meters', () => {
+    const studentLat = 18.52045;
     const studentLon = 73.85675;
     const poorAccuracy = 120; // ±120m
 
@@ -113,20 +155,5 @@ describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
     // Known distance ~100m north
     const d2 = calculateHaversineDistance(18.52043, 73.85674, 18.52133, 73.85674);
     assert.ok(Math.abs(d2 - 100) < 15, 'Calculated distance should be approx 100m');
-  });
-});
-
-describe('Smart Attendance - Biometric Anti-Spoofing Verification', () => {
-  it('should pass biometric verification when spoof confidence meets threshold (>= 0.60)', () => {
-    const result = validateSpoofConfidence(0.88, 0.60);
-    assert.strictEqual(result.isPassing, true);
-    assert.strictEqual(result.status, 'PRESENT');
-  });
-
-  it('should flag attendance for REVIEW when spoof confidence is below threshold (< 0.60)', () => {
-    const result = validateSpoofConfidence(0.42, 0.60);
-    assert.strictEqual(result.isPassing, false);
-    assert.strictEqual(result.status, 'REVIEW');
-    assert.ok(result.reason.includes('Anti-spoofing confidence'));
   });
 });

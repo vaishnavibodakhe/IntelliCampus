@@ -35,6 +35,14 @@ public class Classroom {
 
     public Classroom() {}
 
+    public Classroom(String name, String code, Double latitude, Double longitude, Integer radiusM) {
+        this.name = name;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.radiusM = radiusM != null ? radiusM : 50;
+        this.createdAt = LocalDateTime.now();
+    }
+
     public Classroom(String name, Double latitude, Double longitude, Integer radiusM, Integer capacity, Department department) {
         this.name = name;
         this.latitude = latitude;
@@ -69,3 +77,4 @@ public class Classroom {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
+

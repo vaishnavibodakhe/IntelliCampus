@@ -28,6 +28,9 @@ public class AuditVerificationResponseDto {
     }
 
     public boolean isValid() { return valid; }
+    public int getTotalBlocks() { return totalEntries; }
+    public String getLastHash() { return lastVerifiedHash; }
+    public Integer getTamperedBlockIndex() { return tamperedIndex; }
     public void setValid(boolean valid) { this.valid = valid; }
 
     public int getTotalEntries() { return totalEntries; }
@@ -45,3 +48,4 @@ public class AuditVerificationResponseDto {
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
 }
+

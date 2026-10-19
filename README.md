@@ -10,7 +10,7 @@
 **IntelliCampus** is an enterprise-grade academic operating system built to modernize campus attendance, credential issuance, academic record keeping, and student support. 
 
 ### Core System Modules
-1. **Smart Attendance & Multimodal Verification**: Dynamic 15-second rotating QR codes, Haversine GPS geofencing, and AI anti-spoofing facial recognition.
+1. **Smart Attendance & Real Face Recognition**: Production InsightFace ArcFace 512-d embeddings, student biometric registration with DPDP Act 2023 consent, multi-angle classroom photo recognition (up to 5 photos per session), 1-to-1 bipartite student matching, and automated finalisation.
 2. **Academic Grading & Multi-Tier Leave Workflow**: Draft/Publish marks lifecycle, HOD grade correction approval with cryptographic audit trails, and multi-tier leave approval pipelines.
 3. **User Administration, Setup & Notices**: Bulk CSV ingestion with line-level validation, classroom geofence configuration, and targeted campus notices.
 4. **Verifiable Credentials & Cryptographic Audit Ledger**: SHA-256 chained audit ledger ensuring immutable event logs, tamper detection, and public verifiable documents.
@@ -18,19 +18,25 @@
 
 ---
 
-## 📡 Smart Attendance System Architecture
+## 📡 Smart Attendance & Real Face Recognition Architecture
 
 Full Specification: [**docs/ATTENDANCE.md**](docs/ATTENDANCE.md)
 
 ### Key Features
-- **15-Second Rotating Dynamic QR Tokens**: Projector-friendly QR codes with epoch-based token rotation ($\lfloor t / 15000 \rfloor$) preventing replay attacks and proxy attendance.
-- **Haversine Geofencing Boundary**: Mathematical spherical calculation ensuring student check-ins occur strictly within the classroom perimeter (default $\le 50$ meters) and rejecting unreliable GPS fixes ($> 100$ meters).
-- **AI Face Anti-Spoofing & Liveness**: Evaluates facial cosine similarity and anti-spoof confidence; flags anomalous scores ($< 0.60$) for faculty manual review.
-- **Session Lifecycle Governance**: Auto-closes expired sessions and marks unconfirmed students as `ABSENT` upon session finalization.
+- **Production Face Recognition**: Powered by InsightFace (`buffalo_l`, ONNX Runtime CPU, ArcFace 512-d embeddings) with cosine similarity matching and Hungarian/greedy bipartite 1-to-1 student conflict resolution.
+- **Biometric Enrollment with DPDP Act 2023 Consent**: Student facial photos captured on registration or via authenticated enrollment endpoint with explicit biometric consent timestamp and versioning.
+- **Classroom Multi-Angle Photo Recognition**: Instructors capture up to 5 photos per open session to cover wide lecture halls. Raw classroom photos are never stored to preserve student privacy; only SHA-256 and pHash hashes are saved.
+- **Decision Boundaries**: Similarity $\ge 0.45$ (with $\ge 0.05$ margin over second best) $\implies$ `PRESENT`; $[0.35, 0.45) \implies$ `REVIEW` (faculty Approve/Reject); $< 0.35 \implies$ unmatched.
+- **Session Lifecycle Governance**: Unconfirmed students transition to `ABSENT` upon finalization with faculty manual override capabilities.
 
-### Quick Start: Starting an Attendance Session
+### Quick Start: Attendance & Biometric Enrollment
 ```bash
-# Start live session
+# Enroll student face photo
+curl -X POST http://localhost:8080/api/students/10/face-enroll \
+  -F "photo=@student_face.jpg" \
+  -F "consentVersion=1.0"
+
+# Start live attendance session
 curl -X POST http://localhost:8080/api/attendance/sessions \
   -H "Content-Type: application/json" \
   -d '{
@@ -42,8 +48,11 @@ curl -X POST http://localhost:8080/api/attendance/sessions \
     "photoWindowMinutes": 10
   }'
 
-# Fetch 15-second rotating QR token
-curl http://localhost:8080/api/attendance/sessions/100/token
+# Upload classroom multi-face photo
+curl -X POST http://localhost:8080/api/attendance/sessions/100/photo \
+  -F "photo=@classroom.jpg" \
+  -F "latitude=18.5204" \
+  -F "longitude=73.8567"
 ```
 
 ---
