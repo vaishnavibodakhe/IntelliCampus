@@ -201,9 +201,11 @@ CREATE TABLE IF NOT EXISTS leave_requests (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 15. Initial Genesis Audit Block
+SET FOREIGN_KEY_CHECKS = 0;
 INSERT INTO audit_logs (id, actor_id, action, entity_type, entity_id, reason, prev_hash, entry_hash)
 VALUES (
   1, 1, 'GENESIS_INITIALIZATION', 'SYSTEM', 0, 'Initial setup of IntelliCampus audit chain',
   '0000000000000000000000000000000000000000000000000000000000000000',
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 ) ON DUPLICATE KEY UPDATE id=id;
+SET FOREIGN_KEY_CHECKS = 1;
