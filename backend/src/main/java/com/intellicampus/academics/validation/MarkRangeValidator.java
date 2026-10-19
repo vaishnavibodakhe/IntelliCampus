@@ -18,9 +18,9 @@ public class MarkRangeValidator {
      * @param maxMarks Total possible score
      * @throws IllegalArgumentException If marks are negative or exceed maxMarks
      */
-    public void validateMarks(Double marks, Double maxMarks) {
+    public void validateMarks(Integer marks, Integer maxMarks) {
         if (maxMarks == null || maxMarks <= 0) {
-            throw new IllegalArgumentException("Maximum marks must be a positive number.");
+            throw new IllegalArgumentException("Maximum marks must be a positive integer.");
         }
         if (marks == null) {
             throw new IllegalArgumentException("Marks value is mandatory.");
@@ -31,13 +31,29 @@ public class MarkRangeValidator {
         }
         if (marks > maxMarks) {
             throw new IllegalArgumentException(
-                    String.format("Marks (%.1f) exceed maximum score boundary of %.1f.", marks, maxMarks)
+                    String.format("Marks (%d) exceed maximum score boundary of %d.", marks, maxMarks)
             );
         }
     }
 
-    public void validateMarks(Integer marks, Integer maxMarks) {
-        validateMarks(marks != null ? marks.doubleValue() : null, maxMarks != null ? maxMarks.doubleValue() : null);
+    /**
+     * Validates that assigned marks (floating point) fall within the allowable range [0, maxMarks].
+     */
+    public void validateMarks(Double marks, Double maxMarks) {
+        if (maxMarks == null || maxMarks <= 0) {
+            throw new IllegalArgumentException("Maximum marks must be a positive number.");
+        }
+        if (marks == null) {
+            throw new IllegalArgumentException("Marks value is mandatory.");
+        }
+        if (marks < 0) {
+            throw new IllegalArgumentException("Marks cannot be negative. Provided: " + marks);
+        }
+        if (marks > maxMarks) {
+            throw new IllegalArgumentException(
+                    String.format("Marks (%s) exceed maximum score boundary of %s.", marks, maxMarks)
+            );
+        }
     }
 
     /**
@@ -58,41 +74,18 @@ public class MarkRangeValidator {
     }
 
     /**
-     * Validates full proposed mark correction request.
+     * Validates full proposed mark correction request with double values.
      */
-<<<<<<< HEAD
-    public void validateCorrection(Double proposedMarks, Double maxMarks, String reason) {
-=======
-    public void validateMarks(Double marks, Double maxMarks) {
-        if (maxMarks == null || maxMarks <= 0) {
-            throw new IllegalArgumentException("Maximum marks must be a positive number.");
-        }
-        if (marks == null) {
-            throw new IllegalArgumentException("Marks value is mandatory.");
-        }
-        if (marks < 0) {
-            throw new IllegalArgumentException("Marks cannot be negative. Provided: " + marks);
-        }
-        if (marks > maxMarks) {
-            throw new IllegalArgumentException(
-                    String.format("Marks (%s) exceed maximum score boundary of %s.", marks, maxMarks)
-            );
-        }
-    }
-
     public void validateCorrection(Double proposedMarks, Double maxMarks, String reason) {
         validateMarks(proposedMarks, maxMarks);
         validateCorrectionReason(reason);
     }
 
+    /**
+     * Validates full proposed mark correction request with integer values.
+     */
     public void validateCorrection(Integer proposedMarks, Integer maxMarks, String reason) {
->>>>>>> main
         validateMarks(proposedMarks, maxMarks);
         validateCorrectionReason(reason);
-    }
-
-    public void validateCorrection(Integer proposedMarks, Integer maxMarks, String reason) {
-        validateCorrection(proposedMarks != null ? proposedMarks.doubleValue() : null, maxMarks != null ? maxMarks.doubleValue() : null, reason);
     }
 }
-

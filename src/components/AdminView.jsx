@@ -18,17 +18,13 @@ import {
   MapPin,
   Edit3,
   FileSpreadsheet,
-<<<<<<< HEAD
   ShieldCheck,
-  LogOut
-} from 'lucide-react';
-import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
-import StaffChangePasswordView from './staff/StaffChangePasswordView';
-=======
+  LogOut,
   Camera
 } from 'lucide-react';
 import { api } from '../api/client';
->>>>>>> main
+import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
+import StaffChangePasswordView from './staff/StaffChangePasswordView';
 
 export default function AdminView({
   users,
