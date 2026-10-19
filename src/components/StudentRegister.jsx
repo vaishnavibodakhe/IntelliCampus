@@ -71,6 +71,7 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const qualityIntervalRef = useRef(null);
+  const streamRef = useRef(null);
 
   const departments = [
     'Computer Science',
@@ -185,10 +186,8 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
         audio: false
       });
 
+      streamRef.current = stream;
       setCameraStream(stream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
     } catch (err) {
       console.error('Camera access error:', err);
       let msg = 'Could not access camera. Please allow camera permissions.';
@@ -202,15 +201,16 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
   }, []);
 
   const stopCamera = useCallback(() => {
-    if (cameraStream) {
-      cameraStream.getTracks().forEach(t => t.stop());
-      setCameraStream(null);
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop());
+      streamRef.current = null;
     }
+    setCameraStream(null);
     if (qualityIntervalRef.current) {
       clearInterval(qualityIntervalRef.current);
       qualityIntervalRef.current = null;
     }
-  }, [cameraStream]);
+  }, []);
 
   useEffect(() => {
     if (step === 2) {
@@ -219,7 +219,14 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
     return () => {
       stopCamera();
     };
-  }, [step, startCamera, stopCamera]);
+  }, [step]);
+
+  useEffect(() => {
+    if (videoRef.current && cameraStream) {
+      videoRef.current.srcObject = cameraStream;
+      videoRef.current.play().catch(() => {});
+    }
+  }, [cameraStream]);
 
   // Periodic quality analysis on live video frames via canvas
   useEffect(() => {

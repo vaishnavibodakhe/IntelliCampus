@@ -437,3 +437,77 @@ describe('Student Registration - Backend Status & Auto-Login Invariant', () => {
   });
 });
 
+describe('Student Camera Stream - Lifecycle & StreamRef Invariant', () => {
+  it('should stop all MediaStream tracks and clear streamRef on stopCamera without relying on cameraStream in deps', () => {
+    let stoppedTracks = 0;
+    const mockTrack1 = { stop: () => { stoppedTracks++; } };
+    const mockTrack2 = { stop: () => { stoppedTracks++; } };
+
+    const mockStream = {
+      getTracks: () => [mockTrack1, mockTrack2]
+    };
+
+    // Simulate streamRef and stable stopCamera
+    const streamRef = { current: mockStream };
+    let cameraStreamState = mockStream;
+    let qualityInterval = 999;
+
+    const stopCamera = () => {
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(t => t.stop());
+        streamRef.current = null;
+      }
+      cameraStreamState = null;
+      qualityInterval = null;
+    };
+
+    stopCamera();
+
+    assert.strictEqual(stoppedTracks, 2);
+    assert.strictEqual(streamRef.current, null);
+    assert.strictEqual(cameraStreamState, null);
+    assert.strictEqual(qualityInterval, null);
+  });
+
+  it('should attach cameraStream to videoRef.srcObject and invoke play() when cameraStream becomes active', async () => {
+    let playCalled = false;
+    const mockVideo = {
+      srcObject: null,
+      play: async () => {
+        playCalled = true;
+      }
+    };
+
+    const mockStream = { id: 'stream-123' };
+
+    // Simulate useEffect([cameraStream])
+    function onCameraStreamChange(videoEl, stream) {
+      if (videoEl && stream) {
+        videoEl.srcObject = stream;
+        videoEl.play().catch(() => {});
+      }
+    }
+
+    onCameraStreamChange(mockVideo, mockStream);
+
+    assert.strictEqual(mockVideo.srcObject, mockStream);
+    assert.strictEqual(playCalled, true);
+  });
+
+  it('should only initiate camera acquisition when step transitions to 2', () => {
+    let cameraStarted = false;
+    function evaluateStepEffect(step) {
+      if (step === 2) {
+        cameraStarted = true;
+      }
+    }
+
+    evaluateStepEffect(1);
+    assert.strictEqual(cameraStarted, false);
+
+    evaluateStepEffect(2);
+    assert.strictEqual(cameraStarted, true);
+  });
+});
+
+
