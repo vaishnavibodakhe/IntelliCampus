@@ -29,6 +29,7 @@ public class FlywayMigrationRealDbTest {
                 .baselineOnMigrate(true)
                 .load();
 
+        flyway.repair();
         int migrationsApplied = flyway.migrate().migrationsExecuted;
         System.out.println("Flyway migrations executed: " + migrationsApplied);
 

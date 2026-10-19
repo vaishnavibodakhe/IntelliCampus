@@ -3,8 +3,18 @@ import { LogIn, UserPlus } from 'lucide-react';
 import StudentLogin from './StudentLogin';
 import StudentRegister from './StudentRegister';
 
-export default function StudentAuthView({ onLoginSuccess, onRegisterSuccess, defaultTab = 'login' }) {
+export default function StudentAuthView({ onLoginSuccess, onRegisterSuccess, onAuthSuccess, defaultTab = 'login' }) {
   const [activeTab, setActiveTab] = useState(defaultTab);
+
+  const handleLogin = (authData) => {
+    if (onLoginSuccess) onLoginSuccess(authData);
+    else if (onAuthSuccess) onAuthSuccess(authData);
+  };
+
+  const handleRegister = (authData) => {
+    if (onRegisterSuccess) onRegisterSuccess(authData);
+    else if (onAuthSuccess) onAuthSuccess(authData);
+  };
 
   return (
     <div className="student-auth-viewport animate-fade-in">
@@ -39,12 +49,12 @@ export default function StudentAuthView({ onLoginSuccess, onRegisterSuccess, def
         {activeTab === 'login' ? (
           <StudentLogin
             onSwitchToRegister={() => setActiveTab('register')}
-            onLoginSuccess={onLoginSuccess}
+            onLoginSuccess={handleLogin}
           />
         ) : (
           <StudentRegister
             onSwitchToLogin={() => setActiveTab('login')}
-            onRegisterSuccess={onRegisterSuccess}
+            onRegisterSuccess={handleRegister}
           />
         )}
       </div>

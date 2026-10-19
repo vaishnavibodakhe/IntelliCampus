@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=MySQL
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: ""
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    database-platform: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
+  mail:
+    host: localhost
+    port: 1025
+
+JWT_SECRET: 01234567890123456789012345678901234567890123456789
+app:
+  jwt:
+    secret: 01234567890123456789012345678901234567890123456789
+    access-expiration-minutes: 15
+    refresh-expiration-days: 7
+    lockout-max-attempts: 5
+    lockout-duration-minutes: 15
+  frontend:
+    url: http://localhost:5173

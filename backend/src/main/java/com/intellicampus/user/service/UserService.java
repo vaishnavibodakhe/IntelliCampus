@@ -89,7 +89,7 @@ public class UserService {
             Division div = null;
             final Department targetDept = dept;
             if (targetDept != null && req.getDivision() != null) {
-                div = divisionRepository.findByNameAndDepartmentId(req.getDivision(), dept.getId())
+                div = divisionRepository.findByNameAndDepartmentId(req.getDivision(), targetDept.getId())
                         .orElseGet(() -> divisionRepository.save(new Division(targetDept, 3, req.getDivision())));
             }
             StudentProfile profile = new StudentProfile(savedUser, req.getRollNo(), div, null);

@@ -200,10 +200,11 @@ export default function StudentView({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {currentUser.name} ({currentUser.rollNo || 'ID'}) • {currentUser.division || 'Campus'}
+            <span className="dot online" /> {currentUser.name} ({currentUser.rollNo || currentUser.userCode || 'ID'}) • {currentUser.division || currentUser.department || 'Campus'}
           </div>
           {onLogout && (
             <button
+              type="button"
               onClick={onLogout}
               className="btn-secondary btn-sm flex items-center gap-1 logout-btn"
               title="Sign Out of Student Portal"
@@ -222,7 +223,7 @@ export default function StudentView({
           onClick={() => setActiveTab('dashboard')} 
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
         >
-          <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate}%)
+          <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate !== undefined ? currentUser.attendanceRate : 0}%)
         </button>
         <button 
           onClick={() => setActiveTab('marks')} 

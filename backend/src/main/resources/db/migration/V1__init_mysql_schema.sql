@@ -201,6 +201,19 @@ CREATE TABLE IF NOT EXISTS leave_requests (
   CONSTRAINT fk_leave_student FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 14b. System Administrator Seed User (actor for genesis audit block)
+INSERT INTO users (id, user_code, role, name, email, password_hash, must_change_password, status)
+VALUES (
+  1, 
+  'admin.patel', 
+  'ADMIN', 
+  'System Administrator', 
+  'admin@intellicampus.edu', 
+  '$2a$10$wK1q7e7C60.F36/LpM4wPeI6s35b91tCjN8sXq5j2iR9z6kC8rEeq', 
+  false, 
+  'ACTIVE'
+) ON DUPLICATE KEY UPDATE id=id;
+
 -- 15. Initial Genesis Audit Block
 INSERT INTO audit_logs (id, actor_id, actor_name, action, entity_type, entity_id, reason, prev_hash, entry_hash)
 VALUES (
@@ -208,3 +221,4 @@ VALUES (
   '0000000000000000000000000000000000000000000000000000000000000000',
   'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 ) ON DUPLICATE KEY UPDATE id=id;
+
