@@ -47,7 +47,31 @@ public class StudentProfile {
     @Column(name = "created_at")
     private LocalDateTime createdAt = LocalDateTime.now();
 
+    @Column(name = "face_photo_path", length = 255)
+    private String facePhotoPath;
+
+    @Column(name = "face_embedding", columnDefinition = "JSON")
+    private String faceEmbedding;
+
+    @Column(name = "consent_at")
+    private LocalDateTime consentAt;
+
+    @Column(name = "consent_version", length = 20)
+    private String consentVersion;
+
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt = LocalDateTime.now();
+
+    @PreUpdate
+    public void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public StudentProfile() {}
+
+    public StudentProfile(User user, String rollNo) {
+        this(user, rollNo, null, null);
+    }
 
     public StudentProfile(User user, String rollNo, Division division, User mentor) {
         this.user = user;
@@ -94,4 +118,20 @@ public class StudentProfile {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    public String getFacePhotoPath() { return facePhotoPath; }
+    public void setFacePhotoPath(String facePhotoPath) { this.facePhotoPath = facePhotoPath; }
+
+    public String getFaceEmbedding() { return faceEmbedding; }
+    public void setFaceEmbedding(String faceEmbedding) { this.faceEmbedding = faceEmbedding; }
+
+    public LocalDateTime getConsentAt() { return consentAt; }
+    public void setConsentAt(LocalDateTime consentAt) { this.consentAt = consentAt; }
+
+    public String getConsentVersion() { return consentVersion; }
+    public void setConsentVersion(String consentVersion) { this.consentVersion = consentVersion; }
+
+    public LocalDateTime getUpdatedAt() { return updatedAt; }
+    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }
+

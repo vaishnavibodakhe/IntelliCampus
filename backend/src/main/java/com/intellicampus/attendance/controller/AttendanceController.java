@@ -4,8 +4,12 @@ import com.intellicampus.attendance.dto.*;
 import com.intellicampus.attendance.model.SessionStatus;
 import com.intellicampus.attendance.service.AttendanceService;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/attendance/sessions")
@@ -29,17 +33,15 @@ public class AttendanceController {
         return ResponseEntity.ok(attendanceService.getSessionDetails(id));
     }
 
-    @GetMapping("/{id}/token")
-    public ResponseEntity<DynamicQrTokenDto> getDynamicQrToken(@PathVariable Long id) {
-        return ResponseEntity.ok(attendanceService.generateDynamicQrToken(id));
-    }
-
-    @PostMapping("/{id}/confirm")
-    public ResponseEntity<AttendanceRecordResponseDto> confirmAttendance(
+    @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<PhotoRecognitionResultDto> uploadClassroomPhoto(
             @PathVariable Long id,
-            @RequestBody StudentConfirmAttendanceDto req) {
-        AttendanceRecordResponseDto confirmed = attendanceService.confirmStudentAttendance(id, req);
-        return ResponseEntity.ok(confirmed);
+            @RequestParam("photo") MultipartFile photo,
+            @RequestParam(value = "latitude", required = false) Double latitude,
+            @RequestParam(value = "longitude", required = false) Double longitude,
+            @RequestParam(value = "accuracyM", required = false) Double accuracyM) {
+        PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(id, photo, latitude, longitude, accuracyM);
+        return ResponseEntity.ok(result);
     }
 
     @PutMapping("/{id}/status")
@@ -62,5 +64,10 @@ public class AttendanceController {
         return attendanceService.getActiveSessionForDivision(divisionId)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.noContent().build());
+    }
+
+    @GetMapping("/records/student/{studentId}")
+    public ResponseEntity<List<AttendanceRecordResponseDto>> getStudentAttendanceHistory(@PathVariable Long studentId) {
+        return ResponseEntity.ok(attendanceService.getRecordsForStudent(studentId));
     }
 }

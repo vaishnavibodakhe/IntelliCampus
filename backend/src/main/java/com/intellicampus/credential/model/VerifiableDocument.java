@@ -67,6 +67,10 @@ public class VerifiableDocument {
 
     public VerifiableDocument() {}
 
+    public VerifiableDocument(String code, String type, StudentProfile student, String studentName, String maskedStudentName, String rollNo, String department, LocalDate issueDate, String fileHash, Double gpa, String authorizedSignatory) {
+        this(code, type, student, studentName, maskedStudentName, rollNo, department, issueDate, fileHash, gpa != null ? String.valueOf(gpa) : null, authorizedSignatory);
+    }
+
     public VerifiableDocument(String code, String type, StudentProfile student, String studentName, String maskedStudentName, String rollNo, String department, LocalDate issueDate, String fileHash, String gpa, String authorizedSignatory) {
         this.code = code;
         this.type = type;
@@ -131,3 +135,4 @@ public class VerifiableDocument {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
+

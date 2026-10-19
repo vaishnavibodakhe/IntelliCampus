@@ -12,6 +12,8 @@ import java.util.Optional;
 public interface AuditLogEntryRepository extends JpaRepository<AuditLogEntry, Long> {
     Optional<AuditLogEntry> findByEntryHash(String entryHash);
     List<AuditLogEntry> findAllByOrderByIdAsc();
+    List<AuditLogEntry> findAllByOrderByCreatedAtAsc();
+    Optional<AuditLogEntry> findTopByOrderByCreatedAtDesc();
     List<AuditLogEntry> findByEntityTypeAndEntityIdOrderByIdAsc(String entityType, String entityId);
 
     @Query("SELECT a FROM AuditLogEntry a ORDER BY a.id DESC LIMIT 1")
@@ -19,3 +21,4 @@ public interface AuditLogEntryRepository extends JpaRepository<AuditLogEntry, Lo
 
     long count();
 }
+

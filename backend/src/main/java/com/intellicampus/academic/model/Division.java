@@ -26,6 +26,10 @@ public class Division {
 
     public Division() {}
 
+    public Division(String name, Integer year) {
+        this(null, year, name);
+    }
+
     public Division(Department department, Integer year, String name) {
         this.department = department;
         this.year = year;
@@ -48,3 +52,4 @@ public class Division {
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
+

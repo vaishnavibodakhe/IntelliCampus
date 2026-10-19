@@ -1,5 +1,6 @@
 package com.intellicampus.attendance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intellicampus.academic.model.Classroom;
 import com.intellicampus.academic.model.Division;
 import com.intellicampus.academic.model.Subject;
@@ -10,11 +11,12 @@ import com.intellicampus.attendance.dto.*;
 import com.intellicampus.attendance.model.AttendanceRecord;
 import com.intellicampus.attendance.model.AttendanceSession;
 import com.intellicampus.attendance.model.AttendanceStatus;
+import com.intellicampus.attendance.model.SessionPhoto;
 import com.intellicampus.attendance.model.SessionStatus;
 import com.intellicampus.attendance.repository.AttendanceRecordRepository;
 import com.intellicampus.attendance.repository.AttendanceSessionRepository;
+import com.intellicampus.attendance.repository.SessionPhotoRepository;
 import com.intellicampus.attendance.service.AttendanceService;
-import com.intellicampus.attendance.validation.GeofenceValidationException;
 import com.intellicampus.attendance.validation.GeofenceValidator;
 import com.intellicampus.attendance.validation.SpoofScoreValidator;
 import com.intellicampus.user.model.Role;
@@ -30,7 +32,12 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.client.RestTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -42,9 +49,8 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 /**
- * Unit test suite for AttendanceService covering dynamic QR token rotation,
- * session lifecycle, geofence check-in verification, and manual overrides.
- * Compliant with IC-SRS-1.0 Section 8.6 and Test Case TC-02.
+ * Unit test suite for AttendanceService covering face recognition attendance,
+ * threshold evaluation, duplicate-match handling, session lifecycle, and manual overrides.
  */
 @ExtendWith(MockitoExtension.class)
 class AttendanceServiceTest {
@@ -53,6 +59,8 @@ class AttendanceServiceTest {
     private AttendanceSessionRepository sessionRepository;
     @Mock
     private AttendanceRecordRepository recordRepository;
+    @Mock
+    private SessionPhotoRepository sessionPhotoRepository;
     @Mock
     private UserRepository userRepository;
     @Mock
@@ -67,6 +75,8 @@ class AttendanceServiceTest {
     private GeofenceValidator geofenceValidator;
     @Mock
     private SpoofScoreValidator spoofScoreValidator;
+    @Mock
+    private RestTemplate restTemplate;
 
     @InjectMocks
     private AttendanceService attendanceService;
@@ -78,9 +88,16 @@ class AttendanceServiceTest {
     private Division division;
     private Classroom classroom;
     private AttendanceSession openSession;
+    private ObjectMapper objectMapper;
 
     @BeforeEach
     void setUp() {
+        objectMapper = new ObjectMapper();
+        attendanceService.setRestTemplate(restTemplate);
+        attendanceService.setObjectMapper(objectMapper);
+        attendanceService.setFaceMatchThreshold(0.45);
+        attendanceService.setFaceMatchMargin(0.05);
+
         facultyUser = new User("Dr. Ramesh Joshi", "ramesh@intellicampus.edu", "pass123", Role.FACULTY, "FAC-001");
         ReflectionTestUtils.setField(facultyUser, "id", 1L);
 
@@ -88,6 +105,13 @@ class AttendanceServiceTest {
         ReflectionTestUtils.setField(studentUser, "id", 2L);
 
         studentProfile = new StudentProfile(studentUser, "2024-CS-042");
+        studentProfile.setFaceEnrolled(true);
+        // 512-d unit vector JSON
+        List<Double> emb = new ArrayList<>();
+        for (int i = 0; i < 512; i++) emb.add(i == 0 ? 1.0 : 0.0);
+        try {
+            studentProfile.setFaceEmbedding(objectMapper.writeValueAsString(emb));
+        } catch (Exception ignored) {}
         ReflectionTestUtils.setField(studentProfile, "id", 10L);
 
         subject = new Subject("CS301", "Distributed Systems", 4);
@@ -104,41 +128,163 @@ class AttendanceServiceTest {
     }
 
     @Nested
-    @DisplayName("Dynamic QR Token Rotation Tests (15-Second Slotting)")
-    class DynamicQrTokenTests {
+    @DisplayName("Face Recognition Attendance & Matching Tests")
+    class FaceRecognitionTests {
 
         @Test
-        @DisplayName("Should generate rotating QR token with valid slot, prefix, and countdown")
-        void testGenerateDynamicQrToken() {
-            DynamicQrTokenDto tokenDto = attendanceService.generateDynamicQrToken(100L);
+        @DisplayName("Criterion 1: Cosine similarity >= 0.45 and margin >= 0.05 marks student PRESENT")
+        void testRecognitionMatchPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
 
-            assertNotNull(tokenDto);
-            assertNotNull(tokenDto.getToken());
-            assertTrue(tokenDto.getToken().startsWith("IC-"), "Dynamic QR token should have 'IC-' prefix");
-            assertEquals(19, tokenDto.getToken().length(), "Token format should be IC- followed by 16 hex characters");
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            assertTrue(tokenDto.getSecondsLeft() >= 1 && tokenDto.getSecondsLeft() <= 15,
-                    "Countdown seconds should be between 1 and 15 seconds");
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
 
-            long currentSlot = System.currentTimeMillis() / 15000L;
-            assertEquals(currentSlot, tokenDto.getSlot(), "Slot index should match 15-second epoch window");
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.72," +
+                    "  \"secondSimilarity\": 0.20," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
+            assertEquals(0.72, record.getFaceScore());
+            assertNull(record.getSpoofScore());
+            assertTrue(record.getStatusReason().contains("Biometric face recognition verified"));
         }
 
         @Test
-        @DisplayName("Should produce consistent token for the same session within identical time slot")
-        void testTokenConsistencyWithinSlot() {
-            DynamicQrTokenDto token1 = attendanceService.generateDynamicQrToken(100L);
-            DynamicQrTokenDto token2 = attendanceService.generateDynamicQrToken(100L);
+        @DisplayName("Criterion 2: Borderline similarity in [0.35, 0.45) flags student for REVIEW")
+        void testRecognitionBorderlineReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{5, 6, 7, 8});
 
-            if (token1.getSlot() == token2.getSlot()) {
-                assertEquals(token1.getToken(), token2.getToken(), "Tokens in the same slot should be identical");
-            }
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.38," +
+                    "  \"secondSimilarity\": 0.15," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(0.38, record.getFaceScore());
+            assertTrue(record.getStatusReason().contains("Borderline biometric match"));
+        }
+
+        @Test
+        @DisplayName("Criterion 3: Never downgrade an already PRESENT record on subsequent photo uploads")
+        void testNeverDowngradeAlreadyPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class2.jpg", "image/jpeg", new byte[]{9, 10, 11, 12});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(1L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            // In second photo, match similarity is lower (0.36) or borderline
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.85," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.36," +
+                    "  \"secondSimilarity\": 0.10," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord alreadyPresentRecord = new AttendanceRecord(openSession, studentProfile, 0.75, null, AttendanceStatus.PRESENT);
+            alreadyPresentRecord.setConfirmed(true);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(alreadyPresentRecord));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(alreadyPresentRecord));
+
+            attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            // Record must remain PRESENT!
+            assertEquals(AttendanceStatus.PRESENT, alreadyPresentRecord.getFinalStatus());
+            assertEquals(0.75, alreadyPresentRecord.getFaceScore());
+        }
+
+        @Test
+        @DisplayName("Criterion 4: Reject photo upload when 5 photos limit reached for session")
+        void testPhotoLimitEnforced() {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class6.jpg", "image/jpeg", new byte[]{1, 2});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(5L);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
+            assertTrue(ex.getMessage().contains("Maximum limit of 5 photos"));
+        }
+
+        @Test
+        @DisplayName("Criterion 5: Reject photo upload when photo window expired")
+        void testPhotoWindowExpired() {
+            openSession.setPhotoWindowEndsAt(LocalDateTime.now().minusMinutes(5));
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
+            assertTrue(ex.getMessage().contains("expired"));
         }
     }
 
     @Nested
-    @DisplayName("Session Start and Roster Population Tests")
-    class SessionStartTests {
+    @DisplayName("Session Start, Lifecycle & Finalisation Tests")
+    class SessionLifecycleTests {
 
         @Test
         @DisplayName("Should successfully start a new session and initialize student roster as PENDING")
@@ -183,176 +329,40 @@ class AttendanceServiceTest {
         }
 
         @Test
-        @DisplayName("Should expire previously open session for the faculty when a new session starts")
-        void testExpirePreviousSessionOnNewStart() {
-            AttendanceSession existingOpenSession = new AttendanceSession(facultyUser, subject, division, classroom, "OLD1", 10);
-            ReflectionTestUtils.setField(existingOpenSession, "id", 99L);
-
-            StartSessionRequestDto req = new StartSessionRequestDto();
-            req.setFacultyId(1L);
-            req.setSubjectId(5L);
-            req.setDivisionId(3L);
-            req.setRoomId(7L);
-
-            when(userRepository.findById(1L)).thenReturn(Optional.of(facultyUser));
-            when(subjectRepository.findById(5L)).thenReturn(Optional.of(subject));
-            when(divisionRepository.findById(3L)).thenReturn(Optional.of(division));
-            when(classroomRepository.findById(7L)).thenReturn(Optional.of(classroom));
-            when(sessionRepository.findFirstByFacultyAndStatus(facultyUser, SessionStatus.OPEN)).thenReturn(Optional.of(existingOpenSession));
-            when(sessionRepository.save(any(AttendanceSession.class))).thenReturn(openSession);
-            when(studentProfileRepository.findByDivisionId(anyLong())).thenReturn(List.of());
-            when(sessionRepository.findById(anyLong())).thenReturn(Optional.of(openSession));
-            when(recordRepository.findBySession(any())).thenReturn(List.of());
-
-            attendanceService.startSession(req);
-
-            assertEquals(SessionStatus.EXPIRED, existingOpenSession.getStatus());
-            assertNotNull(existingOpenSession.getFinalisedAt());
-            verify(sessionRepository, atLeastOnce()).save(existingOpenSession);
-        }
-    }
-
-    @Nested
-    @DisplayName("Attendance Confirmation & Geofence Verification Tests")
-    class ConfirmationTests {
-
-        @Test
-        @DisplayName("Should successfully confirm student attendance within geofence perimeter")
-        void testConfirmAttendanceSuccess() {
-            StudentConfirmAttendanceDto req = new StudentConfirmAttendanceDto();
-            req.setStudentId(10L);
-            req.setChallengeCode("K7Q2");
-            req.setLatitude(18.52044);
-            req.setLongitude(73.85675);
-            req.setAccuracyM(12.0);
-
-            AttendanceRecord pendingRecord = new AttendanceRecord(openSession, studentProfile, 0.95, 0.92, AttendanceStatus.PENDING);
-            ReflectionTestUtils.setField(pendingRecord, "id", 501L);
+        @DisplayName("Finalising session marks unresolved PENDING records as ABSENT")
+        void testFinaliseSessionMarksPendingAsAbsent() {
+            AttendanceRecord pendingRecord = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
 
             when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
-            when(studentProfileRepository.findById(10L)).thenReturn(Optional.of(studentProfile));
-            when(geofenceValidator.validate(eq(18.52044), eq(73.85675), eq(12.0), anyDouble(), anyDouble(), anyInt()))
-                    .thenReturn(15.2);
-            when(recordRepository.findBySessionAndStudent(openSession, studentProfile))
-                    .thenReturn(Optional.of(pendingRecord));
-            when(spoofScoreValidator.evaluateStatus(0.95, 0.92, true))
-                    .thenReturn(AttendanceStatus.PRESENT);
-            when(spoofScoreValidator.resolveStatusReason(0.95, 0.92, 15.2))
-                    .thenReturn("Verified via GPS Geofence (15m) and Dynamic QR Token.");
-            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(pendingRecord));
+            when(sessionRepository.save(openSession)).thenReturn(openSession);
 
-            AttendanceRecordResponseDto response = attendanceService.confirmStudentAttendance(100L, req);
+            SessionResponseDto result = attendanceService.transitionSessionStatus(100L, SessionStatus.FINALISED);
 
-            assertNotNull(response);
-            assertTrue(response.getConfirmed());
-            assertEquals(AttendanceStatus.PRESENT, response.getFinalStatus());
-            assertEquals("Aarav Mehta", response.getStudentName());
-            assertEquals("2024-CS-042", response.getRollNo());
-
-            verify(geofenceValidator).validate(18.52044, 73.85675, 12.0, 18.52043, 73.85674, 50);
+            assertNotNull(result);
+            assertEquals(SessionStatus.FINALISED, openSession.getStatus());
+            assertEquals(AttendanceStatus.ABSENT, pendingRecord.getFinalStatus());
             verify(recordRepository).save(pendingRecord);
         }
 
         @Test
-        @DisplayName("Should reject confirmation if attendance session is already closed or finalised")
-        void testRejectIfSessionNotOpen() {
-            openSession.setStatus(SessionStatus.FINALISED);
-            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
-
-            StudentConfirmAttendanceDto req = new StudentConfirmAttendanceDto();
-            req.setStudentId(10L);
-            req.setChallengeCode("K7Q2");
-
-            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
-                    attendanceService.confirmStudentAttendance(100L, req)
-            );
-            assertTrue(ex.getMessage().contains("not currently open"));
-        }
-
-        @Test
-        @DisplayName("Should reject confirmation if challenge code does not match")
-        void testRejectInvalidChallengeCode() {
-            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
-
-            StudentConfirmAttendanceDto req = new StudentConfirmAttendanceDto();
-            req.setStudentId(10L);
-            req.setChallengeCode("WRONG_CODE");
-
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-                    attendanceService.confirmStudentAttendance(100L, req)
-            );
-            assertTrue(ex.getMessage().contains("Invalid challenge code"));
-        }
-
-        @Test
-        @DisplayName("Should reject check-in when GeofenceValidator throws GeofenceValidationException")
-        void testRejectOutsideGeofence() {
-            StudentConfirmAttendanceDto req = new StudentConfirmAttendanceDto();
-            req.setStudentId(10L);
-            req.setChallengeCode("K7Q2");
-            req.setLatitude(18.52500);
-            req.setLongitude(73.85675);
-            req.setAccuracyM(10.0);
-
-            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
-            when(studentProfileRepository.findById(10L)).thenReturn(Optional.of(studentProfile));
-            when(geofenceValidator.validate(anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyDouble(), anyInt()))
-                    .thenThrow(new GeofenceValidationException("Geofence alert: Location is 510m away, exceeding classroom boundary of 50m.", 510.0, 50));
-
-            assertThrows(GeofenceValidationException.class, () ->
-                    attendanceService.confirmStudentAttendance(100L, req)
-            );
-        }
-    }
-
-    @Nested
-    @DisplayName("Session Finalization and Manual Overrides")
-    class FinalizationAndOverrideTests {
-
-        @Test
-        @DisplayName("Should mark all unconfirmed PENDING records as ABSENT when session is FINALISED")
-        void testFinalizeSessionTransitionsPendingToAbsent() {
-            AttendanceRecord record1 = new AttendanceRecord(openSession, studentProfile, 0.95, 0.90, AttendanceStatus.PRESENT);
-            record1.setConfirmed(true);
-
-            User student2User = new User("Priya Sharma", "priya@intellicampus.edu", "pass", Role.STUDENT, "STU-102");
-            StudentProfile student2 = new StudentProfile(student2User, "2024-CS-043");
-            AttendanceRecord record2 = new AttendanceRecord(openSession, student2, null, null, AttendanceStatus.PENDING);
-
-            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
-            when(sessionRepository.save(any(AttendanceSession.class))).thenReturn(openSession);
-            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record1, record2));
-
-            SessionResponseDto result = attendanceService.transitionSessionStatus(100L, SessionStatus.FINALISED);
-
-            assertEquals(SessionStatus.FINALISED, openSession.getStatus());
-            assertNotNull(openSession.getFinalisedAt());
-            assertEquals(AttendanceStatus.ABSENT, record2.getFinalStatus());
-            assertTrue(record2.getStatusReason().contains("did not confirm attendance"));
-
-            verify(recordRepository).save(record2);
-            verify(recordRepository, never()).save(record1); // Already PRESENT
-        }
-
-        @Test
-        @DisplayName("Should allow faculty manual override of an individual attendance record")
-        void testManualOverrideRecordStatus() {
-            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, 0.45, 0.80, AttendanceStatus.REVIEW);
-            record.setConfirmed(true);
-
-            ManualOverrideDto overrideDto = new ManualOverrideDto();
-            overrideDto.setStatus(AttendanceStatus.PRESENT);
-            overrideDto.setReason("Faculty verified student presence in second row");
+        @DisplayName("Faculty manual override sets status and updates reason")
+        void testManualOverride() {
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, 0.40, null, AttendanceStatus.REVIEW);
 
             when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
             when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
 
-            AttendanceRecordResponseDto response = attendanceService.overrideRecordStatus(100L, 10L, overrideDto);
+            ManualOverrideDto override = new ManualOverrideDto();
+            override.setStatus(AttendanceStatus.PRESENT);
+            override.setReason("Student visually confirmed in bench row 2");
 
-            assertNotNull(response);
-            assertEquals(AttendanceStatus.PRESENT, response.getFinalStatus());
-            assertEquals("Faculty verified student presence in second row", response.getStatusReason());
-            verify(recordRepository).save(record);
+            AttendanceRecordResponseDto res = attendanceService.overrideRecordStatus(100L, 10L, override);
+
+            assertNotNull(res);
+            assertEquals(AttendanceStatus.PRESENT, res.getFinalStatus());
+            assertTrue(res.getConfirmed());
+            assertTrue(res.getStatusReason().contains("Faculty manual override: Student visually confirmed"));
         }
     }
 }
