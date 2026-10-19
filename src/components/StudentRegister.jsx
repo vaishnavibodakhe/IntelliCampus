@@ -285,7 +285,10 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
   const handleCapturePose = () => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    if (!video || !canvas) return;
+    if (!video || !canvas || video.readyState < 2 || !video.videoWidth) {
+      setServerError('Webcam video feed is still initializing. Please wait a moment.');
+      return;
+    }
 
     const w = video.videoWidth || 640;
     const h = video.videoHeight || 480;
@@ -294,6 +297,23 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
     const ctx = canvas.getContext('2d');
     ctx.drawImage(video, 0, 0, w, h);
 
+    try {
+      const frameData = ctx.getImageData(0, 0, w, h);
+      const brightRes = validateImageBrightness(frameData.data);
+      if (!brightRes.valid) {
+        setServerError(brightRes.error);
+        return;
+      }
+      const sharpRes = estimateImageSharpness(frameData.data, w, h);
+      if (!sharpRes.valid) {
+        setServerError(sharpRes.error);
+        return;
+      }
+    } catch {
+      // Continue if cross-origin or hardware canvas buffer exception
+    }
+
+    setServerError('');
     // Export high-quality JPEG base64 (strictly live camera, no file upload)
     const base64Jpeg = canvas.toDataURL('image/jpeg', 0.92);
 

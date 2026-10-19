@@ -12,6 +12,7 @@ import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
@@ -138,6 +139,7 @@ public class FaceEnrollmentService {
                 aiServiceUrl, faceMatchThreshold, facePoseConsistencyMin, 10.0);
     }
 
+    @Autowired
     public FaceEnrollmentService(
             StudentProfileRepository studentProfileRepository,
             UserRepository userRepository,
@@ -181,6 +183,22 @@ public class FaceEnrollmentService {
 
     public double getFaceMinYawDiff() {
         return faceMinYawDiff;
+    }
+
+    public StudentProfileRepository getStudentProfileRepository() {
+        return studentProfileRepository;
+    }
+
+    public UserRepository getUserRepository() {
+        return userRepository;
+    }
+
+    public AuditChainService getAuditChainService() {
+        return auditChainService;
+    }
+
+    public IpRateLimiterService getIpRateLimiterService() {
+        return ipRateLimiterService;
     }
 
     public Map<String, CaptureToken> getCaptureTokenStore() {
