@@ -32,38 +32,84 @@ public class EmailService {
 
     /**
      * Dispatches a 6-digit OTP to the registered user's email address via SMTP.
-     * Matches the signature and behavior of origin/main.
+     * Uses HTML email formatting and strict delivery confirmation.
      */
     public void sendPasswordResetOtp(String toEmail, String otp) {
         boolean isSmtpConfigured = mailSender != null && smtpUsername != null && !smtpUsername.trim().isEmpty();
 
         if (!isSmtpConfigured) {
-            // Development fallback only when SMTP_USERNAME is empty: print the OTP in the backend console with a clear warning
-            log.warn("=================================================================");
-            log.warn("[DEV EMAIL FALLBACK] SMTP not configured (SMTP_USERNAME is empty).");
-            log.warn("[DEV EMAIL FALLBACK] Password Reset OTP for {}: {}", toEmail, otp);
-            log.warn("=================================================================");
-            return;
+            log.error("SMTP service is not configured (mailSender is null or spring.mail.username is empty).");
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Email delivery service is not configured. Please contact the administrator.");
         }
 
         try {
-            org.springframework.mail.SimpleMailMessage message = new org.springframework.mail.SimpleMailMessage();
-            if (mailFrom != null && !mailFrom.isBlank()) {
-                message.setFrom(mailFrom);
+            MimeMessage message = mailSender.createMimeMessage();
+            MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
+
+            // For Gmail SMTP, the From address should match the authenticated account
+            String senderEmail = (smtpUsername != null && !smtpUsername.isBlank()) ? smtpUsername.trim() : mailFrom;
+            try {
+                helper.setFrom(new jakarta.mail.internet.InternetAddress(senderEmail, "IntelliCampus Academic Portal"));
+            } catch (Exception e) {
+                helper.setFrom(senderEmail);
             }
-            message.setTo(toEmail);
-            message.setSubject("IntelliCampus password reset OTP");
-            message.setText("Your IntelliCampus password reset code is " + otp + ". It is valid for 10 minutes. If you did not request this, ignore this email.");
+
+            helper.setTo(toEmail);
+            helper.setSubject("IntelliCampus - Password Reset Verification Code");
+
+            String htmlBody = buildOtpEmailHtml(otp);
+            String textFallback = "Your IntelliCampus password reset verification code is: " + otp
+                    + "\n\nThis code is valid for 10 minutes. If you did not request this, please ignore this email.";
+            helper.setText(textFallback, htmlBody);
 
             mailSender.send(message);
-            log.info("Password reset OTP email successfully sent to '{}'", toEmail);
+            log.info("Password reset OTP email successfully delivered to '{}'", toEmail);
+        } catch (org.springframework.web.server.ResponseStatusException rse) {
+            throw rse;
         } catch (Exception ex) {
-            log.error("Failed to send password reset OTP email to '{}': {}. Falling back to console logging for development.", toEmail, ex.getMessage());
-            log.warn("=================================================================");
-            log.warn("[DEV EMAIL FALLBACK] SMTP delivery failed ({}).", ex.getMessage());
-            log.warn("[DEV EMAIL FALLBACK] Password Reset OTP for {}: {}", toEmail, otp);
-            log.warn("=================================================================");
+            log.error("Failed to deliver password reset OTP email to '{}': {}", toEmail, ex.getMessage(), ex);
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to deliver verification code to your email inbox: " + ex.getMessage());
         }
+    }
+
+    private String buildOtpEmailHtml(String otp) {
+        return "<!DOCTYPE html>"
+                + "<html>"
+                + "<head><meta charset='UTF-8'></head>"
+                + "<body style='font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background-color: #0f172a; color: #f8fafc; padding: 40px 20px; margin: 0;'>"
+                + "  <table width='100%' border='0' cellspacing='0' cellpadding='0' style='max-width: 560px; margin: 0 auto; background-color: #1e293b; border-radius: 12px; border: 1px solid #334155; overflow: hidden;'>"
+                + "    <tr>"
+                + "      <td style='padding: 32px 32px 24px 32px; background: linear-gradient(135deg, #1e1b4b 0%, #0f172a 100%); border-bottom: 1px solid #334155;'>"
+                + "        <h1 style='margin: 0; font-size: 22px; color: #60a5fa;'>IntelliCampus</h1>"
+                + "        <p style='margin: 4px 0 0 0; font-size: 13px; color: #94a3b8;'>Academic Governance &amp; Mentorship Portal</p>"
+                + "      </td>"
+                + "    </tr>"
+                + "    <tr>"
+                + "      <td style='padding: 32px;'>"
+                + "        <h2 style='margin: 0 0 16px 0; font-size: 18px; color: #f1f5f9;'>Password Reset Verification Code</h2>"
+                + "        <p style='font-size: 14px; line-height: 1.6; color: #cbd5e1; margin-bottom: 24px;'>"
+                + "          We received a request to reset your password. Use the 6-digit verification code below to complete your password reset:"
+                + "        </p>"
+                + "        <div style='text-align: center; margin: 28px 0; padding: 20px; background-color: #0f172a; border-radius: 8px; border: 2px dashed #3b82f6;'>"
+                + "          <span style='font-family: \"SFMono-Regular\", Consolas, \"Liberation Mono\", Menlo, Courier, monospace; font-size: 36px; font-weight: 700; letter-spacing: 10px; color: #60a5fa;'>"
+                +             otp
+                + "          </span>"
+                + "        </div>"
+                + "        <p style='font-size: 13px; line-height: 1.6; color: #94a3b8; margin: 16px 0 24px 0; text-align: center;'>"
+                + "          <strong>Validity:</strong> 10 minutes &bull; <strong>Max Attempts:</strong> 5"
+                + "        </p>"
+                + "        <p style='font-size: 12px; line-height: 1.6; color: #64748b; margin-top: 24px; border-top: 1px solid #334155; padding-top: 16px;'>"
+                + "          If you did not request a password reset, you can safely ignore this email. Never share this code with anyone, including campus administrators."
+                + "        </p>"
+                + "      </td>"
+                + "    </tr>"
+                + "  </table>"
+                + "</body>"
+                + "</html>";
     }
 
     public void sendPasswordResetEmail(String toEmail, String recipientName, String rawToken, String role) {

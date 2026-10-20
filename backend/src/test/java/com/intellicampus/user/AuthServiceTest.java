@@ -71,6 +71,7 @@ class AuthServiceTest {
                 tokenProvider,
                 emailService
         );
+        authService.clearRateLimitMap();
     }
 
     @Nested
@@ -325,6 +326,11 @@ class AuthServiceTest {
     @DisplayName("Forgot Password & Reset Password Flow Tests")
     class PasswordResetTests {
 
+        @BeforeEach
+        void setUp() {
+            authService.clearRateLimitMap();
+        }
+
         @Test
         @DisplayName("Success: Forgot password for registered user stores SHA-256 hash and sends email")
         void forgotPassword_RegisteredUser_SendsEmail() {
@@ -406,6 +412,7 @@ class AuthServiceTest {
 
         @BeforeEach
         void setUpMentor() {
+            authService.clearRateLimitMap();
             mentor = new User("MEN-201", Role.MENTOR, "Dr. Sunita Mehta", "sunita@intellicampus.edu", "old_hash", dept);
             authService.setJwtSecret("TestSecretKeyForHmacUnitTestingOnly1234567890");
         }
@@ -569,6 +576,126 @@ class AuthServiceTest {
 
             assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
             verify(userRepository, never()).save(any(User.class));
+        }
+    }
+
+    @Nested
+    @DisplayName("Faculty OTP Forgot-Password Tests")
+    class FacultyOtpTests {
+
+        private User faculty;
+
+        @BeforeEach
+        void setUpFaculty() {
+            authService.clearRateLimitMap();
+            faculty = new User("FAC-102", Role.FACULTY, "Prof. Vikram Verma", "v.verma@intellicampus.edu", "old_hash", dept);
+            authService.setJwtSecret("TestSecretKeyForHmacUnitTestingOnly1234567890");
+        }
+
+        @Test
+        @DisplayName("Success: Generates 6-digit OTP, stores HMAC-SHA256, and dispatches email for Faculty")
+        void requestFacultyForgotPassword_Success() {
+            ForgotPasswordRequest req = new ForgotPasswordRequest("v.verma@intellicampus.edu", "FACULTY");
+            when(userRepository.findByEmailIgnoreCase("v.verma@intellicampus.edu")).thenReturn(Optional.of(faculty));
+
+            ApiResponse resp = authService.requestFacultyForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, times(1)).invalidateAllActiveTokensForUser(faculty);
+            verify(passwordResetTokenRepository, times(1)).save(any(PasswordResetToken.class));
+            verify(emailService, times(1)).sendPasswordResetOtp(eq("v.verma@intellicampus.edu"), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Unknown faculty email returns generic response without creating OTP")
+        void requestFacultyForgotPassword_UnknownEmail() {
+            ForgotPasswordRequest req = new ForgotPasswordRequest("unknown@intellicampus.edu", "FACULTY");
+            when(userRepository.findByEmailIgnoreCase("unknown@intellicampus.edu")).thenReturn(Optional.empty());
+
+            ApiResponse resp = authService.requestFacultyForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+            verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Mentor account requesting faculty OTP returns generic response without creating OTP")
+        void requestFacultyForgotPassword_RoleMismatch() {
+            User mentor = new User("MEN-201", Role.MENTOR, "Dr. Sunita Mehta", "sunita@intellicampus.edu", "old_hash", dept);
+            ForgotPasswordRequest req = new ForgotPasswordRequest("sunita@intellicampus.edu", "FACULTY");
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+
+            ApiResponse resp = authService.requestFacultyForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+            verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Verifies correct 6-digit OTP and returns single-use reset token for Faculty")
+        void verifyFacultyOtp_Correct() {
+            String otp = "654321";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(faculty, otpHmac, LocalDateTime.now().plusMinutes(10));
+
+            when(userRepository.findByEmailIgnoreCase("v.verma@intellicampus.edu")).thenReturn(Optional.of(faculty));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(faculty))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("v.verma@intellicampus.edu", otp);
+            ApiResponse resp = authService.verifyFacultyOtp(req);
+
+            assertTrue(resp.isSuccess());
+            assertNotNull(resp.getData());
+            assertNotNull(token.getResetTokenHash());
+            assertEquals("VERIFIED_" + token.getId(), token.getTokenHash());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Fails: Wrong OTP for faculty increments attempt counter and returns 400 Bad Request")
+        void verifyFacultyOtp_WrongOtp() {
+            String otp = "654321";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(faculty, otpHmac, LocalDateTime.now().plusMinutes(10));
+
+            when(userRepository.findByEmailIgnoreCase("v.verma@intellicampus.edu")).thenReturn(Optional.of(faculty));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(faculty))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("v.verma@intellicampus.edu", "111111");
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> authService.verifyFacultyOtp(req));
+
+            assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+            assertTrue(ex.getReason().contains("Invalid OTP"));
+            assertEquals(1, token.getAttempts());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Success: Updates faculty password with BCrypt using verified reset token")
+        void resetFacultyPassword_Success() {
+            String rawResetToken = "faculty_single_use_reset_token_xyz";
+            String resetTokenHash = DigestUtils.sha256Hex(rawResetToken);
+
+            PasswordResetToken token = new PasswordResetToken(faculty, "VERIFIED_2", LocalDateTime.now().plusMinutes(10));
+            token.setResetTokenHash(resetTokenHash);
+
+            when(passwordResetTokenRepository.findByResetTokenHashAndUsedFalse(resetTokenHash))
+                    .thenReturn(Optional.of(token));
+            when(passwordEncoder.encode("NewFacultyPass2026#")).thenReturn("bcrypt_faculty_hash");
+
+            ResetPasswordRequest req = new ResetPasswordRequest(rawResetToken, "NewFacultyPass2026#", "NewFacultyPass2026#");
+            ApiResponse resp = authService.resetFacultyPassword(req);
+
+            assertTrue(resp.isSuccess());
+            assertEquals("bcrypt_faculty_hash", faculty.getPasswordHash());
+            assertTrue(token.getUsed());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+            verify(passwordResetTokenRepository, times(1)).invalidateAllActiveTokensForUser(faculty);
+            verify(userRepository, times(1)).save(faculty);
         }
     }
 }

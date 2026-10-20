@@ -84,7 +84,7 @@ export default function ForgotPasswordPage({
   };
 
   // =========================================================================
-  // STEP 1: REQUEST OTP / RESET LINK
+  // STEP 1: REQUEST 6-DIGIT OTP
   // =========================================================================
   const handleRequestOtp = async (e) => {
     if (e) e.preventDefault();
@@ -107,26 +107,15 @@ export default function ForgotPasswordPage({
 
       const data = await response.json().catch(() => ({}));
 
-      if (!response.ok && data.message && !isFaculty) {
-        setErrorMessage(data.message);
+      if (!response.ok) {
+        setErrorMessage(data.message || data.error || 'Failed to dispatch verification code. Please check your email address.');
         return;
       }
 
-      const defaultMsg = isFaculty
-        ? 'If this email is registered in our system, a password reset link has been dispatched to your inbox.'
-        : 'If this email is registered in our system, a 6-digit password reset code has been dispatched to your inbox.';
-
-      setSuccessMessage(data.message || defaultMsg);
-
-      if (isFaculty) {
-        // Faculty uses the single-step link flow
-        setStep(4);
-      } else {
-        // Mentor transitions to Step 2 (Verify OTP)
-        setStep(2);
-        setCountdown(60);
-        setCanResend(false);
-      }
+      setSuccessMessage(data.message || 'A 6-digit verification code has been dispatched to your registered institutional email.');
+      setStep(2);
+      setCountdown(60);
+      setCanResend(false);
     } catch (networkErr) {
       console.error('[Forgot Password Error]:', networkErr);
       setErrorMessage('Failed to connect to authentication server. Please verify backend status.');
@@ -148,8 +137,10 @@ export default function ForgotPasswordPage({
     setErrorMessage('');
     setSuccessMessage('');
 
+    const verifyUrl = isFaculty ? '/api/faculty/verify-otp' : '/api/mentor/verify-otp';
+
     try {
-      const response = await fetch('/api/mentor/verify-otp', {
+      const response = await fetch(verifyUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -187,13 +178,18 @@ export default function ForgotPasswordPage({
     if (!canResend || isLoading) return;
     setIsLoading(true);
     setErrorMessage('');
+    const resendUrl = apiEndpoint || (isFaculty ? '/api/faculty/forgot-password' : '/api/mentor/forgot-password');
     try {
-      const response = await fetch('/api/mentor/forgot-password', {
+      const response = await fetch(resendUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: email.trim().toLowerCase() }),
       });
       const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setErrorMessage(data.message || data.error || 'Unable to resend OTP at this time. Please retry shortly.');
+        return;
+      }
       setSuccessMessage(data.message || 'A fresh 6-digit OTP code has been dispatched to your email.');
       setCountdown(60);
       setCanResend(false);
@@ -217,8 +213,10 @@ export default function ForgotPasswordPage({
     setErrorMessage('');
     setSuccessMessage('');
 
+    const resetUrl = isFaculty ? '/api/faculty/reset-password' : '/api/mentor/reset-password';
+
     try {
-      const response = await fetch('/api/mentor/reset-password', {
+      const response = await fetch(resetUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -252,13 +250,15 @@ export default function ForgotPasswordPage({
   return (
     <AuthLayout
       role={resolvedRole}
-      title={step === 3 ? "Set New Password" : step === 2 ? "Verify Reset OTP" : "Reset Your Password"}
+      title={step === 4 ? "Password Reset Complete" : step === 3 ? "Set New Password" : step === 2 ? "Verify Reset OTP" : "Reset Your Password"}
       subtitle={
-        step === 3
-          ? "Create a strong new password for your mentor account"
+        step === 4
+          ? "Your password has been successfully updated"
+          : step === 3
+          ? `Create a strong new password for your ${isFaculty ? 'faculty' : 'mentor'} account`
           : step === 2
           ? `Enter the 6-digit OTP code sent to ${email}`
-          : `Enter your official institutional email to recover access to the ${isFaculty ? 'Faculty' : 'Mentor'} portal`
+          : `Enter your registered institutional email to receive a 6-digit verification code`
       }
     >
       {/* Alert Error Banner */}
@@ -295,15 +295,16 @@ export default function ForgotPasswordPage({
           </div>
 
           <h2 style={{ fontSize: '1.25rem', fontWeight: 600, color: 'var(--text-primary)', marginBottom: '0.75rem' }}>
-            {isFaculty ? 'Check Your Email' : 'Password Reset Complete!'}
+            Password Reset Complete!
           </h2>
 
           <p style={{ fontSize: '0.88rem', color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: '1.75rem' }}>
-            {successMessage}
+            {successMessage || 'Your password has been successfully reset. You may now log in.'}
           </p>
 
           <button
             type="button"
+            id={`return-to-login-btn-${roleClass}`}
             className={`auth-submit-btn ${roleClass}`}
             style={{ width: '100%', justifyContent: 'center' }}
             onClick={handleReturnToLogin}
@@ -313,10 +314,10 @@ export default function ForgotPasswordPage({
           </button>
         </div>
       ) : step === 3 ? (
-        /* STEP 3 (MENTOR): ENTER NEW PASSWORD & CONFIRM PASSWORD */
+        /* STEP 3: ENTER NEW PASSWORD & CONFIRM PASSWORD */
         <form className="auth-form" onSubmit={handleResetPassword} noValidate>
           <div className="auth-field">
-            <label htmlFor="mentor-new-password">
+            <label htmlFor={`${roleClass}-new-password`}>
               <span>New Password <span className="auth-label-required">*</span></span>
             </label>
             <div className="auth-input-wrap">
@@ -324,7 +325,7 @@ export default function ForgotPasswordPage({
                 <Lock size={18} />
               </span>
               <input
-                id="mentor-new-password"
+                id={`${roleClass}-new-password`}
                 type={showNewPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 placeholder="Min. 8 characters"
@@ -352,7 +353,7 @@ export default function ForgotPasswordPage({
           </div>
 
           <div className="auth-field">
-            <label htmlFor="mentor-confirm-password">
+            <label htmlFor={`${roleClass}-confirm-password`}>
               <span>Confirm New Password <span className="auth-label-required">*</span></span>
             </label>
             <div className="auth-input-wrap">
@@ -360,7 +361,7 @@ export default function ForgotPasswordPage({
                 <Lock size={18} />
               </span>
               <input
-                id="mentor-confirm-password"
+                id={`${roleClass}-confirm-password`}
                 type={showConfirmPassword ? 'text' : 'password'}
                 autoComplete="new-password"
                 placeholder="Re-enter new password"
@@ -427,7 +428,7 @@ export default function ForgotPasswordPage({
 
           <button
             type="submit"
-            id="mentor-reset-password-btn"
+            id={`${roleClass}-reset-password-btn`}
             disabled={!isPasswordValid(newPassword) || newPassword !== confirmPassword || isLoading}
             className={`auth-submit-btn ${roleClass}`}
           >
@@ -445,10 +446,10 @@ export default function ForgotPasswordPage({
           </button>
         </form>
       ) : step === 2 ? (
-        /* STEP 2 (MENTOR): ENTER 6-DIGIT OTP */
+        /* STEP 2: ENTER 6-DIGIT OTP */
         <form className="auth-form" onSubmit={handleVerifyOtp} noValidate>
           <div className="auth-field">
-            <label htmlFor="mentor-otp-input">
+            <label htmlFor={`${roleClass}-otp-input`}>
               <span>6-Digit Verification Code (OTP) <span className="auth-label-required">*</span></span>
             </label>
             <div className="auth-input-wrap">
@@ -456,7 +457,7 @@ export default function ForgotPasswordPage({
                 <KeyRound size={18} />
               </span>
               <input
-                id="mentor-otp-input"
+                id={`${roleClass}-otp-input`}
                 name="otp"
                 type="text"
                 maxLength={6}
@@ -484,7 +485,7 @@ export default function ForgotPasswordPage({
           <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem', marginBottom: '1.25rem' }}>
             <button
               type="submit"
-              id="mentor-verify-otp-btn"
+              id={`${roleClass}-verify-otp-btn`}
               disabled={!isValidOtp(otp) || isLoading}
               className={`auth-submit-btn ${roleClass}`}
               style={{ flex: 2 }}
@@ -504,7 +505,7 @@ export default function ForgotPasswordPage({
 
             <button
               type="button"
-              id="mentor-resend-otp-btn"
+              id={`${roleClass}-resend-otp-btn`}
               disabled={!canResend || isLoading}
               onClick={handleResendOtp}
               className="auth-link-btn"
@@ -582,11 +583,11 @@ export default function ForgotPasswordPage({
             {isLoading ? (
               <>
                 <div className="loading-spinner" />
-                <span>{isFaculty ? 'Dispatching Reset Link...' : 'Sending 6-Digit OTP...'}</span>
+                <span>Sending 6-Digit OTP...</span>
               </>
             ) : (
               <>
-                <span>{isFaculty ? 'Send Password Reset Link' : 'Send 6-Digit OTP'}</span>
+                <span>Send 6-Digit OTP</span>
                 <ArrowRight size={17} />
               </>
             )}

@@ -63,9 +63,36 @@ public class AuthController {
     }
 
     /**
-     * Request Password Reset Link for Faculty / Default (supports /api/auth/forgot-password, /api/faculty/forgot-password)
+     * Request Password Reset OTP for Faculty (supports /api/faculty/forgot-password, /api/auth/faculty/forgot-password)
      */
-    @PostMapping({"/api/auth/forgot-password", "/api/faculty/forgot-password"})
+    @PostMapping({"/api/faculty/forgot-password", "/api/auth/faculty/forgot-password"})
+    public ResponseEntity<ApiResponse> forgotPasswordFaculty(@Valid @RequestBody ForgotPasswordRequest request) {
+        ApiResponse response = authService.requestFacultyForgotPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Verify Faculty OTP (supports /api/faculty/verify-otp and alias /api/auth/faculty/verify-otp)
+     */
+    @PostMapping({"/api/faculty/verify-otp", "/api/auth/faculty/verify-otp"})
+    public ResponseEntity<ApiResponse> verifyFacultyOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        ApiResponse response = authService.verifyFacultyOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Reset Faculty Password with OTP verification token (supports /api/faculty/reset-password and alias /api/auth/faculty/reset-password)
+     */
+    @PostMapping({"/api/faculty/reset-password", "/api/auth/faculty/reset-password"})
+    public ResponseEntity<ApiResponse> resetPasswordFaculty(@Valid @RequestBody ResetPasswordRequest request) {
+        ApiResponse response = authService.resetFacultyPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * General / Legacy Password Reset (supports /api/auth/forgot-password)
+     */
+    @PostMapping("/api/auth/forgot-password")
     public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         ApiResponse response = authService.requestForgotPassword(request);
         return ResponseEntity.ok(response);

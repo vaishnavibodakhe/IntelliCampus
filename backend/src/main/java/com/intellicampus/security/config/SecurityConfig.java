@@ -90,6 +90,8 @@ public class SecurityConfig {
                     "/api/faculty/login",
                     "/api/faculty/register",
                     "/api/faculty/forgot-password",
+                    "/api/faculty/verify-otp",
+                    "/api/faculty/reset-password",
                     "/api/faculty/reset-password/**",
                     "/api/mentor/login",
                     "/api/mentor/register",
