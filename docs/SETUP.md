@@ -40,7 +40,7 @@ Ensure your system has the following installed:
 
    -- Create application user 'campus_admin'
    CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' 
-       IDENTIFIED BY 'SecureCampusPassword2026!';
+       IDENTIFIED BY 'your_db_password_here';
 
    -- Grant permissions to intellicampus_db
    GRANT ALL PRIVILEGES ON intellicampus_db.* TO 'campus_admin'@'localhost';

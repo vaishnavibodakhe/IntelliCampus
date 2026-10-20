@@ -171,7 +171,7 @@ Full Guide: [**docs/SETUP.md**](docs/SETUP.md)
 Run in MySQL:
 ```sql
 CREATE DATABASE IF NOT EXISTS intellicampus_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' IDENTIFIED BY 'SecureCampusPassword2026!';
+CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' IDENTIFIED BY 'your_db_password_here';
 GRANT ALL PRIVILEGES ON intellicampus_db.* TO 'campus_admin'@'localhost';
 FLUSH PRIVILEGES;
 ```
