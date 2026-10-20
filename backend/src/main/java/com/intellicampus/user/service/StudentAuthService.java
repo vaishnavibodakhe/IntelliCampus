@@ -33,7 +33,7 @@ import com.intellicampus.audit.service.AuditChainService;
 
 @Service
 @Transactional
-public class AuthService {
+public class StudentAuthService {
 
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
     private static final Pattern INDIAN_PHONE_PATTERN = Pattern.compile("^[6-9]\\d{9}$");
@@ -55,7 +55,7 @@ public class AuthService {
     @Value("${app.jwt.lockout-duration-minutes:15}")
     private int lockoutDurationMinutes = 15;
 
-    public AuthService(
+    public StudentAuthService(
             UserRepository userRepository,
             StudentProfileRepository studentProfileRepository,
             DepartmentRepository departmentRepository,
@@ -68,7 +68,7 @@ public class AuthService {
     }
 
     @Autowired
-    public AuthService(
+    public StudentAuthService(
             UserRepository userRepository,
             StudentProfileRepository studentProfileRepository,
             DepartmentRepository departmentRepository,

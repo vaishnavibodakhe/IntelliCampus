@@ -6,13 +6,19 @@ import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import com.intellicampus.user.service.FaceEnrollmentService;
+import com.intellicampus.user.model.User;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -71,18 +77,87 @@ public class StudentController {
     }
 
     @GetMapping("/{studentId}")
-    public ResponseEntity<Map<String, Object>> getStudent(@PathVariable Long studentId) {
+    public ResponseEntity<Map<String, Object>> getStudent(
+            @PathVariable Long studentId,
+            Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
+        }
+
         StudentProfile p = faceEnrollmentService.findStudent(studentId);
+
+        boolean isStaff = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(role -> role.equals("ROLE_ADMIN")
+                               || role.equals("ROLE_HOD")
+                               || role.equals("ROLE_FACULTY")
+                               || role.equals("ROLE_MENTOR"));
+
+        if (!isStaff) {
+            if (!isStudentOwnRecord(p, authentication)) {
+                throw new AccessDeniedException("Access is denied: students may only access their own record");
+            }
+        }
+
         return ResponseEntity.ok(mapStudentToSafeDto(p));
     }
 
     @GetMapping("/division/{divisionId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR')")
     public ResponseEntity<List<Map<String, Object>>> getStudentsByDivision(@PathVariable Long divisionId) {
         List<StudentProfile> students = studentProfileRepository.findByDivisionId(divisionId);
         List<Map<String, Object>> result = students.stream()
                 .map(this::mapStudentToSafeDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(result);
+    }
+
+    private boolean isStudentOwnRecord(StudentProfile p, Authentication authentication) {
+        if (p == null || authentication == null) {
+            return false;
+        }
+
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            if (p.getUser() != null && user.getId() != null && user.getId().equals(p.getUser().getId())) {
+                return true;
+            }
+            if (p.getUser() != null && user.getEmail() != null && user.getEmail().equalsIgnoreCase(p.getUser().getEmail())) {
+                return true;
+            }
+        }
+
+        String authName = authentication.getName();
+        if (authName != null && !authName.isBlank()) {
+            if (p.getUser() != null) {
+                if (authName.equalsIgnoreCase(p.getUser().getEmail())) {
+                    return true;
+                }
+                if (authName.equalsIgnoreCase(p.getUser().getUserCode())) {
+                    return true;
+                }
+            }
+            if (authName.equalsIgnoreCase(p.getRollNo())) {
+                return true;
+            }
+            if (p.getId() != null && authName.equals(String.valueOf(p.getId()))) {
+                return true;
+            }
+            if (p.getUser() != null && p.getUser().getId() != null && authName.equals(String.valueOf(p.getUser().getId()))) {
+                return true;
+            }
+
+            Optional<User> authUserOpt = userRepository.findByEmail(authName)
+                    .or(() -> userRepository.findByUserCode(authName));
+            if (authUserOpt.isPresent()) {
+                User authUser = authUserOpt.get();
+                if (p.getUser() != null && authUser.getId().equals(p.getUser().getId())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private String extractClientIp(HttpServletRequest request) {

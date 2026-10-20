@@ -91,7 +91,7 @@ export const api = {
   },
 
   async login({ identifier, password }) {
-    const res = await fetch('/api/auth/login', {
+    const res = await fetch('/api/auth/student/login', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier, password }),
@@ -105,7 +105,7 @@ export const api = {
 
   async logout() {
     try {
-      const res = await fetch('/api/auth/logout', {
+      const res = await fetch('/api/auth/student/logout', {
         method: 'POST',
         headers: getAuthHeaders(),
       });
@@ -117,7 +117,7 @@ export const api = {
   },
 
   async getCurrentUser() {
-    const res = await fetch('/api/auth/me', {
+    const res = await fetch('/api/auth/student/me', {
       method: 'GET',
       headers: getAuthHeaders(),
     });
@@ -226,12 +226,16 @@ export const api = {
   },
 
   async getStudent(studentId) {
-    const res = await fetch(`/api/students/${studentId}`);
+    const res = await fetch(`/api/students/${studentId}`, {
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    });
     return handleResponse(res);
   },
 
   async getStudentsByDivision(divisionId) {
-    const res = await fetch(`/api/students/division/${divisionId}`);
+    const res = await fetch(`/api/students/division/${divisionId}`, {
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+    });
     return handleResponse(res);
   },
 

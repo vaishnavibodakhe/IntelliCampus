@@ -3,6 +3,7 @@ package com.intellicampus.auth.config;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
@@ -64,8 +65,31 @@ public class SecurityConfig {
                     "/api/auth/staff/{id}/approve",
                     "/api/auth/staff/{id}/reject"
                 ).hasRole("ADMIN")
-                // Authenticated staff endpoints
-                .requestMatchers("/api/auth/staff/me", "/api/auth/staff/change-password").authenticated()
+                // Authenticated staff endpoints (staff only: ADMIN, HOD, FACULTY, MENTOR)
+                .requestMatchers("/api/auth/staff/me", "/api/auth/staff/change-password").hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
+                // Public student auth endpoints
+                .requestMatchers(
+                    "/api/auth/student/register",
+                    "/api/auth/student/login",
+                    "/api/auth/student/logout",
+                    "/api/auth/student/me"
+                ).permitAll()
+                // Biometric face enrollment and capture-token endpoints (permitAll ONLY for these two POST endpoints)
+                .requestMatchers(
+                    HttpMethod.POST,
+                    "/api/students/*/capture-token",
+                    "/api/students/*/face-enroll",
+                    "/api/students/{studentId}/capture-token",
+                    "/api/students/{studentId}/face-enroll"
+                ).permitAll()
+                // Division list restricted to staff (ADMIN, HOD, FACULTY, MENTOR)
+                .requestMatchers(
+                    HttpMethod.GET,
+                    "/api/students/division/**",
+                    "/api/students/division/{divisionId}"
+                ).hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
+                // All other /api/students/** require authentication
+                .requestMatchers("/api/students/**").authenticated()
                 // Public auth endpoints
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/credentials/public/**").permitAll()

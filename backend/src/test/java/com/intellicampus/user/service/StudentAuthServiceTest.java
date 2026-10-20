@@ -34,7 +34,7 @@ import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-class AuthServiceTest {
+class StudentAuthServiceTest {
 
     @Mock
     private UserRepository userRepository;
@@ -57,7 +57,7 @@ class AuthServiceTest {
     private PasswordEncoder passwordEncoder;
     private JwtService jwtService;
     private IpRateLimiterService ipRateLimiterService;
-    private AuthService authService;
+    private StudentAuthService authService;
 
     private Department dept;
     private Division division;
@@ -72,7 +72,7 @@ class AuthServiceTest {
         );
         ipRateLimiterService = new IpRateLimiterService();
 
-        authService = new AuthService(
+        authService = new StudentAuthService(
                 userRepository,
                 studentProfileRepository,
                 departmentRepository,

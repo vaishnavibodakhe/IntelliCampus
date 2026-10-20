@@ -383,7 +383,7 @@ class FaceEnrollmentServiceTest {
         // Prepare AuthService with mock userRepository
         UserRepository mockUserRepo = mock(UserRepository.class);
         PasswordEncoder mockEncoder = mock(PasswordEncoder.class);
-        AuthService authService = new AuthService(
+        StudentAuthService authService = new StudentAuthService(
                 mockUserRepo,
                 studentProfileRepository,
                 mock(),
