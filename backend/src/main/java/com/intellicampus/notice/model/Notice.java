@@ -52,6 +52,11 @@ public class Notice {
     @Column(name = "attachment_url", length = 500)
     private String attachmentUrl;
 
+    @ElementCollection(fetch = FetchType.EAGER)
+    @CollectionTable(name = "notice_target_students", joinColumns = @JoinColumn(name = "notice_id"))
+    @Column(name = "student_user_id")
+    private java.util.Set<Long> targetStudentIds = new java.util.HashSet<>();
+
     public Notice() {}
 
     public Notice(String title, String body, String targetDepartment, String targetYear, String targetDivision, String publisherRole, User publisher, LocalDate deadline) {
@@ -105,6 +110,11 @@ public class Notice {
 
     public String getAttachmentUrl() { return attachmentUrl; }
     public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
+
+    public java.util.Set<Long> getTargetStudentIds() { return targetStudentIds; }
+    public void setTargetStudentIds(java.util.Set<Long> targetStudentIds) {
+        this.targetStudentIds = targetStudentIds != null ? targetStudentIds : new java.util.HashSet<>();
+    }
 }
 
 

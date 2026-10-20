@@ -51,9 +51,16 @@ public class UserService {
             .filter(u -> {
                 if (search == null || search.trim().isEmpty()) return true;
                 String q = search.toLowerCase();
-                return u.getName().toLowerCase().contains(q) ||
+                boolean baseMatch = u.getName().toLowerCase().contains(q) ||
                        u.getUserCode().toLowerCase().contains(q) ||
                        u.getEmail().toLowerCase().contains(q);
+                if (baseMatch) return true;
+                if (u.getRole() == Role.STUDENT) {
+                    return studentProfileRepository.findByUser(u)
+                            .map(sp -> sp.getRollNo() != null && sp.getRollNo().toLowerCase().contains(q))
+                            .orElse(false);
+                }
+                return false;
             })
             .map(this::mapToDto)
             .collect(Collectors.toList());

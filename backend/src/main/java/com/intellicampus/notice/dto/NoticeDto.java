@@ -18,6 +18,8 @@ public class NoticeDto {
     private Boolean hasAttachment;
     private String fileName;
     private String attachmentUrl;
+    private java.util.List<Long> targetStudentIds;
+    private Boolean read;
 
     public NoticeDto() {}
 
@@ -62,4 +64,11 @@ public class NoticeDto {
 
     public String getAttachmentUrl() { return attachmentUrl; }
     public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
+
+    public java.util.List<Long> getTargetStudentIds() { return targetStudentIds; }
+    public void setTargetStudentIds(java.util.List<Long> targetStudentIds) { this.targetStudentIds = targetStudentIds; }
+
+    public Boolean getRead() { return read; }
+    public void setRead(Boolean read) { this.read = read; }
+    public Boolean isRead() { return Boolean.TRUE.equals(read); }
 }
