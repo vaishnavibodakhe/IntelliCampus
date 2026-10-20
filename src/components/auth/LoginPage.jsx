@@ -145,7 +145,7 @@ export default function LoginPage({
               name="identifier"
               type="text"
               autoComplete="username"
-              placeholder={isFaculty ? 'e.g. prof.name@intellicampus.edu or FAC-102' : 'e.g. mentor.name@intellicampus.edu or FAC-201'}
+              placeholder={isFaculty ? 'e.g. prof.name@intellicampus.edu or FAC-102' : 'e.g. mentor.name@intellicampus.edu or MEN-123'}
               value={identifier}
               onChange={(e) => setIdentifier(e.target.value)}
               onBlur={() => handleBlur('identifier')}

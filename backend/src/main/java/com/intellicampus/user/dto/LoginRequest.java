@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 
 public class LoginRequest {
 
+    @com.fasterxml.jackson.annotation.JsonAlias({"username", "userCode"})
     private String identifier;
     private String email;
 

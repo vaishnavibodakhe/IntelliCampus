@@ -25,7 +25,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -50,7 +52,8 @@ class AuthServiceTest {
     @Mock
     private PasswordEncoder passwordEncoder;
     private JwtTokenProvider tokenProvider = new JwtTokenProvider("unit_test_jwt_secret_key_minimum_32_chars_for_hmac_sha256", 15);
-    private EmailService emailService = new EmailService(null);
+    @Mock
+    private EmailService emailService;
 
     private AuthService authService;
 
@@ -195,6 +198,56 @@ class AuthServiceTest {
             assertEquals("MEN-202", resp.getUserCode());
             assertEquals(Role.MENTOR, resp.getRole());
             assertNotNull(resp.getToken());
+        }
+
+        @Test
+        @DisplayName("Fails: Invalid mentor ID pattern throws ValidationException")
+        void registerMentor_InvalidIdPattern() {
+            MentorRegisterRequest req = new MentorRegisterRequest();
+            req.setFullName("Dr. Robert Lee");
+            req.setMentorId("MNT-202"); // Does not match ^MEN-\d{3,}$
+            req.setEmail("robert.lee@intellicampus.edu");
+            req.setDepartment("Computer Science");
+            req.setPhone("9123456789");
+            req.setPassword("StrongMentor2026#");
+            req.setConfirmPassword("StrongMentor2026#");
+
+            assertThrows(ValidationException.class, () -> authService.registerMentor(req));
+        }
+
+        @Test
+        @DisplayName("Fails: Duplicate email throws DuplicateResourceException (409)")
+        void registerMentor_DuplicateEmail() {
+            MentorRegisterRequest req = new MentorRegisterRequest();
+            req.setFullName("Dr. Robert Lee");
+            req.setMentorId("MEN-202");
+            req.setEmail("existing@intellicampus.edu");
+            req.setDepartment("Computer Science");
+            req.setPhone("9123456789");
+            req.setPassword("StrongMentor2026#");
+            req.setConfirmPassword("StrongMentor2026#");
+
+            when(userRepository.existsByEmailIgnoreCase("existing@intellicampus.edu")).thenReturn(true);
+
+            assertThrows(DuplicateResourceException.class, () -> authService.registerMentor(req));
+        }
+
+        @Test
+        @DisplayName("Fails: Duplicate employee ID throws DuplicateResourceException (409)")
+        void registerMentor_DuplicateEmployeeId() {
+            MentorRegisterRequest req = new MentorRegisterRequest();
+            req.setFullName("Dr. Robert Lee");
+            req.setMentorId("MEN-202");
+            req.setEmail("new@intellicampus.edu");
+            req.setDepartment("Computer Science");
+            req.setPhone("9123456789");
+            req.setPassword("StrongMentor2026#");
+            req.setConfirmPassword("StrongMentor2026#");
+
+            when(userRepository.existsByEmailIgnoreCase("new@intellicampus.edu")).thenReturn(false);
+            when(userRepository.existsByUserCode("MEN-202")).thenReturn(true);
+
+            assertThrows(DuplicateResourceException.class, () -> authService.registerMentor(req));
         }
     }
 
@@ -342,6 +395,180 @@ class AuthServiceTest {
 
             ResetPasswordRequest req = new ResetPasswordRequest(rawToken, "NewSecret2026@", "NewSecret2026@");
             assertThrows(ValidationException.class, () -> authService.resetPassword(req));
+        }
+    }
+
+    @Nested
+    @DisplayName("Mentor OTP Forgot-Password Tests")
+    class MentorOtpTests {
+
+        private User mentor;
+
+        @BeforeEach
+        void setUpMentor() {
+            mentor = new User("MEN-201", Role.MENTOR, "Dr. Sunita Mehta", "sunita@intellicampus.edu", "old_hash", dept);
+            authService.setJwtSecret("TestSecretKeyForHmacUnitTestingOnly1234567890");
+        }
+
+        @Test
+        @DisplayName("Success: Generates 6-digit OTP, stores HMAC-SHA256, and dispatches email")
+        void requestMentorForgotPassword_Success() {
+            ForgotPasswordRequest req = new ForgotPasswordRequest("sunita@intellicampus.edu", "MENTOR");
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+
+            ApiResponse resp = authService.requestMentorForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, times(1)).invalidateAllActiveTokensForUser(mentor);
+            verify(passwordResetTokenRepository, times(1)).save(any(PasswordResetToken.class));
+            verify(emailService, times(1)).sendPasswordResetOtp(eq("sunita@intellicampus.edu"), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Unknown email returns generic response without creating OTP")
+        void requestMentorForgotPassword_UnknownEmail() {
+            ForgotPasswordRequest req = new ForgotPasswordRequest("unknown@intellicampus.edu", "MENTOR");
+            when(userRepository.findByEmailIgnoreCase("unknown@intellicampus.edu")).thenReturn(Optional.empty());
+
+            ApiResponse resp = authService.requestMentorForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+            verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Faculty account requesting mentor OTP returns generic response without creating OTP")
+        void requestMentorForgotPassword_RoleMismatch() {
+            User faculty = new User("FAC-102", Role.FACULTY, "Prof. Vikram Verma", "v.verma@intellicampus.edu", "old_hash", dept);
+            ForgotPasswordRequest req = new ForgotPasswordRequest("v.verma@intellicampus.edu", "MENTOR");
+            when(userRepository.findByEmailIgnoreCase("v.verma@intellicampus.edu")).thenReturn(Optional.of(faculty));
+
+            ApiResponse resp = authService.requestMentorForgotPassword(req);
+
+            assertTrue(resp.isSuccess());
+            verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
+            verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("Success: Verifies correct 6-digit OTP and returns single-use reset token")
+        void verifyMentorOtp_Correct() {
+            String otp = "123456";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(mentor, otpHmac, LocalDateTime.now().plusMinutes(10));
+
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(mentor))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("sunita@intellicampus.edu", otp);
+            ApiResponse resp = authService.verifyMentorOtp(req);
+
+            assertTrue(resp.isSuccess());
+            assertNotNull(resp.getData());
+            assertNotNull(token.getResetTokenHash());
+            assertEquals("VERIFIED_" + token.getId(), token.getTokenHash());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Fails: Wrong OTP increments attempt counter and returns 400 Bad Request")
+        void verifyMentorOtp_WrongOtp() {
+            String otp = "123456";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(mentor, otpHmac, LocalDateTime.now().plusMinutes(10));
+
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(mentor))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("sunita@intellicampus.edu", "999999");
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> authService.verifyMentorOtp(req));
+
+            assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+            assertTrue(ex.getReason().contains("Invalid OTP"));
+            assertEquals(1, token.getAttempts());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Fails: Reaching 5 wrong attempts invalidates OTP and throws 429 Too Many Requests")
+        void verifyMentorOtp_MaxAttempts() {
+            String otp = "123456";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(mentor, otpHmac, LocalDateTime.now().plusMinutes(10));
+            token.setAttempts(4);
+
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(mentor))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("sunita@intellicampus.edu", "999999");
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> authService.verifyMentorOtp(req));
+
+            assertEquals(HttpStatus.TOO_MANY_REQUESTS, ex.getStatusCode());
+            assertTrue(token.getUsed());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Fails: Expired OTP is marked used and throws 400 Bad Request")
+        void verifyMentorOtp_Expired() {
+            String otp = "123456";
+            String otpHmac = authService.computeHmacSha256(otp);
+            PasswordResetToken token = new PasswordResetToken(mentor, otpHmac, LocalDateTime.now().minusMinutes(1));
+
+            when(userRepository.findByEmailIgnoreCase("sunita@intellicampus.edu")).thenReturn(Optional.of(mentor));
+            when(passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(mentor))
+                    .thenReturn(Optional.of(token));
+
+            VerifyOtpRequest req = new VerifyOtpRequest("sunita@intellicampus.edu", otp);
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> authService.verifyMentorOtp(req));
+
+            assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+            assertTrue(token.getUsed());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+        }
+
+        @Test
+        @DisplayName("Success: Updates password with BCrypt using verified reset token")
+        void resetMentorPassword_Success() {
+            String rawResetToken = "single_use_reset_token_abc123";
+            String resetTokenHash = DigestUtils.sha256Hex(rawResetToken);
+
+            PasswordResetToken token = new PasswordResetToken(mentor, "VERIFIED_1", LocalDateTime.now().plusMinutes(10));
+            token.setResetTokenHash(resetTokenHash);
+
+            when(passwordResetTokenRepository.findByResetTokenHashAndUsedFalse(resetTokenHash))
+                    .thenReturn(Optional.of(token));
+            when(passwordEncoder.encode("NewMentorPass2026#")).thenReturn("bcrypt_new_hash");
+
+            ResetPasswordRequest req = new ResetPasswordRequest(rawResetToken, "NewMentorPass2026#", "NewMentorPass2026#");
+            ApiResponse resp = authService.resetMentorPassword(req);
+
+            assertTrue(resp.isSuccess());
+            assertEquals("bcrypt_new_hash", mentor.getPasswordHash());
+            assertTrue(token.getUsed());
+            verify(passwordResetTokenRepository, times(1)).save(token);
+            verify(passwordResetTokenRepository, times(1)).invalidateAllActiveTokensForUser(mentor);
+            verify(userRepository, times(1)).save(mentor);
+        }
+
+        @Test
+        @DisplayName("Fails: Already used reset token cannot be reused")
+        void resetMentorPassword_ReuseRejected() {
+            String rawResetToken = "already_used_reset_token";
+            String resetTokenHash = DigestUtils.sha256Hex(rawResetToken);
+
+            when(passwordResetTokenRepository.findByResetTokenHashAndUsedFalse(resetTokenHash))
+                    .thenReturn(Optional.empty());
+
+            ResetPasswordRequest req = new ResetPasswordRequest(rawResetToken, "NewMentorPass2026#", "NewMentorPass2026#");
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () -> authService.resetMentorPassword(req));
+
+            assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
+            verify(userRepository, never()).save(any(User.class));
         }
     }
 }

@@ -63,11 +63,38 @@ public class AuthController {
     }
 
     /**
-     * Request Password Reset Link (supports /api/auth/forgot-password, /api/faculty/forgot-password, /api/mentor/forgot-password)
+     * Request Password Reset Link for Faculty / Default (supports /api/auth/forgot-password, /api/faculty/forgot-password)
      */
-    @PostMapping({"/api/auth/forgot-password", "/api/faculty/forgot-password", "/api/mentor/forgot-password"})
+    @PostMapping({"/api/auth/forgot-password", "/api/faculty/forgot-password"})
     public ResponseEntity<ApiResponse> forgotPassword(@Valid @RequestBody ForgotPasswordRequest request) {
         ApiResponse response = authService.requestForgotPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Request Password Reset OTP for Mentor (supports /api/mentor/forgot-password and alias /api/auth/mentor/forgot-password)
+     */
+    @PostMapping({"/api/mentor/forgot-password", "/api/auth/mentor/forgot-password"})
+    public ResponseEntity<ApiResponse> forgotPasswordMentor(@Valid @RequestBody ForgotPasswordRequest request) {
+        ApiResponse response = authService.requestMentorForgotPassword(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Verify Mentor OTP (supports /api/mentor/verify-otp and alias /api/auth/mentor/verify-otp)
+     */
+    @PostMapping({"/api/mentor/verify-otp", "/api/auth/mentor/verify-otp"})
+    public ResponseEntity<ApiResponse> verifyMentorOtp(@Valid @RequestBody VerifyOtpRequest request) {
+        ApiResponse response = authService.verifyMentorOtp(request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Reset Mentor Password with OTP verification token (supports /api/mentor/reset-password and alias /api/auth/mentor/reset-password)
+     */
+    @PostMapping({"/api/mentor/reset-password", "/api/auth/mentor/reset-password"})
+    public ResponseEntity<ApiResponse> resetPasswordMentor(@Valid @RequestBody ResetPasswordRequest request) {
+        ApiResponse response = authService.resetMentorPassword(request);
         return ResponseEntity.ok(response);
     }
 

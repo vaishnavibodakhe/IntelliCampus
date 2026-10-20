@@ -12,6 +12,9 @@ export const PHONE_REGEX = /^\d{10}$/;
 // 6-digit OTP regex pattern
 export const OTP_REGEX = /^\d{6}$/;
 
+// Mentor Employee ID regex pattern: ^MEN-\d{3,}$
+export const MENTOR_ID_REGEX = /^MEN-\d{3,}$/;
+
 /**
  * Validates email format.
  */
@@ -34,6 +37,14 @@ export function isValidPhone(phone) {
 export function isValidEmployeeId(employeeId) {
   if (!employeeId || typeof employeeId !== 'string') return false;
   return employeeId.trim().length >= 2;
+}
+
+/**
+ * Validates Mentor Employee ID format (must match ^MEN-\d{3,}$).
+ */
+export function isValidMentorId(mentorId) {
+  if (!mentorId || typeof mentorId !== 'string') return false;
+  return MENTOR_ID_REGEX.test(mentorId.trim());
 }
 
 /**

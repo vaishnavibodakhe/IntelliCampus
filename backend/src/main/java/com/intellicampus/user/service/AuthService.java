@@ -15,13 +15,21 @@ import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.PasswordResetTokenRepository;
 import com.intellicampus.user.repository.RevokedTokenRepository;
 import com.intellicampus.user.repository.UserRepository;
+import org.apache.commons.codec.binary.Hex;
 import org.apache.commons.codec.digest.DigestUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -44,6 +52,7 @@ public class AuthService {
     );
     private static final Pattern PHONE_PATTERN = Pattern.compile("^\\d{10}$");
     private static final Pattern EMAIL_PATTERN = Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern MENTOR_ID_PATTERN = Pattern.compile("^MEN-\\d{3,}$");
 
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
@@ -52,6 +61,9 @@ public class AuthService {
     private final PasswordEncoder passwordEncoder;
     private final JwtTokenProvider tokenProvider;
     private final EmailService emailService;
+
+    @Value("${app.jwt.secret:${JWT_SECRET:IntelliCampusDefaultSecretKeyForHmacSigning1234567890}}")
+    private String jwtSecret = "IntelliCampusDefaultSecretKeyForHmacSigning1234567890";
 
     // In-memory rate limiting tracker for forgot-password: email -> timestamp of last request
     private final Map<String, LocalDateTime> forgotPasswordRateLimitMap = new ConcurrentHashMap<>();
@@ -101,6 +113,28 @@ public class AuthService {
         return mapToAuthResponse(savedUser, token);
     }
 
+    public void setJwtSecret(String jwtSecret) {
+        this.jwtSecret = jwtSecret;
+    }
+
+    private byte[] getHmacKey() {
+        return (jwtSecret != null && !jwtSecret.isBlank())
+                ? jwtSecret.getBytes(StandardCharsets.UTF_8)
+                : "IntelliCampusDefaultSecretKeyForHmacSigning1234567890".getBytes(StandardCharsets.UTF_8);
+    }
+
+    public String computeHmacSha256(String data) {
+        try {
+            Mac mac = Mac.getInstance("HmacSHA256");
+            SecretKeySpec keySpec = new SecretKeySpec(getHmacKey(), "HmacSHA256");
+            mac.init(keySpec);
+            byte[] bytes = mac.doFinal(data.getBytes(StandardCharsets.UTF_8));
+            return Hex.encodeHexString(bytes);
+        } catch (Exception ex) {
+            throw new RuntimeException("HMAC computation failed", ex);
+        }
+    }
+
     /**
      * Register a new Mentor
      */
@@ -111,11 +145,15 @@ public class AuthService {
         String email = req.getEmail().trim().toLowerCase();
         String mentorId = req.getMentorId().trim();
 
+        if (!MENTOR_ID_PATTERN.matcher(mentorId).matches()) {
+            throw new ValidationException("Mentor Employee ID must follow the pattern MEN-xxx (e.g. MEN-123)");
+        }
+
         if (userRepository.existsByEmailIgnoreCase(email)) {
             throw new DuplicateResourceException("An account with email '" + email + "' is already registered");
         }
-        if (userRepository.existsByUserCodeAndRole(mentorId, Role.MENTOR)) {
-            throw new DuplicateResourceException("Mentor ID '" + mentorId + "' is already registered");
+        if (userRepository.existsByUserCode(mentorId) || userRepository.existsByUserCodeAndRole(mentorId, Role.MENTOR)) {
+            throw new DuplicateResourceException("Employee ID '" + mentorId + "' is already registered");
         }
 
         Department dept = resolveDepartment(req.getDepartment());
@@ -206,6 +244,194 @@ public class AuthService {
         } catch (Exception ex) {
             log.warn("Error during token revocation: {}", ex.getMessage());
         }
+    }
+
+    /**
+     * Mentor Forgot Password:
+     * Generates 6-digit OTP, stores HMAC-SHA256, enforces 60s cooldown per email,
+     * restricts to MENTOR accounts, dispatches email via EmailService.
+     */
+    public ApiResponse requestMentorForgotPassword(ForgotPasswordRequest req) {
+        String genericSuccessMessage = "If this email is registered in our system, a 6-digit password reset code has been dispatched to your inbox.";
+
+        if (req == null || req.getEmail() == null || !EMAIL_PATTERN.matcher(req.getEmail().trim()).matches()) {
+            return new ApiResponse(true, genericSuccessMessage);
+        }
+
+        String email = req.getEmail().trim().toLowerCase();
+
+        // 60-second cooldown per email on backend (checked before user lookup to avoid enumeration)
+        LocalDateTime lastReq = forgotPasswordRateLimitMap.get(email);
+        if (lastReq != null && lastReq.isAfter(LocalDateTime.now().minusSeconds(60))) {
+            log.warn("Mentor forgot-password 60-second cooldown triggered for '{}'", email);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Please wait 60 seconds before requesting another verification code.");
+        }
+        forgotPasswordRateLimitMap.put(email, LocalDateTime.now());
+
+        Optional<User> userOpt = userRepository.findByEmailIgnoreCase(email);
+        if (userOpt.isEmpty()) {
+            return new ApiResponse(true, genericSuccessMessage);
+        }
+
+        User user = userOpt.get();
+
+        // A mentor OTP only works for MENTOR accounts
+        if (user.getRole() != Role.MENTOR) {
+            log.warn("Forgot password role mismatch: User '{}' has role {}, not MENTOR", email, user.getRole());
+            return new ApiResponse(true, genericSuccessMessage);
+        }
+
+        // Invalidate any older active tokens for this user
+        passwordResetTokenRepository.invalidateAllActiveTokensForUser(user);
+
+        // Generate cryptographically secure 6-digit OTP
+        int otpCode = 100000 + secureRandom.nextInt(900000);
+        String otp = String.valueOf(otpCode);
+
+        // Store HMAC-SHA256(otp) in database
+        String otpHmac = computeHmacSha256(otp);
+        LocalDateTime expiresAt = LocalDateTime.now().plusMinutes(10);
+
+        PasswordResetToken resetToken = new PasswordResetToken(user, otpHmac, expiresAt);
+        passwordResetTokenRepository.save(resetToken);
+
+        // Dispatch email
+        emailService.sendPasswordResetOtp(user.getEmail(), otp);
+
+        return new ApiResponse(true, genericSuccessMessage);
+    }
+
+    /**
+     * Mentor Verify OTP:
+     * Validates 6-digit OTP against HMAC-SHA256 using constant-time comparison.
+     * Enforces max 5 attempts and 10-minute validity.
+     * Returns a short-lived single-use reset token only if the OTP is correct.
+     */
+    public ApiResponse verifyMentorOtp(VerifyOtpRequest req) {
+        if (req == null || req.getEmail() == null || req.getOtp() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email and 6-digit OTP are required.");
+        }
+
+        String email = req.getEmail().trim().toLowerCase();
+        String enteredOtp = req.getOtp().trim();
+
+        if (!enteredOtp.matches("^\\d{6}$")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP must be exactly 6 digits.");
+        }
+
+        User user = userRepository.findByEmailIgnoreCase(email)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired OTP."));
+
+        if (user.getRole() != Role.MENTOR) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired OTP.");
+        }
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findFirstByUserAndUsedFalseOrderByCreatedAtDesc(user)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid or expired OTP."));
+
+        // Check if maximum wrong attempts reached
+        if (resetToken.getAttempts() >= 5) {
+            resetToken.setUsed(true);
+            passwordResetTokenRepository.save(resetToken);
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many incorrect attempts. This OTP has been invalidated. Please request a new OTP.");
+        }
+
+        // Check 10-minute expiry
+        if (resetToken.isExpired()) {
+            resetToken.setUsed(true);
+            passwordResetTokenRepository.save(resetToken);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "OTP has expired (10-minute validity). Please request a new OTP.");
+        }
+
+        // Constant-time HMAC comparison
+        String enteredHmac = computeHmacSha256(enteredOtp);
+        byte[] storedBytes = resetToken.getTokenHash().getBytes(StandardCharsets.UTF_8);
+        byte[] enteredBytes = enteredHmac.getBytes(StandardCharsets.UTF_8);
+
+        if (!MessageDigest.isEqual(storedBytes, enteredBytes)) {
+            resetToken.incrementAttempts();
+            if (resetToken.getAttempts() >= 5) {
+                resetToken.setUsed(true);
+                passwordResetTokenRepository.save(resetToken);
+                throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                        "Too many incorrect attempts. This OTP has been invalidated. Please request a new OTP.");
+            }
+            passwordResetTokenRepository.save(resetToken);
+            int remaining = 5 - resetToken.getAttempts();
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Invalid OTP. " + remaining + " attempt(s) remaining.");
+        }
+
+        // Generate short-lived single-use reset token
+        byte[] randomBytes = new byte[32];
+        secureRandom.nextBytes(randomBytes);
+        String singleUseResetToken = Hex.encodeHexString(randomBytes);
+        String resetTokenHash = DigestUtils.sha256Hex(singleUseResetToken);
+
+        // Store resetTokenHash and invalidate raw OTP so it cannot be reused
+        resetToken.setResetTokenHash(resetTokenHash);
+        resetToken.setTokenHash("VERIFIED_" + resetToken.getId());
+        passwordResetTokenRepository.save(resetToken);
+
+        Map<String, Object> data = Map.of("resetToken", singleUseResetToken);
+        return new ApiResponse(true, "OTP verified successfully. You may now set a new password.", data);
+    }
+
+    /**
+     * Mentor Reset Password:
+     * Requires single-use reset token from verify-otp, validates password complexity,
+     * updates password with BCrypt, and invalidates all reset tokens.
+     */
+    public ApiResponse resetMentorPassword(ResetPasswordRequest req) {
+        if (req == null || req.getToken() == null || req.getToken().trim().isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Reset token is required.");
+        }
+        if (req.getNewPassword() == null || !PASSWORD_PATTERN.matcher(req.getNewPassword()).matches()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Password must be at least 8 characters with uppercase, lowercase, and a number.");
+        }
+        if (req.getConfirmPassword() != null && !req.getNewPassword().equals(req.getConfirmPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Passwords do not match.");
+        }
+
+        String rawToken = req.getToken().trim();
+        String resetTokenHash = DigestUtils.sha256Hex(rawToken);
+
+        PasswordResetToken resetToken = passwordResetTokenRepository.findByResetTokenHashAndUsedFalse(resetTokenHash)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Invalid or expired password reset session. Please request a new OTP."));
+
+        if (resetToken.isExpired()) {
+            resetToken.setUsed(true);
+            passwordResetTokenRepository.save(resetToken);
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                    "Password reset session has expired. Please request a new OTP.");
+        }
+
+        User user = resetToken.getUser();
+        if (user.getRole() != Role.MENTOR) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid reset session for mentor portal.");
+        }
+
+        // Update password with BCrypt
+        user.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
+        user.setMustChangePassword(false);
+        user.setFailedAttempts(0);
+        user.setLockedUntil(null);
+        userRepository.save(user);
+
+        // Mark token as used
+        resetToken.setUsed(true);
+        passwordResetTokenRepository.save(resetToken);
+
+        // Invalidate all tokens for user
+        passwordResetTokenRepository.invalidateAllActiveTokensForUser(user);
+
+        log.info("Password successfully reset for mentor '{}'", user.getEmail());
+        return new ApiResponse(true, "Password has been successfully updated. You may now sign in.");
     }
 
     /**

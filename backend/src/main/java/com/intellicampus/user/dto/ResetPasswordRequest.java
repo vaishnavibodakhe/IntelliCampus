@@ -1,5 +1,6 @@
 package com.intellicampus.user.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
@@ -7,6 +8,7 @@ import jakarta.validation.constraints.Size;
 public class ResetPasswordRequest {
 
     @NotBlank(message = "Reset token is required")
+    @JsonAlias({"token", "resetToken"})
     private String token;
 
     @NotBlank(message = "New password is required")

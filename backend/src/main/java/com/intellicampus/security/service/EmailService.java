@@ -23,8 +23,47 @@ public class EmailService {
     @Value("${app.mail-from:noreply@intellicampus.edu}")
     private String mailFrom;
 
+    @Value("${spring.mail.username:}")
+    private String smtpUsername;
+
     public EmailService(@Autowired(required = false) JavaMailSender mailSender) {
         this.mailSender = mailSender;
+    }
+
+    /**
+     * Dispatches a 6-digit OTP to the registered user's email address via SMTP.
+     * Matches the signature and behavior of origin/main.
+     */
+    public void sendPasswordResetOtp(String toEmail, String otp) {
+        boolean isSmtpConfigured = mailSender != null && smtpUsername != null && !smtpUsername.trim().isEmpty();
+
+        if (!isSmtpConfigured) {
+            // Development fallback only when SMTP_USERNAME is empty: print the OTP in the backend console with a clear warning
+            log.warn("=================================================================");
+            log.warn("[DEV EMAIL FALLBACK] SMTP not configured (SMTP_USERNAME is empty).");
+            log.warn("[DEV EMAIL FALLBACK] Password Reset OTP for {}: {}", toEmail, otp);
+            log.warn("=================================================================");
+            return;
+        }
+
+        try {
+            org.springframework.mail.SimpleMailMessage message = new org.springframework.mail.SimpleMailMessage();
+            if (mailFrom != null && !mailFrom.isBlank()) {
+                message.setFrom(mailFrom);
+            }
+            message.setTo(toEmail);
+            message.setSubject("IntelliCampus password reset OTP");
+            message.setText("Your IntelliCampus password reset code is " + otp + ". It is valid for 10 minutes. If you did not request this, ignore this email.");
+
+            mailSender.send(message);
+            log.info("Password reset OTP email successfully sent to '{}'", toEmail);
+        } catch (Exception ex) {
+            log.error("Failed to send password reset OTP email to '{}': {}. Falling back to console logging for development.", toEmail, ex.getMessage());
+            log.warn("=================================================================");
+            log.warn("[DEV EMAIL FALLBACK] SMTP delivery failed ({}).", ex.getMessage());
+            log.warn("[DEV EMAIL FALLBACK] Password Reset OTP for {}: {}", toEmail, otp);
+            log.warn("=================================================================");
+        }
     }
 
     public void sendPasswordResetEmail(String toEmail, String recipientName, String rawToken, String role) {

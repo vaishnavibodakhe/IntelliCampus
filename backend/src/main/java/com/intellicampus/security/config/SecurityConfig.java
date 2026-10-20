@@ -94,6 +94,8 @@ public class SecurityConfig {
                     "/api/mentor/login",
                     "/api/mentor/register",
                     "/api/mentor/forgot-password",
+                    "/api/mentor/verify-otp",
+                    "/api/mentor/reset-password",
                     "/api/mentor/reset-password/**",
                     "/api/logout"
                 ).permitAll()

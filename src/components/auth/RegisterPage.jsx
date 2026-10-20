@@ -19,7 +19,8 @@ import {
   isValidPhone, 
   isPasswordValid, 
   validatePasswordCriteria, 
-  calculatePasswordStrength 
+  calculatePasswordStrength,
+  isValidMentorId 
 } from './authUtils';
 import { useAuth } from '../../context/AuthContext';
 
@@ -68,8 +69,14 @@ export default function RegisterPage({
     errors.email = 'Please enter a valid official institutional email address';
   }
 
-  if (touched.employeeId && (!employeeId.trim() || employeeId.trim().length < 3)) {
-    errors.employeeId = 'Employee ID is required (e.g. FAC-102 or MNT-201)';
+  if (touched.employeeId) {
+    if (!employeeId.trim()) {
+      errors.employeeId = isFaculty ? 'Employee ID is required (e.g. FAC-102)' : 'Employee ID is required (e.g. MEN-123)';
+    } else if (!isFaculty && !isValidMentorId(employeeId)) {
+      errors.employeeId = 'Mentor Employee ID must follow the pattern MEN-xxx (e.g. MEN-123)';
+    } else if (isFaculty && employeeId.trim().length < 3) {
+      errors.employeeId = 'Faculty ID must be at least 3 characters (e.g. FAC-102)';
+    }
   }
 
   if (touched.department && !department.trim()) {
@@ -92,10 +99,14 @@ export default function RegisterPage({
     errors.confirmPassword = 'Passwords do not match';
   }
 
+  const isEmployeeIdValid = isFaculty
+    ? employeeId.trim().length >= 3
+    : isValidMentorId(employeeId);
+
   const isFormValid =
     fullName.trim().length >= 3 &&
     isValidEmail(email) &&
-    employeeId.trim().length >= 3 &&
+    isEmployeeIdValid &&
     department.trim().length > 0 &&
     isValidPhone(phone) &&
     (isFaculty || specialization.trim().length >= 3) &&
@@ -266,7 +277,7 @@ export default function RegisterPage({
               <input
                 id="reg-employeeid"
                 type="text"
-                placeholder={isFaculty ? 'e.g. FAC-102' : 'e.g. MNT-201'}
+                placeholder={isFaculty ? 'e.g. FAC-102' : 'e.g. MEN-123'}
                 value={employeeId}
                 onChange={(e) => setEmployeeId(e.target.value)}
                 onBlur={() => handleBlur('employeeId')}
@@ -274,6 +285,9 @@ export default function RegisterPage({
                 aria-invalid={!!errors.employeeId}
               />
             </div>
+            <span id="reg-employeeid-hint" style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px', display: 'block' }}>
+              {isFaculty ? 'Expected format: FAC-xxx (e.g. FAC-102)' : 'Expected format: MEN-xxx (e.g. MEN-123)'}
+            </span>
             {errors.employeeId && (
               <p className="auth-error" role="alert">
                 <AlertCircle size={13} />

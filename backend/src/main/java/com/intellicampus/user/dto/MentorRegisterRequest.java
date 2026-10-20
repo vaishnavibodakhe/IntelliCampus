@@ -11,8 +11,8 @@ public class MentorRegisterRequest {
     private String fullName;
 
     @NotBlank(message = "Mentor ID is required")
-    @Size(min = 2, max = 40, message = "Mentor ID must be between 2 and 40 characters")
-    @JsonAlias({"employeeId", "mentorId"})
+    @Pattern(regexp = "^MEN-\\d{3,}$", message = "Mentor Employee ID must follow the pattern MEN-xxx (e.g. MEN-123)")
+    @JsonAlias({"employeeId", "mentorId", "userCode"})
     private String mentorId;
 
     @NotBlank(message = "Email is required")

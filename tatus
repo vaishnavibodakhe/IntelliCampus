@@ -1,0 +1,113 @@
+warning: in the working copy of 'backend/src/main/java/com/intellicampus/user/dto/VerifyOtpRequest.java', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'backend/src/main/resources/db/migration/V8__mentor_otp_password_reset.sql', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/backend/src/main/java/com/intellicampus/user/dto/VerifyOtpRequest.java b/backend/src/main/java/com/intellicampus/user/dto/VerifyOtpRequest.java[m
+[1mnew file mode 100644[m
+[1mindex 0000000..59ebb18[m
+[1m--- /dev/null[m
+[1m+++ b/backend/src/main/java/com/intellicampus/user/dto/VerifyOtpRequest.java[m
+[36m@@ -0,0 +1,42 @@[m
+[32m+[m[32mpackage com.intellicampus.user.dto;[m
+[32m+[m
+[32m+[m[32mimport com.fasterxml.jackson.annotation.JsonAlias;[m
+[32m+[m[32mimport jakarta.validation.constraints.Email;[m
+[32m+[m[32mimport jakarta.validation.constraints.NotBlank;[m
+[32m+[m[32mimport jakarta.validation.constraints.Pattern;[m
+[32m+[m
+[32m+[m[32mpublic class VerifyOtpRequest {[m
+[32m+[m
+[32m+[m[32m    @NotBlank(message = "Email is required")[m
+[32m+[m[32m    @Email(message = "Invalid email format")[m
+[32m+[m[32m    private String email;[m
+[32m+[m
+[32m+[m[32m    @NotBlank(message = "6-digit OTP code is required")[m
+[32m+[m[32m    @Pattern(regexp = "^\\d{6}$", message = "OTP must be exactly 6 digits")[m
+[32m+[m[32m    @JsonAlias({"otp", "code", "token"})[m
+[32m+[m[32m    private String otp;[m
+[32m+[m
+[32m+[m[32m    private String role;[m
+[32m+[m
+[32m+[m[32m    public VerifyOtpRequest() {}[m
+[32m+[m
+[32m+[m[32m    public VerifyOtpRequest(String email, String otp) {[m
+[32m+[m[32m        this.email = email;[m
+[32m+[m[32m        this.otp = otp;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public VerifyOtpRequest(String email, String otp, String role) {[m
+[32m+[m[32m        this.email = email;[m
+[32m+[m[32m        this.otp = otp;[m
+[32m+[m[32m        this.role = role;[m
+[32m+[m[32m    }[m
+[32m+[m
+[32m+[m[32m    public String getEmail() { return email; }[m
+[32m+[m[32m    public void setEmail(String email) { this.email = email; }[m
+[32m+[m
+[32m+[m[32m    public String getOtp() { return otp; }[m
+[32m+[m[32m    public void setOtp(String otp) { this.otp = otp; }[m
+[32m+[m
+[32m+[m[32m    public String getRole() { return role; }[m
+[32m+[m[32m    public void setRole(String role) { this.role = role; }[m
+[32m+[m[32m}[m
+[1mdiff --git a/backend/src/main/resources/db/migration/V8__mentor_otp_password_reset.sql b/backend/src/main/resources/db/migration/V8__mentor_otp_password_reset.sql[m
+[1mnew file mode 100644[m
+[1mindex 0000000..9bddb03[m
+[1m--- /dev/null[m
+[1m+++ b/backend/src/main/resources/db/migration/V8__mentor_otp_password_reset.sql[m
+[36m@@ -0,0 +1,57 @@[m
+[32m+[m[32m-- V8__mentor_otp_password_reset.sql[m
+[32m+[m[32m-- Mentor & Staff Authentication: Secure OTP Password Reset Flow[m
+[32m+[m[32m-- Adds attempts and reset_token_hash columns to password_reset_tokens table safely[m
+[32m+[m
+[32m+[m[32m-- 1. Conditionally add attempts column if not already present[m
+[32m+[m[32mSET @col_attempts_exists = ([m
+[32m+[m[32m    SELECT COUNT(*)[m
+[32m+[m[32m    FROM information_schema.COLUMNS[m
+[32m+[m[32m    WHERE TABLE_SCHEMA = DATABASE()[m
+[32m+[m[32m      AND TABLE_NAME = 'password_reset_tokens'[m
+[32m+[m[32m      AND COLUMN_NAME = 'attempts'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mSET @sql_attempts = IF(@col_attempts_exists = 0,[m
+[32m+[m[32m    'ALTER TABLE password_reset_tokens ADD COLUMN attempts INT NOT NULL DEFAULT 0 AFTER used',[m
+[32m+[m[32m    'SELECT "Column attempts already exists"'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mPREPARE stmt_attempts FROM @sql_attempts;[m
+[32m+[m[32mEXECUTE stmt_attempts;[m
+[32m+[m[32mDEALLOCATE PREPARE stmt_attempts;[m
+[32m+[m
+[32m+[m[32m-- 2. Conditionally add reset_token_hash column if not already present[m
+[32m+[m[32mSET @col_reset_hash_exists = ([m
+[32m+[m[32m    SELECT COUNT(*)[m
+[32m+[m[32m    FROM information_schema.COLUMNS[m
+[32m+[m[32m    WHERE TABLE_SCHEMA = DATABASE()[m
+[32m+[m[32m      AND TABLE_NAME = 'password_reset_tokens'[m
+[32m+[m[32m      AND COLUMN_NAME = 'reset_token_hash'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mSET @sql_reset_hash = IF(@col_reset_hash_exists = 0,[m
+[32m+[m[32m    'ALTER TABLE password_reset_tokens ADD COLUMN reset_token_hash VARCHAR(64) NULL AFTER token_hash',[m
+[32m+[m[32m    'SELECT "Column reset_token_hash already exists"'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mPREPARE stmt_reset_hash FROM @sql_reset_hash;[m
+[32m+[m[32mEXECUTE stmt_reset_hash;[m
+[32m+[m[32mDEALLOCATE PREPARE stmt_reset_hash;[m
+[32m+[m
+[32m+[m[32m-- 3. Conditionally create index for reset_token_hash[m
+[32m+[m[32mSET @idx_reset_hash_exists = ([m
+[32m+[m[32m    SELECT COUNT(*)[m
+[32m+[m[32m    FROM information_schema.STATISTICS[m
+[32m+[m[32m    WHERE TABLE_SCHEMA = DATABASE()[m
+[32m+[m[32m      AND TABLE_NAME = 'password_reset_tokens'[m
+[32m+[m[32m      AND INDEX_NAME = 'idx_pwd_reset_token_hash_token'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mSET @sql_idx = IF(@idx_reset_hash_exists = 0,[m
+[32m+[m[32m    'CREATE INDEX idx_pwd_reset_token_hash_token ON password_reset_tokens (reset_token_hash)',[m
+[32m+[m[32m    'SELECT "Index idx_pwd_reset_token_hash_token already exists"'[m
+[32m+[m[32m);[m
+[32m+[m
+[32m+[m[32mPREPARE stmt_idx FROM @sql_idx;[m
+[32m+[m[32mEXECUTE stmt_idx;[m
+[32m+[m[32mDEALLOCATE PREPARE stmt_idx;[m
