@@ -12,16 +12,18 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class FlywayMigrationRealDbTest {
 
     private static final String JDBC_URL = "jdbc:mysql://localhost:3307/intellicampus_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true";
     private static final String DB_USER = "campus_admin";
-    private static final String DB_PASS = "SecureCampusPassword2026!";
+    private static final String DB_PASS = System.getenv("DB_PASSWORD");
 
     @Test
     @DisplayName("Verify Flyway V1..V3 runs cleanly on real MySQL and persisting PENDING student succeeds")
     void testFlywayMigrationsAndPendingStudentPersistence() throws Exception {
+        assumeTrue(DB_PASS != null && !DB_PASS.trim().isEmpty(), "Skipping test: DB_PASSWORD environment variable not set");
         System.out.println("=== 1. Executing Flyway V1..V3 on real MySQL (localhost:3307/intellicampus_db) ===");
         Flyway flyway = Flyway.configure()
                 .dataSource(JDBC_URL, DB_USER, DB_PASS)
