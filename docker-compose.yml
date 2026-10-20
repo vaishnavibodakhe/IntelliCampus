@@ -61,7 +61,7 @@ services:
     container_name: intellicampus-db
     restart: unless-stopped
     ports:
-      - "3306:3306"
+      - "${DB_PORT_EXTERNAL:-3307}:3306"
     environment:
       MYSQL_ROOT_PASSWORD: RootSecurePassword2026!
       MYSQL_DATABASE: intellicampus_db

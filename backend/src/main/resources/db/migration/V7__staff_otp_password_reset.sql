@@ -15,3 +15,11 @@ CREATE TABLE IF NOT EXISTS password_reset_tokens (
   INDEX idx_pwd_reset_user_id (user_id),
   INDEX idx_pwd_reset_expires (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens' AND COLUMN_NAME = 'expires_at');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE password_reset_tokens ADD COLUMN expires_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'password_reset_tokens' AND COLUMN_NAME = 'attempts');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE password_reset_tokens ADD COLUMN attempts INT NOT NULL DEFAULT 0', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;

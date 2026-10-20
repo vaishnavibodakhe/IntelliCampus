@@ -24,6 +24,12 @@ public class SessionPhoto {
     @Column(name = "phash")
     private Long phash;
 
+    @Column(name = "spoof_score")
+    private Double spoofScore;
+
+    @Column(name = "flagged_for_review", nullable = false)
+    private Boolean flaggedForReview = false;
+
     @Column(nullable = false)
     private Double latitude;
 
@@ -75,6 +81,12 @@ public class SessionPhoto {
 
     public Integer getFaceCount() { return faceCount; }
     public void setFaceCount(Integer faceCount) { this.faceCount = faceCount; }
+
+    public Double getSpoofScore() { return spoofScore; }
+    public void setSpoofScore(Double spoofScore) { this.spoofScore = spoofScore; }
+
+    public Boolean getFlaggedForReview() { return flaggedForReview; }
+    public void setFlaggedForReview(Boolean flaggedForReview) { this.flaggedForReview = flaggedForReview; }
 
     public LocalDateTime getCapturedAt() { return capturedAt; }
     public void setCapturedAt(LocalDateTime capturedAt) { this.capturedAt = capturedAt; }

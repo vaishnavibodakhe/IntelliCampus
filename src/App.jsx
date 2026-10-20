@@ -10,7 +10,6 @@ import StudentAuthView from './components/StudentAuthView';
 import PublicVerifierView from './components/PublicVerifierView';
 import AuditChainModal from './components/AuditChainModal';
 import ChatbotDrawer from './components/ChatbotDrawer';
-import { getStoredStudentSession, clearStudentSession } from './utils/studentAuthService';
 
 import AdminAuthView from './components/staff/AdminAuthView';
 import HodAuthView from './components/staff/HodAuthView';
@@ -32,10 +31,21 @@ import {
   INITIAL_RISK_STUDENTS
 } from './data/mockData';
 import { computeAuditEntryHash } from './utils/cryptoAndGeo';
+import { api, getStoredUser, clearAuthSession } from './api/client';
 
 export default function App() {
   const [currentRole, setCurrentRole] = useState('FACULTY');
   const [theme, setTheme] = useState('dark');
+
+  // Authentication State (JWT & User Session for students)
+  const [authenticatedUser, setAuthenticatedUser] = useState(() => {
+    const stored = getStoredUser();
+    if (stored && stored.role === 'STUDENT' && stored.status === 'PENDING') {
+      return null;
+    }
+    return stored;
+  });
+  const [authNotification, setAuthNotification] = useState(null);
 
   // Application Data Stores
   const [users, setUsers] = useState(INITIAL_USERS);
@@ -54,9 +64,6 @@ export default function App() {
   // Modals & Drawers
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
-
-  // Authenticated Student Session (stored in localStorage)
-  const [studentSession, setStudentSession] = useState(() => getStoredStudentSession());
 
   // Authenticated Staff Session (stored in localStorage)
   const [staffSession, setStaffSession] = useState(() => getStoredStaffSession());
@@ -114,20 +121,18 @@ export default function App() {
     document.documentElement.setAttribute('data-theme', theme);
   }, [theme]);
 
-  // Current active student (from real authenticated session or seed data)
-  const currentStudent = studentSession?.user ? {
-    id: studentSession.user.id,
-    userCode: studentSession.user.userCode,
-    name: studentSession.user.name,
-    email: studentSession.user.email,
-    role: 'STUDENT',
-    rollNo: studentSession.user.rollNo,
-    department: studentSession.user.department,
-    division: studentSession.user.division || `Year ${studentSession.user.year || 3} Div A`,
-    year: `Year ${studentSession.user.year || 3}`,
-    status: 'ACTIVE',
-    attendanceRate: 85.0
-  } : (users.find(u => u.userCode === 'student.aarav') || users[4]);
+  // Current active student session (only when a valid authenticated student session exists)
+  const currentStudent = (authenticatedUser && authenticatedUser.role === 'STUDENT' && authenticatedUser.status !== 'PENDING')
+    ? (() => {
+        const found = users.find(u => u.id === authenticatedUser.id || u.email === authenticatedUser.email);
+        const resolved = found ? { ...found, ...authenticatedUser } : authenticatedUser;
+        return {
+          ...resolved,
+          status: resolved.status || authenticatedUser.status || 'PENDING',
+          faceEnrolled: resolved.faceEnrolled !== undefined ? resolved.faceEnrolled : Boolean(authenticatedUser.faceEnrolled)
+        };
+      })()
+    : null;
 
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
@@ -162,6 +167,73 @@ export default function App() {
     setAuditLogs(prev => [...prev, completedBlock]);
   };
 
+  // Auth Lifecycle Handlers
+  const handleLoginSuccess = (authData) => {
+    if (authData && authData.user) {
+      setAuthenticatedUser(authData.user);
+      setCurrentRole(authData.user.role || 'STUDENT');
+      setAuthNotification({ type: 'success', message: `Welcome back, ${authData.user.name}!` });
+      setTimeout(() => setAuthNotification(null), 4000);
+    }
+  };
+
+  const handleRegisterSuccess = (authData) => {
+    if (authData && authData.user) {
+      const backendStatus = authData.user.status || (authData.student?.faceEnrolled ? 'ACTIVE' : 'PENDING');
+      const backendFaceEnrolled = authData.student?.faceEnrolled !== undefined
+        ? Boolean(authData.student.faceEnrolled)
+        : (authData.user?.faceEnrolled !== undefined ? Boolean(authData.user.faceEnrolled) : (backendStatus === 'ACTIVE'));
+
+      const newUser = {
+        id: authData.user.id || (users.length + 1),
+        userCode: authData.user.userCode,
+        name: authData.user.name,
+        email: authData.user.email,
+        role: 'STUDENT',
+        department: authData.user.department || 'Computer Science',
+        status: backendStatus,
+        rollNo: authData.student?.rollNo || 'CS-NEW',
+        division: authData.student?.division || 'Div A',
+        year: authData.student?.year || 'Year 3',
+        attendanceRate: 0.0,
+        faceEnrolled: backendFaceEnrolled
+      };
+
+      setUsers(prev => {
+        const idx = prev.findIndex(u => u.id === newUser.id || u.email === newUser.email);
+        if (idx >= 0) {
+          const updated = [...prev];
+          updated[idx] = { ...updated[idx], ...newUser };
+          return updated;
+        }
+        return [...prev, newUser];
+      });
+
+      // Do not auto-login before face enrollment succeeds (status must be ACTIVE with faceEnrolled)
+      if (backendStatus === 'ACTIVE' && backendFaceEnrolled) {
+        setAuthenticatedUser(newUser);
+        setCurrentRole('STUDENT');
+        setAuthNotification({ type: 'success', message: `Registration & Face ID enrollment complete! Welcome, ${newUser.name}.` });
+      } else {
+        setAuthNotification({ type: 'info', message: 'Registration submitted (status: PENDING). Complete facial enrollment before logging in.' });
+      }
+      setTimeout(() => setAuthNotification(null), 5000);
+    }
+  };
+
+  const handleLogout = async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.warn('Logout API call:', err);
+    } finally {
+      clearAuthSession();
+      setAuthenticatedUser(null);
+      setAuthNotification({ type: 'info', message: 'You have been securely signed out. Session token invalidated.' });
+      setTimeout(() => setAuthNotification(null), 4000);
+    }
+  };
+
   const handleStaffLogout = async () => {
     if (staffSession) {
       await logoutStaffApi(staffSession.refreshToken, staffSession.accessToken || staffSession.token);
@@ -187,6 +259,35 @@ export default function App() {
         activeSession={activeSession}
         notificationCount={notices.length}
       />
+
+      {/* Global Auth Status Notification Toast */}
+      {authNotification && (
+        <div style={{
+          position: 'fixed',
+          top: '75px',
+          right: '25px',
+          zIndex: 9999,
+          background: authNotification.type === 'success' ? '#065f46' : '#1e3a8a',
+          color: '#ffffff',
+          padding: '10px 18px',
+          borderRadius: '8px',
+          boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          fontSize: '0.9rem',
+          fontWeight: 600,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '10px'
+        }}>
+          <span>{authNotification.message}</span>
+          <button 
+            onClick={() => setAuthNotification(null)}
+            style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}
+          >
+            ✕
+          </button>
+        </div>
+      )}
 
       {/* Main Role-Based Workflow Viewport */}
       <main className="main-viewport">
@@ -287,32 +388,28 @@ export default function App() {
               />
             )}
 
-            {currentRole === 'STUDENT' && !studentSession && (
-              <StudentAuthView 
-                onAuthSuccess={(session) => {
-                  setStudentSession(session);
-                }}
-              />
-            )}
-
-            {currentRole === 'STUDENT' && studentSession && (
-              <StudentView 
-                currentUser={currentStudent}
-                onLogout={() => {
-                  clearStudentSession();
-                  setStudentSession(null);
-                }}
-                activeSession={activeSession}
-                sessions={sessions}
-                setSessions={setSessions}
-                marks={marks}
-                leaveRequests={leaveRequests}
-                setLeaveRequests={setLeaveRequests}
-                notices={notices}
-                issuedDocuments={issuedDocuments}
-                onOpenChat={() => setIsChatbotOpen(true)}
-                onAddAuditLog={handleAddAuditLog}
-              />
+            {currentRole === 'STUDENT' && (
+              currentStudent ? (
+                <StudentView 
+                  currentUser={currentStudent}
+                  activeSession={activeSession}
+                  sessions={sessions}
+                  setSessions={setSessions}
+                  marks={marks}
+                  leaveRequests={leaveRequests}
+                  setLeaveRequests={setLeaveRequests}
+                  notices={notices}
+                  issuedDocuments={issuedDocuments}
+                  onOpenChat={() => setIsChatbotOpen(true)}
+                  onAddAuditLog={handleAddAuditLog}
+                  onLogout={handleLogout}
+                />
+              ) : (
+                <StudentAuthView 
+                  onLoginSuccess={handleLoginSuccess}
+                  onRegisterSuccess={handleRegisterSuccess}
+                />
+              )
             )}
 
             {currentRole === 'PUBLIC' && (

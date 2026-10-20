@@ -14,7 +14,8 @@ import {
   ExternalLink, 
   ChevronRight, 
   RefreshCw, 
-  Bell 
+  Bell,
+  LogOut 
 } from 'lucide-react';
 import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
 
@@ -197,24 +198,20 @@ export default function StudentView({
             Monitor attendance metrics, confirm classroom presence, verify grades, track leaves, and consult the document-grounded chatbot.
           </p>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {currentUser.name} ({currentUser.rollNo || currentUser.userCode}) • {currentUser.division || currentUser.department || 'General'}
+            <span className="dot online" /> {currentUser.name} ({currentUser.rollNo || currentUser.userCode || 'ID'}) • {currentUser.division || currentUser.department || 'Campus'}
           </div>
           {onLogout && (
-            <button 
+            <button
               type="button"
               onClick={onLogout}
-              className="btn-secondary"
-              style={{
-                padding: '0.4rem 0.85rem',
-                fontSize: '0.8rem',
-                borderRadius: '0.5rem',
-                cursor: 'pointer'
-              }}
-              title="Sign out of student account"
+              className="btn-secondary btn-sm flex items-center gap-1 logout-btn"
+              title="Sign Out of Student Portal"
+              id="student-logout-btn"
             >
-              Sign Out
+              <LogOut size={14} />
+              <span>Sign Out</span>
             </button>
           )}
         </div>

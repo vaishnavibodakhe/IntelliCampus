@@ -3,93 +3,225 @@
 -- Compliant with IC-SRS-1.0 and Hibernate 6.4 Schema Validation Specifications
 
 -- 1. Alter Table: attendance_records (AttendanceRecord entity)
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_records' AND COLUMN_NAME = 'confirmed');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE attendance_records ADD COLUMN confirmed BOOLEAN NOT NULL DEFAULT FALSE AFTER spoof_score', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_records' AND COLUMN_NAME = 'status_reason');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE attendance_records ADD COLUMN status_reason VARCHAR(255) NULL AFTER final_status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 ALTER TABLE attendance_records
-  ADD COLUMN confirmed BOOLEAN NOT NULL DEFAULT FALSE AFTER spoof_score,
-  ADD COLUMN status_reason VARCHAR(255) NULL AFTER final_status,
   MODIFY COLUMN face_score DOUBLE NULL,
   MODIFY COLUMN spoof_score DOUBLE NULL,
   MODIFY COLUMN final_status VARCHAR(16) NOT NULL DEFAULT 'PENDING';
 
 -- 2. Alter Table: attendance_sessions (AttendanceSession entity)
-ALTER TABLE attendance_sessions
-  ADD COLUMN photo_window_ends_at DATETIME(6) NULL AFTER started_at,
-  ADD COLUMN created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) AFTER finalised_at,
-  ADD INDEX idx_sessions_started_at (started_at);
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_sessions' AND COLUMN_NAME = 'photo_window_ends_at');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE attendance_sessions ADD COLUMN photo_window_ends_at DATETIME(6) NULL AFTER started_at', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_sessions' AND COLUMN_NAME = 'created_at');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE attendance_sessions ADD COLUMN created_at DATETIME(6) DEFAULT CURRENT_TIMESTAMP(6) AFTER finalised_at', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @i_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'attendance_sessions' AND INDEX_NAME = 'idx_sessions_started_at');
+SET @sql = IF(@i_exists = 0, 'ALTER TABLE attendance_sessions ADD INDEX idx_sessions_started_at (started_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 3. Alter Table: audit_logs (AuditLogEntry entity)
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_logs' AND COLUMN_NAME = 'actor_name');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE audit_logs ADD COLUMN actor_name VARCHAR(100) NOT NULL DEFAULT ''System'' AFTER actor_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 ALTER TABLE audit_logs
-  ADD COLUMN actor_name VARCHAR(100) NOT NULL DEFAULT 'System' AFTER actor_id,
-  MODIFY COLUMN entity_id VARCHAR(64) NOT NULL,
-  ADD INDEX idx_audit_created_at (created_at);
+  MODIFY COLUMN entity_id VARCHAR(64) NOT NULL;
+
+SET @i_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'audit_logs' AND INDEX_NAME = 'idx_audit_created_at');
+SET @sql = IF(@i_exists = 0, 'ALTER TABLE audit_logs ADD INDEX idx_audit_created_at (created_at)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 UPDATE audit_logs SET actor_name = 'System' WHERE id = 1;
 
 -- 4. Alter Table: rooms (Classroom entity)
 ALTER TABLE rooms
-  MODIFY COLUMN name VARCHAR(60) NOT NULL,
-  ADD COLUMN capacity INT NULL AFTER radius_m,
-  ADD COLUMN department_id BIGINT UNSIGNED NULL AFTER capacity,
-  ADD CONSTRAINT fk_rooms_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL;
+  MODIFY COLUMN name VARCHAR(60) NOT NULL;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rooms' AND COLUMN_NAME = 'capacity');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE rooms ADD COLUMN capacity INT NULL AFTER radius_m', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rooms' AND COLUMN_NAME = 'department_id');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE rooms ADD COLUMN department_id BIGINT UNSIGNED NULL AFTER capacity', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @k_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'rooms' AND CONSTRAINT_NAME = 'fk_rooms_dept');
+SET @sql = IF(@k_exists = 0, 'ALTER TABLE rooms ADD CONSTRAINT fk_rooms_dept FOREIGN KEY (department_id) REFERENCES departments(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 5. Alter Table: subjects (Subject entity)
-ALTER TABLE subjects
-  ADD COLUMN credits INT NOT NULL DEFAULT 4 AFTER name,
-  ADD COLUMN faculty_id BIGINT UNSIGNED NULL AFTER department_id,
-  ADD CONSTRAINT fk_subjects_faculty FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE SET NULL;
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subjects' AND COLUMN_NAME = 'credits');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE subjects ADD COLUMN credits INT NOT NULL DEFAULT 4 AFTER name', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subjects' AND COLUMN_NAME = 'faculty_id');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE subjects ADD COLUMN faculty_id BIGINT UNSIGNED NULL AFTER department_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @k_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subjects' AND CONSTRAINT_NAME = 'fk_subjects_faculty');
+SET @sql = IF(@k_exists = 0, 'ALTER TABLE subjects ADD CONSTRAINT fk_subjects_faculty FOREIGN KEY (faculty_id) REFERENCES users(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 6. Alter Table: students (StudentProfile entity)
 ALTER TABLE students
-  MODIFY COLUMN roll_no VARCHAR(30) NOT NULL,
-  ADD COLUMN face_enrolled BOOLEAN DEFAULT FALSE AFTER mentor_id,
-  ADD COLUMN attendance_rate DOUBLE DEFAULT 0.0 AFTER face_enrolled,
-  ADD COLUMN backlogs INT DEFAULT 0 AFTER attendance_rate,
-  ADD COLUMN fee_status VARCHAR(20) DEFAULT 'PAID' AFTER backlogs,
-  ADD COLUMN due_amount DOUBLE DEFAULT 0.0 AFTER fee_status;
+  MODIFY COLUMN roll_no VARCHAR(30) NOT NULL;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'face_enrolled');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE students ADD COLUMN face_enrolled BOOLEAN DEFAULT FALSE AFTER mentor_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'attendance_rate');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE students ADD COLUMN attendance_rate DOUBLE DEFAULT 0.0 AFTER face_enrolled', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'backlogs');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE students ADD COLUMN backlogs INT DEFAULT 0 AFTER attendance_rate', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'fee_status');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE students ADD COLUMN fee_status VARCHAR(20) DEFAULT ''PAID'' AFTER backlogs', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'students' AND COLUMN_NAME = 'due_amount');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE students ADD COLUMN due_amount DOUBLE DEFAULT 0.0 AFTER fee_status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 7. Alter Table: session_photos (SessionPhoto entity)
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'session_photos' AND COLUMN_NAME = 'face_count');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE session_photos ADD COLUMN face_count INT DEFAULT 0 AFTER accuracy_m', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
 ALTER TABLE session_photos
-  ADD COLUMN face_count INT DEFAULT 0 AFTER accuracy_m,
   MODIFY COLUMN phash BIGINT NULL;
 
 -- 8. Alter Table: mark_entries (MarkEntry entity)
 ALTER TABLE mark_entries
   MODIFY COLUMN marks DOUBLE NOT NULL,
-  MODIFY COLUMN max_marks DOUBLE NOT NULL,
-  ADD COLUMN updated_by BIGINT UNSIGNED NULL AFTER status,
-  ADD CONSTRAINT fk_marks_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL,
-  ADD INDEX idx_marks_status (status);
+  MODIFY COLUMN max_marks DOUBLE NOT NULL;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mark_entries' AND COLUMN_NAME = 'updated_by');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE mark_entries ADD COLUMN updated_by BIGINT UNSIGNED NULL AFTER status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @k_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mark_entries' AND CONSTRAINT_NAME = 'fk_marks_updated_by');
+SET @sql = IF(@k_exists = 0, 'ALTER TABLE mark_entries ADD CONSTRAINT fk_marks_updated_by FOREIGN KEY (updated_by) REFERENCES users(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @i_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'mark_entries' AND INDEX_NAME = 'idx_marks_status');
+SET @sql = IF(@i_exists = 0, 'ALTER TABLE mark_entries ADD INDEX idx_marks_status (status)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 9. Alter Table: leave_requests (LeaveRequest entity)
-ALTER TABLE leave_requests
-  ADD COLUMN days_count INT NOT NULL DEFAULT 1 AFTER to_date,
-  ADD COLUMN attachment_name VARCHAR(200) NULL AFTER reason,
-  ADD COLUMN attachment_url VARCHAR(500) NULL AFTER attachment_name,
-  ADD COLUMN mentor_id BIGINT UNSIGNED NULL AFTER attachment_url,
-  ADD COLUMN mentor_status VARCHAR(20) NOT NULL DEFAULT 'SUBMITTED' AFTER mentor_id,
-  ADD COLUMN mentor_comment VARCHAR(500) NULL AFTER mentor_status,
-  ADD COLUMN hod_id BIGINT UNSIGNED NULL AFTER mentor_comment,
-  ADD COLUMN hod_status VARCHAR(20) NOT NULL DEFAULT 'SUBMITTED' AFTER hod_id,
-  ADD COLUMN hod_comment VARCHAR(500) NULL AFTER hod_status,
-  ADD COLUMN final_status VARCHAR(20) NOT NULL DEFAULT 'SUBMITTED' AFTER hod_comment,
-  ADD COLUMN submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) AFTER final_status,
-  ADD COLUMN decided_at DATETIME(6) NULL AFTER submitted_at,
-  ADD CONSTRAINT fk_leave_mentor FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE SET NULL,
-  ADD CONSTRAINT fk_leave_hod FOREIGN KEY (hod_id) REFERENCES users(id) ON DELETE SET NULL,
-  ADD INDEX idx_leaves_final_status (final_status),
-  ADD INDEX idx_leaves_from_date (from_date);
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'days_count');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN days_count INT NOT NULL DEFAULT 1 AFTER to_date', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'attachment_name');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN attachment_name VARCHAR(200) NULL AFTER reason', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'attachment_url');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN attachment_url VARCHAR(500) NULL AFTER attachment_name', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'mentor_id');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN mentor_id BIGINT UNSIGNED NULL AFTER attachment_url', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'mentor_status');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN mentor_status VARCHAR(20) NOT NULL DEFAULT ''SUBMITTED'' AFTER mentor_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'mentor_comment');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN mentor_comment VARCHAR(500) NULL AFTER mentor_status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'hod_id');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN hod_id BIGINT UNSIGNED NULL AFTER mentor_comment', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'hod_status');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN hod_status VARCHAR(20) NOT NULL DEFAULT ''SUBMITTED'' AFTER hod_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'hod_comment');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN hod_comment VARCHAR(500) NULL AFTER hod_status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'final_status');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN final_status VARCHAR(20) NOT NULL DEFAULT ''SUBMITTED'' AFTER hod_comment', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'submitted_at');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN submitted_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) AFTER final_status', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND COLUMN_NAME = 'decided_at');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE leave_requests ADD COLUMN decided_at DATETIME(6) NULL AFTER submitted_at', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @k_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND CONSTRAINT_NAME = 'fk_leave_mentor');
+SET @sql = IF(@k_exists = 0, 'ALTER TABLE leave_requests ADD CONSTRAINT fk_leave_mentor FOREIGN KEY (mentor_id) REFERENCES users(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @k_exists = (SELECT COUNT(*) FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND CONSTRAINT_NAME = 'fk_leave_hod');
+SET @sql = IF(@k_exists = 0, 'ALTER TABLE leave_requests ADD CONSTRAINT fk_leave_hod FOREIGN KEY (hod_id) REFERENCES users(id) ON DELETE SET NULL', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @i_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND INDEX_NAME = 'idx_leaves_final_status');
+SET @sql = IF(@i_exists = 0, 'ALTER TABLE leave_requests ADD INDEX idx_leaves_final_status (final_status)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @i_exists = (SELECT COUNT(*) FROM information_schema.STATISTICS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'leave_requests' AND INDEX_NAME = 'idx_leaves_from_date');
+SET @sql = IF(@i_exists = 0, 'ALTER TABLE leave_requests ADD INDEX idx_leaves_from_date (from_date)', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 10. Alter Table: issued_documents (VerifiableDocument entity)
 ALTER TABLE issued_documents
   MODIFY COLUMN type VARCHAR(60) NOT NULL,
-  MODIFY COLUMN student_id BIGINT UNSIGNED NULL,
-  ADD COLUMN student_name VARCHAR(100) NOT NULL DEFAULT '' AFTER student_id,
-  ADD COLUMN masked_student_name VARCHAR(100) NOT NULL DEFAULT '' AFTER student_name,
-  ADD COLUMN roll_no VARCHAR(30) NULL AFTER masked_student_name,
-  ADD COLUMN department VARCHAR(100) NULL AFTER roll_no,
-  ADD COLUMN issue_date DATE NOT NULL DEFAULT (CURRENT_DATE) AFTER department,
-  ADD COLUMN gpa VARCHAR(30) NULL AFTER revoked_reason,
-  ADD COLUMN amount_paid VARCHAR(50) NULL AFTER gpa,
-  ADD COLUMN authorized_signatory VARCHAR(120) NULL AFTER amount_paid;
+  MODIFY COLUMN student_id BIGINT UNSIGNED NULL;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'student_name');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN student_name VARCHAR(100) NOT NULL DEFAULT '''' AFTER student_id', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'masked_student_name');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN masked_student_name VARCHAR(100) NOT NULL DEFAULT '''' AFTER student_name', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'roll_no');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN roll_no VARCHAR(30) NULL AFTER masked_student_name', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'department');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN department VARCHAR(100) NULL AFTER roll_no', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'issue_date');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN issue_date DATE NOT NULL DEFAULT (CURRENT_DATE) AFTER department', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'gpa');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN gpa VARCHAR(30) NULL AFTER revoked_reason', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'amount_paid');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN amount_paid VARCHAR(50) NULL AFTER gpa', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
+
+SET @c_exists = (SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'issued_documents' AND COLUMN_NAME = 'authorized_signatory');
+SET @sql = IF(@c_exists = 0, 'ALTER TABLE issued_documents ADD COLUMN authorized_signatory VARCHAR(120) NULL AFTER amount_paid', 'SELECT 1');
+PREPARE stmt FROM @sql; EXECUTE stmt; DEALLOCATE PREPARE stmt;
 
 -- 11. Alter Table: users (align varchar bounds with User entity)
 ALTER TABLE users

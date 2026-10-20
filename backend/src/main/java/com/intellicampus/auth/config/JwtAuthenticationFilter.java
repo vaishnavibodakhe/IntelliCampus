@@ -2,6 +2,7 @@ package com.intellicampus.auth.config;
 
 import com.intellicampus.auth.service.JwtTokenProvider;
 import com.intellicampus.user.model.User;
+import com.intellicampus.user.repository.TokenDenylistRepository;
 import com.intellicampus.user.repository.UserRepository;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -25,10 +26,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider jwtTokenProvider;
     private final UserRepository userRepository;
+    private final TokenDenylistRepository tokenDenylistRepository;
 
-    public JwtAuthenticationFilter(JwtTokenProvider jwtTokenProvider, UserRepository userRepository) {
+    public JwtAuthenticationFilter(
+            JwtTokenProvider jwtTokenProvider,
+            UserRepository userRepository,
+            TokenDenylistRepository tokenDenylistRepository) {
         this.jwtTokenProvider = jwtTokenProvider;
         this.userRepository = userRepository;
+        this.tokenDenylistRepository = tokenDenylistRepository;
     }
 
     @Override
@@ -39,24 +45,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         String token = resolveToken(request);
 
-        if (StringUtils.hasText(token) && jwtTokenProvider.validateToken(token)) {
-            String email = jwtTokenProvider.getEmailFromToken(token);
-            String roleName = jwtTokenProvider.getRoleFromToken(token);
+        if (StringUtils.hasText(token)) {
+            // Check token denylist (for student logout revocation)
+            if (tokenDenylistRepository != null && tokenDenylistRepository.existsByToken(token)) {
+                filterChain.doFilter(request, response);
+                return;
+            }
 
-            if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
-                Optional<User> userOpt = userRepository.findByEmail(email);
-                if (userOpt.isPresent()) {
-                    User user = userOpt.get();
-                    String role = (roleName != null && !roleName.isEmpty()) ? roleName : user.getRole().name();
-                    SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
+            if (jwtTokenProvider.validateToken(token)) {
+                String email = jwtTokenProvider.getEmailFromToken(token);
+                String roleName = jwtTokenProvider.getRoleFromToken(token);
 
-                    UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
-                            user,
-                            null,
-                            Collections.singletonList(authority)
-                    );
-                    authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+                if (email != null && SecurityContextHolder.getContext().getAuthentication() == null) {
+                    Optional<User> userOpt = userRepository.findByEmail(email);
+                    if (userOpt.isPresent()) {
+                        User user = userOpt.get();
+                        String role = (roleName != null && !roleName.isEmpty()) ? roleName : user.getRole().name();
+                        SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
+
+                        UsernamePasswordAuthenticationToken authentication = new UsernamePasswordAuthenticationToken(
+                                user,
+                                null,
+                                Collections.singletonList(authority)
+                        );
+                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 }
             }
         }
