@@ -90,6 +90,12 @@ public class SecurityConfig {
                 ).hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
                 // All other /api/students/** require authentication
                 .requestMatchers("/api/students/**").authenticated()
+                // Attendance: Student attendance history accessible to authenticated users
+                .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/records/student/**").authenticated()
+                .requestMatchers(HttpMethod.GET, "/api/attendance/sessions/active").authenticated()
+                // Attendance session creation, photo capture, overrides and status transitions restricted to staff
+                .requestMatchers("/api/attendance/sessions/**").hasAnyRole("ADMIN", "HOD", "FACULTY")
+                .requestMatchers("/api/attendance/**").hasAnyRole("ADMIN", "HOD", "FACULTY")
                 // Public auth endpoints
                 .requestMatchers("/api/auth/**").permitAll()
                 .requestMatchers("/api/credentials/public/**").permitAll()

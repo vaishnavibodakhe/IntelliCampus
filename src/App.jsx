@@ -374,6 +374,7 @@ export default function App() {
                 markCorrections={markCorrections}
                 setMarkCorrections={setMarkCorrections}
                 onAddAuditLog={handleAddAuditLog}
+                staffSession={staffSession}
               />
             )}
 

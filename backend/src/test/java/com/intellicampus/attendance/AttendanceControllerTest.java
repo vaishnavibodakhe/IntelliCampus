@@ -130,7 +130,8 @@ class AttendanceControllerTest {
                 .andExpect(jsonPath("$.facesDetected").value(15))
                 .andExpect(jsonPath("$.studentsMatched").value(12))
                 .andExpect(jsonPath("$.studentsInReview").value(2))
-                .andExpect(jsonPath("$.unmatchedFaceCount").value(1));
+                .andExpect(jsonPath("$.unmatchedFaceCount").value(1))
+                .andExpect(jsonPath("$.unmatchedFaces").value(1));
 
         verify(attendanceService).processClassroomPhoto(eq(100L), any(), any(), any(), any());
     }

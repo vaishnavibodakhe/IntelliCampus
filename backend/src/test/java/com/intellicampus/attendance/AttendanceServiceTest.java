@@ -32,6 +32,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import com.intellicampus.attendance.validation.GeofenceValidationException;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -97,6 +99,7 @@ class AttendanceServiceTest {
         attendanceService.setObjectMapper(objectMapper);
         attendanceService.setFaceMatchThreshold(0.45);
         attendanceService.setFaceMatchMargin(0.05);
+        lenient().when(spoofScoreValidator.getSpoofThreshold()).thenReturn(0.60);
 
         facultyUser = new User("Dr. Ramesh Joshi", "ramesh@intellicampus.edu", "pass123", Role.FACULTY, "FAC-001");
         ReflectionTestUtils.setField(facultyUser, "id", 1L);
@@ -125,6 +128,8 @@ class AttendanceServiceTest {
 
         openSession = new AttendanceSession(facultyUser, subject, division, classroom, "K7Q2", 10);
         ReflectionTestUtils.setField(openSession, "id", 100L);
+
+        lenient().when(sessionRepository.incrementPhotoCountIfUnderLimit(anyLong())).thenReturn(1);
     }
 
     @Nested
@@ -152,7 +157,7 @@ class AttendanceServiceTest {
                     "  \"matchedStudentId\": 10," +
                     "  \"similarity\": 0.72," +
                     "  \"secondSimilarity\": 0.20," +
-                    "  \"spoofScore\": null" +
+                    "  \"spoofScore\": 0.95" +
                     "}]}";
 
             when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
@@ -170,8 +175,49 @@ class AttendanceServiceTest {
             assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
             assertTrue(record.getConfirmed());
             assertEquals(0.72, record.getFaceScore());
+            assertEquals(0.95, record.getSpoofScore());
+            assertTrue(record.getStatusReason().contains("Biometric face recognition and liveness verified"));
+        }
+
+        @Test
+        @DisplayName("Criterion 1b: Unverified liveness (spoofScore is null) routes high-confidence match to REVIEW")
+        void testUnverifiedLivenessWhenSpoofScoreNullRoutesToReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.72," +
+                    "  \"secondSimilarity\": 0.20," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
             assertNull(record.getSpoofScore());
-            assertTrue(record.getStatusReason().contains("Biometric face recognition verified"));
+            assertEquals(0.72, record.getFaceScore());
+            assertTrue(record.getStatusReason().contains("Unverified liveness"));
         }
 
         @Test
@@ -212,6 +258,114 @@ class AttendanceServiceTest {
             assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
             assertEquals(0.38, record.getFaceScore());
             assertTrue(record.getStatusReason().contains("Borderline biometric match"));
+        }
+
+        @Test
+        @DisplayName("Criterion: One detected face with no enrolled candidates in division counts as Unmatched with bounding box")
+        void testOneDetectedFaceNoEnrolledCandidatesInDivision() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class_unmatched.jpg", "image/jpeg", new byte[]{13, 14, 15, 16});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // No enrolled candidates in the division
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of());
+
+            // AI service returns 1 detected face, not matched to any student, with a bounding box
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 0," +
+                    "\"unmatchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"bbox\": [100, 150, 300, 450]," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": null," +
+                    "  \"similarity\": null," +
+                    "  \"secondSimilarity\": null," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of());
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(0, result.getStudentsMatched());
+            assertEquals(0, result.getStudentsInReview());
+            assertEquals(1, result.getUnmatchedFaceCount());
+            assertEquals(1, result.getUnmatchedFaces());
+            assertEquals(result.getFacesDetected(), result.getStudentsMatched() + result.getStudentsInReview() + result.getUnmatchedFaces());
+
+            assertNotNull(result.getDetectedFaces());
+            assertEquals(1, result.getDetectedFaces().size());
+            DetectedFaceDto face = result.getDetectedFaces().get(0);
+            assertEquals("UNMATCHED", face.getStatus());
+            assertEquals(List.of(100, 150, 300, 450), face.getBbox());
+            assertNull(face.getMatchedStudentId());
+        }
+
+        @Test
+        @DisplayName("1 unknown face + a roster with 2 PRESENT students must show Matched 0, Review 0, Unmatched 1")
+        void testOneUnknownFaceWithTwoPresentStudentsInRosterShowsMatchedZeroReviewZeroUnmatchedOne() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class_unknown.jpg", "image/jpeg", new byte[]{21, 22, 23, 24});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(1L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            // Roster in DB already has 2 PRESENT records from prior photo or manual override
+            User user2 = new User("Rohan Sharma", "rohan@campus.edu", "pass123", Role.STUDENT, "STU-102");
+            ReflectionTestUtils.setField(user2, "id", 3L);
+            StudentProfile profile2 = new StudentProfile(user2, "2024-CS-043");
+            ReflectionTestUtils.setField(profile2, "id", 20L);
+
+            AttendanceRecord present1 = new AttendanceRecord(openSession, studentProfile, 0.85, 0.90, AttendanceStatus.PRESENT);
+            present1.setConfirmed(true);
+            AttendanceRecord present2 = new AttendanceRecord(openSession, profile2, 0.80, 0.90, AttendanceStatus.PRESENT);
+            present2.setConfirmed(true);
+
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile, profile2));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(present1, present2));
+
+            // Current photo recognition response: 1 detected face of an unregistered/unknown person
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 0," +
+                    "\"unmatchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"bbox\": [110, 90, 250, 310]," +
+                    "  \"quality\": 0.94," +
+                    "  \"matchedStudentId\": null," +
+                    "  \"similarity\": null," +
+                    "  \"secondSimilarity\": null," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(0, result.getStudentsMatched(), "Current photo matched must be 0, not cumulative session count (2)");
+            assertEquals(0, result.getStudentsInReview(), "Current photo review must be 0");
+            assertEquals(1, result.getUnmatchedFaces(), "Current photo unmatched must be 1");
+            assertEquals(1, result.getUnmatchedFaceCount());
+            assertEquals(result.getFacesDetected(), result.getStudentsMatched() + result.getStudentsInReview() + result.getUnmatchedFaces());
+
+            // Roster still preserves the 2 PRESENT students
+            assertEquals(2, result.getRecords().size());
+            assertTrue(result.getRecords().stream().allMatch(r -> r.getFinalStatus() == AttendanceStatus.PRESENT));
         }
 
         @Test
@@ -269,6 +423,23 @@ class AttendanceServiceTest {
         }
 
         @Test
+        @DisplayName("Security: Multi-instance concurrent photo limit enforced by database atomic increment")
+        void testMultiInstanceConcurrentPhotoLimitEnforced() {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(4L);
+            openSession.setPhotoCount(4);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            // Simulate another instance concurrently incremented to 5, so database atomic update updates 0 rows:
+            when(sessionRepository.incrementPhotoCountIfUnderLimit(100L)).thenReturn(0);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
+            assertTrue(ex.getMessage().contains("Maximum limit of 5 photos"));
+        }
+
+        @Test
         @DisplayName("Criterion 5: Reject photo upload when photo window expired")
         void testPhotoWindowExpired() {
             openSession.setPhotoWindowEndsAt(LocalDateTime.now().minusMinutes(5));
@@ -279,6 +450,223 @@ class AttendanceServiceTest {
             IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
                     attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
             assertTrue(ex.getMessage().contains("expired"));
+        }
+
+        @Test
+        @DisplayName("Unknown or invalid face never becomes PRESENT")
+        void testUnknownFaceNeverMarkedPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 0," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": null," +
+                    "  \"similarity\": null," +
+                    "  \"secondSimilarity\": null," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(1, result.getUnmatchedFaceCount());
+            assertEquals(AttendanceStatus.PENDING, record.getFinalStatus());
+            assertFalse(Boolean.TRUE.equals(record.getConfirmed()));
+        }
+
+        @Test
+        @DisplayName("Multiple faces in one photo: detects multiple faces and assigns respective statuses")
+        void testMultipleFacesInOnePhoto() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+
+            User student2User = new User("Priya Sharma", "priya@intellicampus.edu", "pass123", Role.STUDENT, "STU-102");
+            ReflectionTestUtils.setField(student2User, "id", 3L);
+            StudentProfile student2Profile = new StudentProfile(student2User, "2024-CS-043");
+            ReflectionTestUtils.setField(student2Profile, "id", 11L);
+
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile, student2Profile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 3," +
+                    "\"matchedCount\": 2," +
+                    "\"faces\": [" +
+                    "  {\"faceId\": 1, \"quality\": 0.95, \"matchedStudentId\": 10, \"similarity\": 0.75, \"secondSimilarity\": 0.20, \"spoofScore\": 0.95}," +
+                    "  {\"faceId\": 2, \"quality\": 0.90, \"matchedStudentId\": 11, \"similarity\": 0.40, \"secondSimilarity\": 0.10, \"spoofScore\": 0.90}," +
+                    "  {\"faceId\": 3, \"quality\": 0.85, \"matchedStudentId\": null, \"similarity\": null, \"secondSimilarity\": null, \"spoofScore\": null}" +
+                    "]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord rec1 = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            AttendanceRecord rec2 = new AttendanceRecord(openSession, student2Profile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(rec1));
+            when(recordRepository.findBySessionIdAndStudentId(100L, 11L)).thenReturn(Optional.of(rec2));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(rec1, rec2));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(3, result.getFacesDetected());
+            assertEquals(1, result.getUnmatchedFaceCount());
+            assertEquals(AttendanceStatus.PRESENT, rec1.getFinalStatus());
+            assertEquals(AttendanceStatus.REVIEW, rec2.getFinalStatus());
+        }
+
+        @Test
+        @DisplayName("Same student detected across multiple photos updates existing record without duplicates")
+        void testSameStudentAcrossMultiplePhotosNoDuplicateRecords() throws Exception {
+            MockMultipartFile photo1 = new MockMultipartFile("photo", "class1.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+            MockMultipartFile photo2 = new MockMultipartFile("photo", "class2.jpg", "image/jpeg", new byte[]{5, 6, 7, 8});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L, 1L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{\"faceId\": 1, \"quality\": 0.95, \"matchedStudentId\": 10, \"similarity\": 0.70, \"secondSimilarity\": 0.15, \"spoofScore\": 0.92}]" +
+                    "}";
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            attendanceService.processClassroomPhoto(100L, photo1, 18.52043, 73.85674, 10.0);
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+
+            // Second photo with higher score
+            String aiResponseJson2 = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{\"faceId\": 1, \"quality\": 0.98, \"matchedStudentId\": 10, \"similarity\": 0.88, \"secondSimilarity\": 0.15, \"spoofScore\": 0.96}]" +
+                    "}";
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson2, HttpStatus.OK));
+
+            attendanceService.processClassroomPhoto(100L, photo2, 18.52043, 73.85674, 10.0);
+
+            // Record is updated in place, remaining PRESENT with updated faceScore
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertEquals(0.88, record.getFaceScore());
+        }
+
+        @Test
+        @DisplayName("Reject replayed or exact duplicate photo submission")
+        void testExactDuplicatePhotoRejection() {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(1L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(true);
+
+            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
+            assertTrue(ex.getMessage().contains("already been uploaded"));
+        }
+
+        @Test
+        @DisplayName("Reject photo upload when session nonce/token is invalid or missing")
+        void testInvalidSessionNonceRejection() {
+            openSession.setSessionNonce("VALID_NONCE_SECRET_123");
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            // Missing nonce
+            assertThrows(SecurityException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0, null, null));
+
+            // Wrong nonce
+            assertThrows(SecurityException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0, "WRONG_NONCE", null));
+        }
+
+        @Test
+        @DisplayName("Failed anti-spoof liveness check routes match to REVIEW even with high similarity")
+        void testAntiSpoofFailureRoutesToReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            // Liveness score 0.40 is below threshold 0.60
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.85," +
+                    "  \"secondSimilarity\": 0.10," +
+                    "  \"spoofScore\": 0.40" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(0.40, record.getSpoofScore());
+            assertTrue(record.getStatusReason().contains("Anti-spoofing alert"));
+        }
+
+        @Test
+        @DisplayName("Geofence rejection when coordinates are missing or out of bounds")
+        void testGeofenceMissingOrInvalidCoordinatesRejection() {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            // Missing latitude
+            IllegalArgumentException ex1 = assertThrows(IllegalArgumentException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, null, 73.85674, 10.0));
+            assertTrue(ex1.getMessage().contains("mandatory"));
+
+            // Geofence validator rejection
+            doThrow(new GeofenceValidationException("Location is 250m away, exceeding classroom boundary of 50m."))
+                    .when(geofenceValidator).validate(anyDouble(), anyDouble(), any(), anyDouble(), anyDouble(), any());
+
+            assertThrows(GeofenceValidationException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.6000, 73.9000, 10.0));
         }
     }
 
@@ -346,6 +734,71 @@ class AttendanceServiceTest {
         }
 
         @Test
+        @DisplayName("Reject photo upload for already finalised session")
+        void testFinalisedSessionCannotAcceptPhotos() {
+            openSession.setStatus(SessionStatus.FINALISED);
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0));
+            assertTrue(ex.getMessage().contains("finalised"));
+        }
+
+        @Test
+        @DisplayName("Reject reopening a finalised or expired session")
+        void testCannotReopenFinalisedSession() {
+            openSession.setStatus(SessionStatus.FINALISED);
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            assertThrows(IllegalStateException.class, () ->
+                    attendanceService.transitionSessionStatus(100L, SessionStatus.OPEN));
+        }
+
+        @Test
+        @DisplayName("Unauthorized faculty cannot upload photo, transition status, or override record")
+        void testUnauthorizedFacultyRejection() {
+            User otherFaculty = new User("Dr. Sunita Rao", "sunita@intellicampus.edu", "pass123", Role.FACULTY, "FAC-002");
+            ReflectionTestUtils.setField(otherFaculty, "id", 99L);
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            // Unauthorized photo upload
+            assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0, null, otherFaculty));
+
+            // Unauthorized status transition
+            assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.transitionSessionStatus(100L, SessionStatus.EXPIRED, otherFaculty));
+
+            // Unauthorized manual override
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, 0.40, null, AttendanceStatus.REVIEW);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+
+            ManualOverrideDto override = new ManualOverrideDto();
+            override.setStatus(AttendanceStatus.PRESENT);
+            assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.overrideRecordStatus(100L, 10L, override, otherFaculty));
+        }
+
+        @Test
+        @DisplayName("Admin or HOD can manage another faculty's session")
+        void testAdminOrHodCanManageSession() {
+            User adminUser = new User("System Admin", "admin@intellicampus.edu", "pass123", Role.ADMIN, "ADM-001");
+            ReflectionTestUtils.setField(adminUser, "id", 999L);
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionRepository.save(openSession)).thenReturn(openSession);
+            when(recordRepository.findBySession(openSession)).thenReturn(new ArrayList<>());
+
+            assertDoesNotThrow(() ->
+                    attendanceService.transitionSessionStatus(100L, SessionStatus.EXPIRED, adminUser));
+        }
+
+        @Test
         @DisplayName("Faculty manual override sets status and updates reason")
         void testManualOverride() {
             AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, 0.40, null, AttendanceStatus.REVIEW);
@@ -363,6 +816,90 @@ class AttendanceServiceTest {
             assertEquals(AttendanceStatus.PRESENT, res.getFinalStatus());
             assertTrue(res.getConfirmed());
             assertTrue(res.getStatusReason().contains("Faculty manual override: Student visually confirmed"));
+        }
+
+        @Test
+        @DisplayName("Security: Possession of X-Session-Token cannot bypass session expiry")
+        void testSessionTokenCannotBypassExpiredSession() {
+            openSession.setSessionNonce("valid-nonce-abc-123");
+            openSession.setPhotoWindowEndsAt(LocalDateTime.now().minusMinutes(10));
+            openSession.setExpiresAt(LocalDateTime.now().minusMinutes(10));
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0, "valid-nonce-abc-123", facultyUser));
+            assertTrue(ex.getMessage().contains("expired"));
+        }
+
+        @Test
+        @DisplayName("Security: Possession of X-Session-Token cannot bypass faculty authorization")
+        void testSessionTokenCannotBypassUnauthorizedFaculty() {
+            openSession.setSessionNonce("valid-nonce-abc-123");
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+
+            User unauthorizedFaculty = new User("Dr. Imposter", "imposter@intellicampus.edu", "pass123", Role.FACULTY, "FAC-999");
+            ReflectionTestUtils.setField(unauthorizedFaculty, "id", 999L);
+
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            AccessDeniedException ex = assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0, "valid-nonce-abc-123", unauthorizedFaculty));
+            assertTrue(ex.getMessage().contains("not authorized"));
+        }
+
+        @Test
+        @DisplayName("Security: Cannot override records for an already finalised session")
+        void testCannotOverrideRecordOnFinalisedSession() {
+            openSession.setStatus(SessionStatus.FINALISED);
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, 0.40, null, AttendanceStatus.REVIEW);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+
+            ManualOverrideDto override = new ManualOverrideDto();
+            override.setStatus(AttendanceStatus.PRESENT);
+
+            IllegalStateException ex = assertThrows(IllegalStateException.class, () ->
+                    attendanceService.overrideRecordStatus(100L, 10L, override, facultyUser));
+            assertTrue(ex.getMessage().contains("already finalised"));
+        }
+
+        @Test
+        @DisplayName("Security: Authenticated faculty identity controls session creation; client cannot impersonate another facultyId")
+        void testFacultyCannotImpersonateAnotherFacultyOnStartSession() {
+            StartSessionRequestDto req = new StartSessionRequestDto();
+            req.setFacultyId(999L); // Client attempts to supply another faculty ID
+            req.setSubjectId(5L);
+            req.setDivisionId(3L);
+            req.setRoomId(7L);
+            req.setChallengeCode("K7Q2");
+
+            when(userRepository.findById(1L)).thenReturn(Optional.of(facultyUser)); // Resolved to caller's id (1L), not 999L
+            when(subjectRepository.findById(5L)).thenReturn(Optional.of(subject));
+            when(divisionRepository.findById(3L)).thenReturn(Optional.of(division));
+            when(classroomRepository.findById(7L)).thenReturn(Optional.of(classroom));
+            when(sessionRepository.findFirstByFacultyAndStatus(facultyUser, SessionStatus.OPEN)).thenReturn(Optional.empty());
+
+            when(sessionRepository.save(any(AttendanceSession.class))).thenAnswer(invocation -> {
+                AttendanceSession s = invocation.getArgument(0);
+                assertEquals(1L, s.getFaculty().getId(), "Faculty ID must match authenticated caller, not client-supplied ID");
+                ReflectionTestUtils.setField(s, "id", 102L);
+                return s;
+            });
+
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+            when(sessionRepository.findById(102L)).thenAnswer(inv -> {
+                AttendanceSession s = new AttendanceSession(facultyUser, subject, division, classroom, "K7Q2", 10);
+                ReflectionTestUtils.setField(s, "id", 102L);
+                return Optional.of(s);
+            });
+            when(recordRepository.findBySession(any(AttendanceSession.class))).thenReturn(new ArrayList<>());
+
+            SessionResponseDto result = attendanceService.startSession(req, facultyUser);
+
+            assertNotNull(result);
+            verify(userRepository).findById(1L); // Caller's ID was used!
+            verify(userRepository, never()).findById(999L); // Impersonated ID was rejected!
         }
     }
 }

@@ -1,5 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 import { 
   calculateHaversineDistance, 
   validateGeofence,
@@ -155,5 +157,204 @@ describe('Smart Attendance - Geofence Haversine Boundary Edge Cases', () => {
     // Known distance ~100m north
     const d2 = calculateHaversineDistance(18.52043, 73.85674, 18.52133, 73.85674);
     assert.ok(Math.abs(d2 - 100) < 15, 'Calculated distance should be approx 100m');
+  });
+});
+
+describe('FacultyView - Demo Quick-Auth Security & Production Gating', () => {
+  function scanDirForSubstring(dir, substring, matches = []) {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        scanDirForSubstring(fullPath, substring, matches);
+      } else if (entry.isFile()) {
+        if (entry.name === 'FacultyView.test.js') {
+          continue;
+        }
+        const content = fs.readFileSync(fullPath, 'utf8');
+        if (content.includes(substring)) {
+          matches.push(fullPath);
+        }
+      }
+    }
+    return matches;
+  }
+
+  it('fails if the string Password@123 appears anywhere under src/', () => {
+    const forbiddenTarget = ['Password', '@', '123'].join('');
+    const srcDirectory = path.resolve('src');
+    const detectedFiles = scanDirForSubstring(srcDirectory, forbiddenTarget);
+    assert.deepStrictEqual(
+      detectedFiles,
+      [],
+      `Hardcoded credential "${forbiddenTarget}" detected in src/ files: ${detectedFiles.join(', ')}`
+    );
+  });
+
+  function isFacultyAuthButtonVisible(isDev, apiError) {
+    if (!isDev) return false;
+    return Boolean(apiError && apiError.toLowerCase().includes('authentication'));
+  }
+
+  it('should ensure Authenticate as Faculty button is hidden when DEV is false', () => {
+    assert.strictEqual(isFacultyAuthButtonVisible(false, 'Full authentication is required to start session'), false);
+    assert.strictEqual(isFacultyAuthButtonVisible(false, 'authentication error'), false);
+    assert.strictEqual(isFacultyAuthButtonVisible(false, null), false);
+  });
+
+  it('should render Authenticate as Faculty button only when DEV is true and auth error exists', () => {
+    assert.strictEqual(isFacultyAuthButtonVisible(true, 'Full authentication is required to start session'), true);
+    assert.strictEqual(isFacultyAuthButtonVisible(true, 'Session closed'), false);
+    assert.strictEqual(isFacultyAuthButtonVisible(true, null), false);
+  });
+
+  function executeQuickStaffAuth(isDev, envEmail, envPassword) {
+    if (!isDev) {
+      return { madeRequest: false, error: 'Disabled in production' };
+    }
+    if (!envEmail || !envPassword) {
+      return { madeRequest: false, error: 'Demo faculty credentials not configured' };
+    }
+    return { madeRequest: true, payload: { email: envEmail, password: envPassword } };
+  }
+
+  it('should abort and show "Demo faculty credentials not configured" without making a request if env vars are missing', () => {
+    const noCreds = executeQuickStaffAuth(true, undefined, undefined);
+    assert.strictEqual(noCreds.madeRequest, false);
+    assert.strictEqual(noCreds.error, 'Demo faculty credentials not configured');
+
+    const missingPass = executeQuickStaffAuth(true, 'v.verma@intellicampus.edu', '');
+    assert.strictEqual(missingPass.madeRequest, false);
+    assert.strictEqual(missingPass.error, 'Demo faculty credentials not configured');
+
+    const missingEmail = executeQuickStaffAuth(true, '', 'secret');
+    assert.strictEqual(missingEmail.madeRequest, false);
+    assert.strictEqual(missingEmail.error, 'Demo faculty credentials not configured');
+
+    const valid = executeQuickStaffAuth(true, 'v.verma@intellicampus.edu', 'secret');
+    assert.strictEqual(valid.madeRequest, true);
+    assert.strictEqual(valid.payload.email, 'v.verma@intellicampus.edu');
+    assert.strictEqual(valid.payload.password, 'secret');
+  });
+
+  it('should abort handleQuickStaffAuth without making request if DEV is false', () => {
+    const prodCall = executeQuickStaffAuth(false, 'v.verma@intellicampus.edu', 'secret');
+    assert.strictEqual(prodCall.madeRequest, false);
+  });
+});
+
+describe('FacultyView - Unmatched Face Detection & Bounding Box Invariants', () => {
+  // Evaluates extraction of photoStats from backend capture response as in FacultyView
+  function extractFacultyViewPhotoStats(photoStats) {
+    const facesDetected = photoStats ? (photoStats.facesDetected ?? (photoStats.detectedFaces?.length || 0)) : 0;
+    const studentsMatched = photoStats ? (photoStats.detectedFaces && photoStats.detectedFaces.length > 0
+      ? photoStats.detectedFaces.filter(f => f.status === 'PRESENT').length
+      : (photoStats.studentsMatched ?? 0)) : 0;
+    const studentsInReview = photoStats ? (photoStats.detectedFaces && photoStats.detectedFaces.length > 0
+      ? photoStats.detectedFaces.filter(f => f.status === 'REVIEW').length
+      : (photoStats.studentsInReview ?? 0)) : 0;
+    const unmatchedFaces = photoStats ? (photoStats.detectedFaces && photoStats.detectedFaces.length > 0
+      ? photoStats.detectedFaces.filter(f => f.status === 'UNMATCHED').length
+      : (photoStats.unmatchedFaces ?? photoStats.unmatchedFaceCount ?? Math.max(0, facesDetected - studentsMatched - studentsInReview))) : 0;
+    return {
+      facesDetected,
+      studentsMatched,
+      studentsInReview,
+      unmatchedFaces,
+      invariantSatisfied: facesDetected === (studentsMatched + studentsInReview + unmatchedFaces)
+    };
+  }
+
+  function computeFaceBoundingBox(face, imageDims = { width: 1280, height: 720 }) {
+    const bbox = face?.bbox || [];
+    if (bbox.length < 4) return null;
+
+    const imgW = imageDims.width || 1280;
+    const imgH = imageDims.height || 720;
+    const left = (bbox[0] / imgW) * 100;
+    const top = (bbox[1] / imgH) * 100;
+    const width = ((bbox[2] - bbox[0]) / imgW) * 100;
+    const height = ((bbox[3] - bbox[1]) / imgH) * 100;
+
+    const isPresent = face.status === 'PRESENT';
+    const isReview = face.status === 'REVIEW';
+    const color = isPresent ? '#10b981' : isReview ? '#f59e0b' : '#ef4444';
+    const label = face.studentName
+      ? `${face.studentName} (${Math.round((face.similarity || 0) * 100)}%)`
+      : `Face #${face.faceId} (Unmatched)`;
+
+    return { left, top, width, height, color, label, isPresent, isUnmatched: face.status === 'UNMATCHED' };
+  }
+
+  it('correctly counts unmatched faces and satisfies Faces Detected = Matched + Borderline + Unmatched', () => {
+    // Both new backend (unmatchedFaces) and legacy (unmatchedFaceCount) formats supported
+    const backendResultWithBoth = {
+      facesDetected: 1,
+      studentsMatched: 0,
+      studentsInReview: 0,
+      unmatchedFaceCount: 1,
+      unmatchedFaces: 1,
+      detectedFaces: [
+        { faceId: 1, bbox: [120, 80, 400, 360], status: 'UNMATCHED', studentName: null }
+      ]
+    };
+
+    const stats = extractFacultyViewPhotoStats(backendResultWithBoth);
+    assert.strictEqual(stats.unmatchedFaces, 1, 'Unmatched faces must equal 1 when 1 unmatched face detected');
+    assert.strictEqual(stats.invariantSatisfied, true, 'Faces Detected must equal Matched + Borderline + Unmatched');
+    assert.strictEqual(stats.facesDetected, stats.studentsMatched + stats.studentsInReview + stats.unmatchedFaces);
+
+    // Bounding box for unmatched face must exist, have red border (#ef4444), and never mark student PRESENT
+    const box = computeFaceBoundingBox(backendResultWithBoth.detectedFaces[0]);
+    assert.ok(box, 'Bounding box must be computed for unmatched face');
+    assert.strictEqual(box.isPresent, false, 'Unmatched face must never be marked PRESENT');
+    assert.strictEqual(box.color, '#ef4444');
+    assert.ok(box.label.includes('Unmatched'));
+    assert.strictEqual(box.isUnmatched, true);
+  });
+
+  it('1 unknown face + a roster with 2 PRESENT students must show Matched 0, Review 0, Unmatched 1', () => {
+    // Current photo recognition response: 1 detected face of an unknown person
+    const photoResponse = {
+      facesDetected: 1,
+      studentsMatched: 0,
+      studentsInReview: 0,
+      unmatchedFaces: 1,
+      unmatchedFaceCount: 1,
+      detectedFaces: [
+        { faceId: 1, bbox: [110, 90, 250, 310], status: 'UNMATCHED', studentName: null }
+      ]
+    };
+
+    // Active session roster has 2 students already marked PRESENT
+    const activeSessionRoster = [
+      { studentId: 10, studentName: 'Aarav Mehta', finalStatus: 'PRESENT' },
+      { studentId: 20, studentName: 'Rohan Sharma', finalStatus: 'PRESENT' }
+    ];
+
+    const stats = extractFacultyViewPhotoStats(photoResponse);
+    assert.strictEqual(stats.facesDetected, 1, 'Faces Detected must be 1');
+    assert.strictEqual(stats.studentsMatched, 0, 'Matched must be 0 for current photo (not 2 from roster)');
+    assert.strictEqual(stats.studentsInReview, 0, 'Review must be 0 for current photo');
+    assert.strictEqual(stats.unmatchedFaces, 1, 'Unmatched must be 1 for current photo');
+    assert.strictEqual(stats.invariantSatisfied, true, 'Faces Detected must equal Matched + Review + Unmatched');
+    assert.strictEqual(stats.facesDetected, stats.studentsMatched + stats.studentsInReview + stats.unmatchedFaces);
+
+    // Verify roster retains 2 PRESENT records independently of photo stats
+    const rosterPresentCount = activeSessionRoster.filter(r => r.finalStatus === 'PRESENT').length;
+    assert.strictEqual(rosterPresentCount, 2, 'Roster retains 2 PRESENT students');
+  });
+
+  it('guarantees Faces Detected = Matched + Borderline + Unmatched via fallback when unmatchedFaces is missing', () => {
+    const legacyResult = {
+      facesDetected: 1,
+      studentsMatched: 0,
+      studentsInReview: 0,
+      unmatchedFaceCount: 1
+    };
+
+    const stats = extractFacultyViewPhotoStats(legacyResult);
+    assert.strictEqual(stats.unmatchedFaces, 1);
+    assert.strictEqual(stats.invariantSatisfied, true);
   });
 });

@@ -166,7 +166,7 @@ export const INITIAL_SESSIONS = [
     roomName: "Room 204",
     facultyId: 3,
     challengeCode: "K7Q2",
-    status: "OPEN", // OPEN, PROCESSING, REVIEW, FINALISED
+    status: "FINALISED", // OPEN, PROCESSING, REVIEW, FINALISED
     startedAt: new Date(Date.now() - 5 * 60 * 1000).toISOString(),
     photoWindowEndsAt: new Date(Date.now() + 5 * 60 * 1000).toISOString(),
     capturedPhoto: null,
