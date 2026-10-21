@@ -853,9 +853,23 @@ export default function FacultyView({
                       const isPresent = face.status === 'PRESENT';
                       const isReview = face.status === 'REVIEW';
                       const color = isPresent ? '#10b981' : isReview ? '#f59e0b' : '#ef4444';
-                      const label = face.studentName
-                        ? `${face.studentName} (${Math.round((face.similarity || 0) * 100)}%)`
-                        : `Face #${face.faceId} (Unmatched)`;
+
+                      let label;
+                      if (isPresent) {
+                        label = face.studentName
+                          ? `${face.studentName} (${Math.round((face.similarity || 0) * 100)}%)`
+                          : `Face #${face.faceId}`;
+                      } else if (isReview) {
+                        const name = face.studentName || `Face #${face.faceId}`;
+                        const sim = face.similarity !== undefined && face.similarity !== null
+                          ? (typeof face.similarity === 'number'
+                              ? (Number.isInteger(face.similarity) ? face.similarity : Number(face.similarity.toFixed(2)))
+                              : face.similarity)
+                          : null;
+                        label = sim !== null ? `${name} (similarity ${sim})` : name;
+                      } else {
+                        label = 'Unmatched';
+                      }
 
                       return (
                         <div
@@ -978,7 +992,7 @@ export default function FacultyView({
                   </div>
                 </div>
                 <div style={{ background: 'rgba(255,255,255,0.04)', padding: '12px', borderRadius: '8px', border: '1px solid rgba(255,255,255,0.08)' }}>
-                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Borderline (REVIEW)</div>
+                  <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>Needs review</div>
                   <div style={{ fontSize: '1.4rem', fontWeight: 700, color: '#f59e0b' }}>
                     {photoInReview}
                   </div>

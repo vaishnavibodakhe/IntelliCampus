@@ -279,11 +279,25 @@ describe('FacultyView - Unmatched Face Detection & Bounding Box Invariants', () 
     const isPresent = face.status === 'PRESENT';
     const isReview = face.status === 'REVIEW';
     const color = isPresent ? '#10b981' : isReview ? '#f59e0b' : '#ef4444';
-    const label = face.studentName
-      ? `${face.studentName} (${Math.round((face.similarity || 0) * 100)}%)`
-      : `Face #${face.faceId} (Unmatched)`;
 
-    return { left, top, width, height, color, label, isPresent, isUnmatched: face.status === 'UNMATCHED' };
+    let label;
+    if (isPresent) {
+      label = face.studentName
+        ? `${face.studentName} (${Math.round((face.similarity || 0) * 100)}%)`
+        : `Face #${face.faceId}`;
+    } else if (isReview) {
+      const name = face.studentName || `Face #${face.faceId}`;
+      const sim = face.similarity !== undefined && face.similarity !== null
+        ? (typeof face.similarity === 'number'
+            ? (Number.isInteger(face.similarity) ? face.similarity : Number(face.similarity.toFixed(2)))
+            : face.similarity)
+        : null;
+      label = sim !== null ? `${name} (similarity ${sim})` : name;
+    } else {
+      label = 'Unmatched';
+    }
+
+    return { left, top, width, height, color, label, isPresent, isReview, isUnmatched: face.status === 'UNMATCHED' };
   }
 
   it('correctly counts unmatched faces and satisfies Faces Detected = Matched + Borderline + Unmatched', () => {
@@ -309,8 +323,69 @@ describe('FacultyView - Unmatched Face Detection & Bounding Box Invariants', () 
     assert.ok(box, 'Bounding box must be computed for unmatched face');
     assert.strictEqual(box.isPresent, false, 'Unmatched face must never be marked PRESENT');
     assert.strictEqual(box.color, '#ef4444');
-    assert.ok(box.label.includes('Unmatched'));
+    assert.strictEqual(box.label, 'Unmatched');
     assert.strictEqual(box.isUnmatched, true);
+  });
+
+  it('an unmatched face never renders a student name or similarity percentage, and keeps red box', () => {
+    // Even when the AI backend populates nearest candidate studentName and similarity
+    const unmatchedFaceWithCandidate = {
+      faceId: 101,
+      bbox: [100, 150, 250, 350],
+      status: 'UNMATCHED',
+      studentName: 'Priya Jadhav',
+      similarity: 0.18
+    };
+
+    const box = computeFaceBoundingBox(unmatchedFaceWithCandidate);
+    assert.ok(box, 'Bounding box must be computed');
+    assert.strictEqual(box.color, '#ef4444', 'UNMATCHED face must maintain red box color');
+    assert.strictEqual(box.label, 'Unmatched', 'UNMATCHED face label must be strictly "Unmatched"');
+    assert.strictEqual(box.label.includes('Priya Jadhav'), false, 'UNMATCHED face must never render candidate student name');
+    assert.strictEqual(box.label.includes('18%'), false, 'UNMATCHED face must never render percentage');
+    assert.strictEqual(box.label.includes('0.18'), false, 'UNMATCHED face must never render similarity score');
+    assert.strictEqual(box.isPresent, false);
+    assert.strictEqual(box.isReview, false);
+    assert.strictEqual(box.isUnmatched, true);
+
+    // Unmatched face without candidate name
+    const unmatchedFaceWithoutCandidate = {
+      faceId: 102,
+      bbox: [300, 200, 450, 400],
+      status: 'UNMATCHED',
+      studentName: null,
+      similarity: 0.12
+    };
+
+    const boxNoName = computeFaceBoundingBox(unmatchedFaceWithoutCandidate);
+    assert.strictEqual(boxNoName.label, 'Unmatched');
+    assert.strictEqual(boxNoName.color, '#ef4444');
+  });
+
+  it('a review face renders the student name and similarity in amber box', () => {
+    const reviewFace = {
+      faceId: 201,
+      bbox: [80, 120, 220, 300],
+      status: 'REVIEW',
+      studentName: 'Priya Jadhav',
+      similarity: 0.84
+    };
+
+    const box = computeFaceBoundingBox(reviewFace);
+    assert.ok(box, 'Bounding box must be computed');
+    assert.strictEqual(box.color, '#f59e0b', 'REVIEW face must have an amber box');
+    assert.ok(box.label.includes('Priya Jadhav'), 'REVIEW face must render student name');
+    assert.strictEqual(box.label, 'Priya Jadhav (similarity 0.84)', 'REVIEW face must format as "<name> (similarity <score>)"');
+    assert.strictEqual(box.isReview, true);
+    assert.strictEqual(box.isUnmatched, false);
+    assert.strictEqual(box.isPresent, false);
+  });
+
+  it('FacultyView component renames counter label "Borderline (REVIEW)" to "Needs review"', () => {
+    const facultyViewPath = path.resolve('src/components/FacultyView.jsx');
+    const content = fs.readFileSync(facultyViewPath, 'utf8');
+    assert.ok(content.includes('Needs review'), 'FacultyView.jsx must contain "Needs review" counter label');
+    assert.ok(!content.includes('Borderline (REVIEW)'), 'FacultyView.jsx must not contain "Borderline (REVIEW)"');
   });
 
   it('1 unknown face + a roster with 2 PRESENT students must show Matched 0, Review 0, Unmatched 1', () => {
