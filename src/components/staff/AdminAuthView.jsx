@@ -172,7 +172,18 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
         setLoginForm({ email: registerForm.email, password: registerForm.password });
       }, 1500);
     } catch (err) {
-      setApiError(err.message || 'Bootstrap registration failed.');
+      const msg = err?.message || '';
+      if (
+        err?.status === 403 ||
+        msg.includes('403') ||
+        msg.toLowerCase().includes('forbidden') ||
+        msg.toLowerCase().includes('closed') ||
+        msg.toLowerCase().includes('already exists')
+      ) {
+        setApiError('Admin registration is closed. Contact an existing Admin.');
+      } else {
+        setApiError(msg || 'Registration failed.');
+      }
     } finally {
       setLoading(false);
     }
@@ -298,16 +309,14 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             <span>Sign In</span>
           </button>
 
-          {canBootstrap && (
-            <button 
-              type="button"
-              className={`staff-tab-btn ${activeTab === 'register' ? 'active' : ''}`}
-              onClick={() => handleTabSwitch('register')}
-            >
-              <UserPlus size={15} />
-              <span>Initial Setup</span>
-            </button>
-          )}
+          <button 
+            type="button"
+            className={`staff-tab-btn ${activeTab === 'register' ? 'active' : ''}`}
+            onClick={() => handleTabSwitch('register')}
+          >
+            <UserPlus size={15} />
+            <span>Register</span>
+          </button>
 
           <button 
             type="button"
@@ -382,12 +391,14 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
           </form>
         )}
 
-        {/* Initial Bootstrap Registration Form (Only rendered when 0 admins exist) */}
-        {activeTab === 'register' && canBootstrap && (
+        {/* Administrator Registration Form */}
+        {activeTab === 'register' && (
           <form onSubmit={handleRegisterSubmit} className="staff-form">
-            <div style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '0.82rem', color: '#c7d2fe' }}>
-              <strong>Bootstrap Mode:</strong> No Administrator account exists yet. Create the initial SuperAdmin account to initialize the system.
-            </div>
+            {canBootstrap && (
+              <div style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '0.82rem', color: '#c7d2fe' }}>
+                <strong>Bootstrap Mode:</strong> No Administrator account exists yet. Create the initial SuperAdmin account to initialize the system.
+              </div>
+            )}
 
             <div className="form-group">
               <label htmlFor="admin-reg-name">Full Name</label>
@@ -465,11 +476,11 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               {loading ? (
                 <>
                   <RotateCw size={16} className="spin-icon" />
-                  <span>Bootstrapping SuperAdmin...</span>
+                  <span>Registering Administrator...</span>
                 </>
               ) : (
                 <>
-                  <span>Initialize SuperAdmin Account</span>
+                  <span>{canBootstrap ? 'Initialize SuperAdmin Account' : 'Register Administrator'}</span>
                   <ArrowRight size={16} />
                 </>
               )}
