@@ -83,6 +83,9 @@ public class StaffAuthService {
         }
 
         Role role = req.getRole();
+        if (role == Role.ADMIN) {
+            throw new IllegalArgumentException("Registration of ADMIN accounts is strictly prohibited.");
+        }
         if (role == Role.STUDENT || role == Role.PUBLIC) {
             throw new IllegalArgumentException("Staff registration only supports administrative and academic roles.");
         }
@@ -140,11 +143,18 @@ public class StaffAuthService {
         );
     }
 
-    public AuthResponseDto loginStaff(LoginRequestDto req) {
-        String email = req.getEmail().trim().toLowerCase();
+    private static final String DUMMY_BCRYPT_HASH = "$2a$12$e8xOQjZc1zF6W6qf1D0JMeZ8L9u2F1A7E9b8C0d1E2F3a4B5c6D7e";
 
-        User user = userRepository.findByEmail(email)
-                .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
+    public AuthResponseDto loginStaff(LoginRequestDto req) {
+        String email = req.getEmail() != null ? req.getEmail().trim().toLowerCase() : "";
+
+        Optional<User> userOpt = userRepository.findByEmail(email);
+        if (userOpt.isEmpty()) {
+            passwordEncoder.matches(req.getPassword() != null ? req.getPassword() : "", DUMMY_BCRYPT_HASH);
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
+        User user = userOpt.get();
 
         // Check Account Lockout
         if (user.getLockedUntil() != null) {
@@ -244,6 +254,114 @@ public class StaffAuthService {
                 user.getRole(),
                 null,
                 user.getDepartment() != null ? user.getDepartment().getName() : "General",
+                null,
+                null
+        );
+
+        return new AuthResponseDto(accessToken, rawRefreshToken, jwtTokenProvider.getAccessExpirationSeconds(), userSummary);
+    }
+
+    public AuthResponseDto loginAdmin(LoginRequestDto req) {
+        String email = req.getEmail() != null ? req.getEmail().trim().toLowerCase() : "";
+
+        Optional<User> userOpt = userRepository.findByEmail(email);
+
+        // Constant-time check: If user not found OR user is NOT an ADMIN, run dummy BCrypt to prevent timing attacks,
+        // and return the exact same generic BadCredentialsException so other roles get the identical 401.
+        if (userOpt.isEmpty() || userOpt.get().getRole() != Role.ADMIN) {
+            passwordEncoder.matches(req.getPassword() != null ? req.getPassword() : "", DUMMY_BCRYPT_HASH);
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
+        User admin = userOpt.get();
+
+        // Check Account Lockout
+        if (admin.getLockedUntil() != null) {
+            if (admin.getLockedUntil().isAfter(LocalDateTime.now())) {
+                throw new LockedException("Account is temporarily locked due to consecutive failed attempts. Try again later.");
+            } else {
+                admin.setLockedUntil(null);
+                admin.setFailedAttempts(0);
+                if (admin.getStatus() == UserStatus.LOCKED) {
+                    admin.setStatus(UserStatus.ACTIVE);
+                }
+            }
+        }
+
+        if (admin.getStatus() == UserStatus.DISABLED || admin.getStatus() == UserStatus.INACTIVE || admin.getStatus() == UserStatus.SUSPENDED) {
+            throw new DisabledException("Account is disabled or suspended. Please contact system governance.");
+        }
+
+        // Verify BCrypt password
+        if (!passwordEncoder.matches(req.getPassword(), admin.getPasswordHash())) {
+            int attempts = (admin.getFailedAttempts() != null ? admin.getFailedAttempts() : 0) + 1;
+            admin.setFailedAttempts(attempts);
+
+            if (attempts >= 5) {
+                admin.setStatus(UserStatus.LOCKED);
+                admin.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                userRepository.save(admin);
+
+                auditChainService.recordEntry(
+                        admin.getId(),
+                        admin.getName(),
+                        "ADMIN_ACCOUNT_LOCKED",
+                        "USER",
+                        admin.getId().toString(),
+                        "{\"failedAttempts\":5}",
+                        "{\"status\":\"LOCKED\"}",
+                        "Admin account locked for 15 minutes due to 5 consecutive failed attempts"
+                );
+            } else {
+                userRepository.save(admin);
+                auditChainService.recordEntry(
+                        admin.getId(),
+                        admin.getName(),
+                        "ADMIN_LOGIN_FAILURE",
+                        "USER",
+                        admin.getId().toString(),
+                        "{}",
+                        "{\"email\":\"" + admin.getEmail() + "\",\"attempts\":" + attempts + "}",
+                        "Failed admin login attempt"
+                );
+            }
+
+            throw new BadCredentialsException("Invalid email or password");
+        }
+
+        // Reset failed attempts on success
+        admin.setFailedAttempts(0);
+        admin.setLockedUntil(null);
+        userRepository.save(admin);
+
+        // Generate tokens
+        String accessToken = jwtTokenProvider.generateAccessToken(admin, null);
+        String rawRefreshToken = generateSecureRandomToken();
+        String hashedRefreshToken = DigestUtils.sha256Hex(rawRefreshToken);
+        refreshTokenRepository.revokeAllForUser(admin);
+        LocalDateTime expDate = LocalDateTime.now().plusDays(7);
+        refreshTokenRepository.save(new RefreshToken(admin, hashedRefreshToken, expDate));
+
+        // Audit Event: Login Success
+        auditChainService.recordEntry(
+                admin.getId(),
+                admin.getName(),
+                "ADMIN_LOGIN_SUCCESS",
+                "USER",
+                admin.getId().toString(),
+                "{}",
+                "{\"email\":\"" + admin.getEmail() + "\",\"role\":\"ADMIN\"}",
+                "Administrator successfully logged in"
+        );
+
+        UserSummaryDto userSummary = new UserSummaryDto(
+                admin.getId(),
+                admin.getUserCode(),
+                admin.getName(),
+                admin.getEmail(),
+                admin.getRole(),
+                null,
+                "Central Administration",
                 null,
                 null
         );
@@ -616,6 +734,10 @@ public class StaffAuthService {
         User staff = userRepository.findById(staffUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Staff user not found: " + staffUserId));
 
+        if (staff.getRole() == Role.ADMIN) {
+            throw new SecurityException("Modifying or approving the System Administrator is prohibited.");
+        }
+
         if (staff.getStatus() != UserStatus.PENDING_APPROVAL) {
             throw new IllegalStateException("User is not awaiting approval (current status: " + staff.getStatus() + ")");
         }
@@ -639,6 +761,10 @@ public class StaffAuthService {
     public void rejectStaff(Long staffUserId, String reason, User adminUser) {
         User staff = userRepository.findById(staffUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Staff user not found: " + staffUserId));
+
+        if (staff.getRole() == Role.ADMIN) {
+            throw new SecurityException("The System Administrator account cannot be rejected or modified.");
+        }
 
         staff.setStatus(UserStatus.REJECTED);
         userRepository.save(staff);

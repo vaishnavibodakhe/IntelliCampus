@@ -65,6 +65,9 @@ public class UserService {
     }
 
     public UserResponseDto createUser(CreateUserRequestDto req) {
+        if (req.getRole() == Role.ADMIN) {
+            throw new IllegalArgumentException("Registration or creation of ADMIN accounts via API is strictly prohibited.");
+        }
         if (userRepository.existsByUserCode(req.getUserCode())) {
             throw new IllegalArgumentException("User code already in use: " + req.getUserCode());
         }
@@ -106,6 +109,11 @@ public class UserService {
         List<String> errors = new ArrayList<>(validation.getErrors());
 
         for (CreateUserRequestDto dto : validation.getValidRows()) {
+            if (dto.getRole() == Role.ADMIN) {
+                failed++;
+                errors.add("User '" + dto.getUserCode() + "': Role ADMIN is prohibited in bulk CSV import.");
+                continue;
+            }
             try {
                 createUser(dto);
                 imported++;
@@ -118,6 +126,38 @@ public class UserService {
 
         int totalCount = csvLines != null ? csvLines.size() : 0;
         return new CsvImportResultDto(totalCount, imported, failed, errors);
+    }
+
+    public void deleteUser(Long id) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+        if (user.getRole() == Role.ADMIN) {
+            throw new SecurityException("The System Administrator account cannot be deleted.");
+        }
+        userRepository.delete(user);
+    }
+
+    public void updateUserStatus(Long id, com.intellicampus.user.model.UserStatus status) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+        if (user.getRole() == Role.ADMIN && status != com.intellicampus.user.model.UserStatus.ACTIVE) {
+            throw new SecurityException("The System Administrator account cannot be deactivated or disabled.");
+        }
+        user.setStatus(status);
+        userRepository.save(user);
+    }
+
+    public void updateUserRole(Long id, Role newRole) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+        if (user.getRole() == Role.ADMIN && newRole != Role.ADMIN) {
+            throw new SecurityException("The System Administrator role cannot be demoted or changed.");
+        }
+        if (newRole == Role.ADMIN && user.getRole() != Role.ADMIN) {
+            throw new SecurityException("Promoting an account to ADMIN is strictly prohibited.");
+        }
+        user.setRole(newRole);
+        userRepository.save(user);
     }
 
     private UserResponseDto mapToDto(User u) {

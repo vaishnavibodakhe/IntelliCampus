@@ -15,7 +15,12 @@ spring:
     port: 1025
 
 JWT_SECRET: 01234567890123456789012345678901234567890123456789
+SUPERADMIN_PASSWORD: TestSuperAdminPassword123!
+ADMIN_EMAIL: admin@intellicampus.edu
 app:
+  security:
+    admin-email: admin@intellicampus.edu
+    superadmin-password: TestSuperAdminPassword123!
   jwt:
     secret: 01234567890123456789012345678901234567890123456789
     access-expiration-minutes: 15

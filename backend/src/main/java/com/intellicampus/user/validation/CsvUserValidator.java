@@ -138,7 +138,6 @@ public class CsvUserValidator {
                 seenEmails.put(email, lineNum);
             }
 
-            // Optional role and division columns
             Role role = Role.STUDENT;
             if (headerMap.containsKey("role") && cols.length > headerMap.get("role")) {
                 String rStr = clean(cols[headerMap.get("role")]).toUpperCase();
@@ -147,6 +146,11 @@ public class CsvUserValidator {
                 } catch (IllegalArgumentException ignored) {
                     role = Role.STUDENT;
                 }
+            }
+
+            if (role == Role.ADMIN) {
+                errors.add(String.format("Line %d: Creating ADMIN role via CSV import is strictly prohibited.", lineNum));
+                continue;
             }
 
             String division = "Div A";

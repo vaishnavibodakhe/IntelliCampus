@@ -38,6 +38,9 @@ public class UserController {
 
     @PostMapping
     public ResponseEntity<UserResponseDto> createUser(@RequestBody CreateUserRequestDto req) {
+        if (req.getRole() == Role.ADMIN) {
+            throw new IllegalArgumentException("Creation of ADMIN accounts via API is strictly prohibited.");
+        }
         UserResponseDto created = userService.createUser(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }

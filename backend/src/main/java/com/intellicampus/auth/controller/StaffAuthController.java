@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping({"/api/auth/staff", "/api/auth/admin", "/api/auth/hod"})
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:3000", "*"})
+@RequestMapping({"/api/auth/staff", "/api/auth/hod"})
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:3000"})
 public class StaffAuthController {
 
     private final StaffAuthService staffAuthService;
@@ -27,15 +27,11 @@ public class StaffAuthController {
 
     @PostMapping("/register")
     public ResponseEntity<PendingStaffApprovalDto> register(@Valid @RequestBody StaffRegisterRequestDto req, HttpServletRequest request) {
-        String uri = request != null ? request.getRequestURI() : "";
+        if (req.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+            throw new IllegalArgumentException("Registration of ADMIN accounts is strictly prohibited.");
+        }
         if (req.getRole() == null) {
-            if (uri.contains("/admin")) {
-                req.setRole(com.intellicampus.user.model.Role.ADMIN);
-            } else if (uri.contains("/hod")) {
-                req.setRole(com.intellicampus.user.model.Role.HOD);
-            } else {
-                req.setRole(com.intellicampus.user.model.Role.ADMIN);
-            }
+            req.setRole(com.intellicampus.user.model.Role.HOD);
         }
         PendingStaffApprovalDto response = staffAuthService.registerStaff(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
@@ -70,11 +66,7 @@ public class StaffAuthController {
         String uri = request != null ? request.getRequestURI() : "";
         com.intellicampus.user.model.Role role = req.getRole();
         if (role == null) {
-            if (uri.contains("/admin")) {
-                role = com.intellicampus.user.model.Role.ADMIN;
-            } else if (uri.contains("/hod")) {
-                role = com.intellicampus.user.model.Role.HOD;
-            }
+            role = com.intellicampus.user.model.Role.HOD;
         }
         String message = staffAuthService.forgotPassword(req.getEmail(), role, clientIp);
         return ResponseEntity.ok(Map.of("message", message));

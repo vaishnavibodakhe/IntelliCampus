@@ -15,6 +15,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     Optional<User> findByEmailIgnoreCase(String email);
     List<User> findByRole(Role role);
     List<User> findByStatusAndCreatedAtBefore(com.intellicampus.user.model.UserStatus status, java.time.LocalDateTime cutoff);
+    boolean existsByRole(Role role);
+    long countByRole(Role role);
     boolean existsByUserCode(String userCode);
     boolean existsByUserCodeAndRole(String userCode, Role role);
     boolean existsByEmail(String email);
