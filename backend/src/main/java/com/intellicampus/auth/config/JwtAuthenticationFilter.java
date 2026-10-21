@@ -60,6 +60,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     Optional<User> userOpt = userRepository.findByEmail(email);
                     if (userOpt.isPresent()) {
                         User user = userOpt.get();
+                        if (user.getStatus() != com.intellicampus.user.model.UserStatus.ACTIVE) {
+                            filterChain.doFilter(request, response);
+                            return;
+                        }
                         String role = (roleName != null && !roleName.isEmpty()) ? roleName : user.getRole().name();
                         SimpleGrantedAuthority authority = new SimpleGrantedAuthority("ROLE_" + role);
 

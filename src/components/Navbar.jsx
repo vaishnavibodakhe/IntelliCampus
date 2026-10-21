@@ -21,13 +21,12 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-  notificationCount = 2
+  notificationCount = 2,
+  staffSession
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
-    { id: 'HOD', label: 'HOD', icon: BookOpen, color: '#8b5cf6' },
-    { id: 'FACULTY', label: 'Faculty', icon: UserCheck, color: '#06b6d4' },
-    { id: 'MENTOR', label: 'Mentor', icon: Users, color: '#10b981' },
+    { id: 'STAFF', label: 'Staff', icon: UserCheck, color: '#8b5cf6' },
     { id: 'STUDENT', label: 'Student', icon: GraduationCap, color: '#f59e0b' },
     { id: 'PUBLIC', label: 'Public Verifier', icon: QrCode, color: '#ec4899' }
   ];
@@ -63,11 +62,19 @@ export default function Navbar({
         <div className="role-pill-group">
           {roles.map(r => {
             const Icon = r.icon;
-            const isActive = currentRole === r.id;
+            const isActive = r.id === 'STAFF'
+              ? (currentRole === 'STAFF' || currentRole === 'HOD' || currentRole === 'FACULTY' || currentRole === 'MENTOR')
+              : currentRole === r.id;
             return (
               <button
                 key={r.id}
-                onClick={() => setCurrentRole(r.id)}
+                onClick={() => {
+                  if (r.id === 'STAFF' && staffSession && ['HOD', 'FACULTY', 'MENTOR'].includes(staffSession?.user?.role)) {
+                    setCurrentRole(staffSession.user.role);
+                  } else {
+                    setCurrentRole(r.id);
+                  }
+                }}
                 className={`role-pill-btn ${isActive ? 'active' : ''}`}
                 style={{
                   '--accent': r.color

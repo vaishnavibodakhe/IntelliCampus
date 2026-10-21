@@ -1,13 +1,13 @@
 import React from 'react';
-import RoleAuthView from './RoleAuthView';
+import StaffAuthView from './StaffAuthView';
 
-export default function HodAuthView({ onAuthSuccess, noticeMessage = '', onSwitchRole }) {
+export default function HodAuthView({ onAuthSuccess, noticeMessage = '', onRoleChange }) {
   return (
-    <RoleAuthView 
-      role="HOD"
+    <StaffAuthView 
+      initialRole="HOD"
       onAuthSuccess={onAuthSuccess}
       noticeMessage={noticeMessage}
-      onSwitchRole={onSwitchRole}
+      onRoleChange={onRoleChange}
     />
   );
 }

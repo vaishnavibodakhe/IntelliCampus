@@ -13,6 +13,7 @@ import ChatbotDrawer from './components/ChatbotDrawer';
 
 import AdminAuthView from './components/staff/AdminAuthView';
 import HodAuthView from './components/staff/HodAuthView';
+import StaffAuthView from './components/staff/StaffAuthView';
 import StaffResetPasswordView from './components/staff/StaffResetPasswordView';
 import { getStoredStaffSession, clearStaffSession, logoutStaffApi } from './utils/staffAuthService';
 
@@ -34,7 +35,7 @@ import { computeAuditEntryHash } from './utils/cryptoAndGeo';
 import { api, getStoredUser, clearAuthSession } from './api/client';
 
 export default function App() {
-  const [currentRole, setCurrentRole] = useState('FACULTY');
+  const [currentRole, setCurrentRole] = useState(() => getStoredStaffSession()?.user?.role || 'STAFF');
   const [theme, setTheme] = useState('dark');
 
   // Authentication State (JWT & User Session for students)
@@ -68,6 +69,19 @@ export default function App() {
   // Authenticated Staff Session (stored in localStorage)
   const [staffSession, setStaffSession] = useState(() => getStoredStaffSession());
 
+  // Path-based routing state (/admin/login, /staff/login)
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p === '/hod/login') {
+        window.history.replaceState({}, '', '/staff/login?role=HOD');
+        return '/staff/login';
+      }
+      return p;
+    }
+    return '/';
+  });
+
   // URL-based view routing state (?view=...)
   const [activeUrlView, setActiveUrlView] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -91,6 +105,12 @@ export default function App() {
       const params = new URLSearchParams(window.location.search);
       setActiveUrlView(params.get('view') || null);
       setActiveUrlToken(params.get('token') || '');
+      let p = window.location.pathname;
+      if (p === '/hod/login') {
+        window.history.replaceState({}, '', '/staff/login?role=HOD');
+        p = '/staff/login';
+      }
+      setCurrentPath(p);
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -113,6 +133,14 @@ export default function App() {
       window.history.pushState({}, '', url.toString());
       setActiveUrlView(viewName || null);
       setActiveUrlToken(extraParams.token || '');
+    }
+  };
+
+  const navigateToPath = (pathname, search = '') => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', pathname + (search ? (search.startsWith('?') ? search : `?${search}`) : ''));
+      setCurrentPath(pathname);
+      setActiveUrlView(null);
     }
   };
 
@@ -250,6 +278,10 @@ export default function App() {
         currentRole={currentRole}
         setCurrentRole={(role) => {
           navigateToView(null);
+          if (currentPath === '/admin/login' || currentPath === '/staff/login') {
+            window.history.pushState({}, '', '/');
+            setCurrentPath('/');
+          }
           setCurrentRole(role);
         }}
         theme={theme}
@@ -258,6 +290,7 @@ export default function App() {
         onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
         notificationCount={notices.length}
+        staffSession={staffSession}
       />
 
       {/* Global Auth Status Notification Toast */}
@@ -296,16 +329,61 @@ export default function App() {
           <StaffResetPasswordView 
             initialToken={activeUrlToken}
             onNavigate={(targetRole) => {
-              if (targetRole === 'ADMIN' || targetRole === 'HOD') {
-                setCurrentRole(targetRole);
+              if (targetRole === 'ADMIN') {
+                navigateToPath('/admin/login');
+              } else {
+                navigateToPath('/staff/login', `role=${targetRole}`);
               }
-              navigateToView(null);
             }}
           />
         )}
 
-        {/* Regular Role Viewports when not on a specialized ?view= route */}
-        {activeUrlView !== 'reset-password' && (
+        {/* Dedicated Path: /admin/login */}
+        {currentPath === '/admin/login' && activeUrlView !== 'reset-password' && (
+          staffSession?.user?.role === 'ADMIN' ? (
+            <AdminView 
+              users={users}
+              setUsers={setUsers}
+              rooms={rooms}
+              setRooms={setRooms}
+              subjects={subjects}
+              setSubjects={setSubjects}
+              notices={notices}
+              setNotices={setNotices}
+              issuedDocuments={issuedDocuments}
+              setIssuedDocuments={setIssuedDocuments}
+              knowledgeDocs={knowledgeDocs}
+              setKnowledgeDocs={setKnowledgeDocs}
+              onAddAuditLog={handleAddAuditLog}
+              staffSession={staffSession}
+              onLogout={handleStaffLogout}
+            />
+          ) : (
+            <AdminAuthView 
+              onAuthSuccess={(session) => {
+                setStaffSession(session);
+                setCurrentRole('ADMIN');
+                navigateToPath('/');
+              }}
+              noticeMessage=""
+            />
+          )
+        )}
+
+        {/* Dedicated Path: /staff/login */}
+        {currentPath === '/staff/login' && activeUrlView !== 'reset-password' && (
+          <StaffAuthView 
+            initialRole={new URLSearchParams(window.location.search).get('role') || 'FACULTY'}
+            onAuthSuccess={(session) => {
+              setStaffSession(session);
+              setCurrentRole(session.user.role);
+              navigateToPath('/');
+            }}
+          />
+        )}
+
+        {/* Regular Role Viewports when not on dedicated /admin/login or /staff/login routes */}
+        {currentPath !== '/admin/login' && currentPath !== '/staff/login' && activeUrlView !== 'reset-password' && (
           <>
             {currentRole === 'ADMIN' && (
               staffSession?.user?.role === 'ADMIN' ? (
@@ -330,11 +408,73 @@ export default function App() {
                 <AdminAuthView 
                   onAuthSuccess={(session) => {
                     setStaffSession(session);
+                    setCurrentRole('ADMIN');
                   }}
                   noticeMessage={staffSession ? "Admin access required" : ""}
-                  onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
                 />
               )
+            )}
+
+            {currentRole === 'STAFF' && (
+              (() => {
+                const role = staffSession?.user?.role;
+                if (role === 'HOD') {
+                  return (
+                    <HodView 
+                      leaveRequests={leaveRequests}
+                      setLeaveRequests={setLeaveRequests}
+                      markCorrections={markCorrections}
+                      setMarkCorrections={setMarkCorrections}
+                      marks={marks}
+                      setMarks={setMarks}
+                      users={users}
+                      onAddAuditLog={handleAddAuditLog}
+                      staffSession={staffSession}
+                      onLogout={handleStaffLogout}
+                    />
+                  );
+                }
+                if (role === 'FACULTY') {
+                  return (
+                    <FacultyView 
+                      sessions={sessions}
+                      setSessions={setSessions}
+                      subjects={subjects}
+                      rooms={rooms}
+                      users={users}
+                      marks={marks}
+                      setMarks={setMarks}
+                      markCorrections={markCorrections}
+                      setMarkCorrections={setMarkCorrections}
+                      onAddAuditLog={handleAddAuditLog}
+                      onLogout={handleStaffLogout}
+                    />
+                  );
+                }
+                if (role === 'MENTOR') {
+                  return (
+                    <MentorView 
+                      riskStudents={riskStudents}
+                      setRiskStudents={setRiskStudents}
+                      leaveRequests={leaveRequests}
+                      setLeaveRequests={setLeaveRequests}
+                      users={users}
+                      onAddAuditLog={handleAddAuditLog}
+                      onLogout={handleStaffLogout}
+                    />
+                  );
+                }
+                return (
+                  <StaffAuthView 
+                    initialRole="FACULTY"
+                    onAuthSuccess={(session) => {
+                      setStaffSession(session);
+                      setCurrentRole(session.user.role);
+                    }}
+                    noticeMessage=""
+                  />
+                );
+              })()
             )}
 
             {currentRole === 'HOD' && (
@@ -352,40 +492,65 @@ export default function App() {
                   onLogout={handleStaffLogout}
                 />
               ) : (
-                <HodAuthView 
+                <StaffAuthView 
+                  initialRole="HOD"
                   onAuthSuccess={(session) => {
                     setStaffSession(session);
+                    setCurrentRole(session.user.role);
                   }}
                   noticeMessage={staffSession ? "HOD access required" : ""}
-                  onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
                 />
               )
             )}
 
             {currentRole === 'FACULTY' && (
-              <FacultyView 
-                sessions={sessions}
-                setSessions={setSessions}
-                subjects={subjects}
-                rooms={rooms}
-                users={users}
-                marks={marks}
-                setMarks={setMarks}
-                markCorrections={markCorrections}
-                setMarkCorrections={setMarkCorrections}
-                onAddAuditLog={handleAddAuditLog}
-              />
+              staffSession?.user?.role === 'FACULTY' ? (
+                <FacultyView 
+                  sessions={sessions}
+                  setSessions={setSessions}
+                  subjects={subjects}
+                  rooms={rooms}
+                  users={users}
+                  marks={marks}
+                  setMarks={setMarks}
+                  markCorrections={markCorrections}
+                  setMarkCorrections={setMarkCorrections}
+                  onAddAuditLog={handleAddAuditLog}
+                  onLogout={handleStaffLogout}
+                />
+              ) : (
+                <StaffAuthView 
+                  initialRole="FACULTY"
+                  onAuthSuccess={(session) => {
+                    setStaffSession(session);
+                    setCurrentRole(session.user.role);
+                  }}
+                  noticeMessage={staffSession ? "Faculty access required" : ""}
+                />
+              )
             )}
 
             {currentRole === 'MENTOR' && (
-              <MentorView 
-                riskStudents={riskStudents}
-                setRiskStudents={setRiskStudents}
-                leaveRequests={leaveRequests}
-                setLeaveRequests={setLeaveRequests}
-                users={users}
-                onAddAuditLog={handleAddAuditLog}
-              />
+              staffSession?.user?.role === 'MENTOR' ? (
+                <MentorView 
+                  riskStudents={riskStudents}
+                  setRiskStudents={setRiskStudents}
+                  leaveRequests={leaveRequests}
+                  setLeaveRequests={setLeaveRequests}
+                  users={users}
+                  onAddAuditLog={handleAddAuditLog}
+                  onLogout={handleStaffLogout}
+                />
+              ) : (
+                <StaffAuthView 
+                  initialRole="MENTOR"
+                  onAuthSuccess={(session) => {
+                    setStaffSession(session);
+                    setCurrentRole(session.user.role);
+                  }}
+                  noticeMessage={staffSession ? "Mentor access required" : ""}
+                />
+              )
             )}
 
             {currentRole === 'STUDENT' && (
