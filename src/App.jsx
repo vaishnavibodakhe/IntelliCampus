@@ -137,6 +137,71 @@ export default function App() {
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
 
+  // Student Notice Feed & Live Read Receipts
+  const [studentNotices, setStudentNotices] = useState(() => INITIAL_NOTICES);
+  const [isLoadingStudentNotices, setIsLoadingStudentNotices] = useState(false);
+  const [studentNoticeError, setStudentNoticeError] = useState(null);
+
+  const getAudienceFilteredNotices = (noticeList, student) => {
+    if (!student) return noticeList;
+    return noticeList.filter(n => {
+      if (n.targetStudentIds && n.targetStudentIds.length > 0) {
+        return n.targetStudentIds.includes(student.id) || n.targetStudentIds.includes(Number(student.id));
+      }
+      const matchDept = !n.targetDepartment || n.targetDepartment === 'All Departments' || n.targetDepartment === student.department;
+      const matchYear = !n.targetYear || n.targetYear === 'All Years' || n.targetYear === student.year;
+      const matchDiv = !n.targetDivision || n.targetDivision === 'All Divisions' || n.targetDivision === student.division;
+      return matchDept && matchYear && matchDiv;
+    });
+  };
+
+  const fetchStudentNotices = async () => {
+    const studentId = currentStudent?.id || (authenticatedUser?.role === 'STUDENT' ? authenticatedUser?.id : null);
+    if (!studentId) {
+      setStudentNotices(notices);
+      return;
+    }
+
+    setIsLoadingStudentNotices(true);
+    setStudentNoticeError(null);
+    try {
+      const feed = await api.getMyNoticeFeed(studentId);
+      if (Array.isArray(feed) && feed.length > 0) {
+        setStudentNotices(feed);
+      } else {
+        setStudentNotices(getAudienceFilteredNotices(notices, currentStudent));
+      }
+    } catch (err) {
+      console.warn('Live notice feed unavailable, falling back to local dataset:', err);
+      setStudentNotices(getAudienceFilteredNotices(notices, currentStudent));
+    } finally {
+      setIsLoadingStudentNotices(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentRole === 'STUDENT' && (currentStudent?.id || authenticatedUser?.id)) {
+      fetchStudentNotices();
+    } else {
+      setStudentNotices(notices);
+    }
+  }, [currentRole, currentStudent?.id, currentStudent?.department, currentStudent?.year, currentStudent?.division, notices]);
+
+  const handleMarkNoticeRead = async (noticeId) => {
+    const studentId = currentStudent?.id || (authenticatedUser?.role === 'STUDENT' ? authenticatedUser?.id : null);
+    await api.markNoticeRead(noticeId, studentId);
+    setStudentNotices(prev => prev.map(n => 
+      n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
+    ));
+    setNotices(prev => prev.map(n => 
+      n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
+    ));
+  };
+
+  const unreadNoticeCount = currentRole === 'STUDENT'
+    ? studentNotices.filter(n => !n.read).length
+    : notices.filter(n => !n.read).length;
+
   // Append entry to Cryptographic Hash Chain
   const handleAddAuditLog = async ({ action, entityType, entityId, oldValue, newValue, reason }) => {
     const lastEntry = auditLogs[auditLogs.length - 1];
@@ -257,7 +322,19 @@ export default function App() {
         onOpenAudit={() => setIsAuditModalOpen(true)}
         onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
-        notificationCount={notices.length}
+        notificationCount={unreadNoticeCount}
+        unreadCount={unreadNoticeCount}
+        notices={currentRole === 'STUDENT' ? studentNotices : notices}
+        isLoadingNotices={isLoadingStudentNotices}
+        noticeError={studentNoticeError}
+        onMarkNoticeRead={handleMarkNoticeRead}
+        onRefreshNotices={fetchStudentNotices}
+        onViewAllNotices={() => {
+          if (currentRole !== 'STUDENT') {
+            setCurrentRole('STUDENT');
+          }
+        }}
+        currentUser={currentStudent || authenticatedUser}
       />
 
       {/* Global Auth Status Notification Toast */}
@@ -350,6 +427,8 @@ export default function App() {
                   onAddAuditLog={handleAddAuditLog}
                   staffSession={staffSession}
                   onLogout={handleStaffLogout}
+                  notices={notices}
+                  setNotices={setNotices}
                 />
               ) : (
                 <HodAuthView 
@@ -374,6 +453,8 @@ export default function App() {
                 markCorrections={markCorrections}
                 setMarkCorrections={setMarkCorrections}
                 onAddAuditLog={handleAddAuditLog}
+                notices={notices}
+                setNotices={setNotices}
               />
             )}
 
@@ -385,6 +466,8 @@ export default function App() {
                 setLeaveRequests={setLeaveRequests}
                 users={users}
                 onAddAuditLog={handleAddAuditLog}
+                notices={notices}
+                setNotices={setNotices}
               />
             )}
 
@@ -398,7 +481,9 @@ export default function App() {
                   marks={marks}
                   leaveRequests={leaveRequests}
                   setLeaveRequests={setLeaveRequests}
-                  notices={notices}
+                  notices={studentNotices}
+                  onMarkNoticeRead={handleMarkNoticeRead}
+                  onRefreshNotices={fetchStudentNotices}
                   issuedDocuments={issuedDocuments}
                   onOpenChat={() => setIsChatbotOpen(true)}
                   onAddAuditLog={handleAddAuditLog}

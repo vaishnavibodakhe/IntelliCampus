@@ -324,4 +324,8 @@ export async function searchStudents(query) {
   return api.searchStudents(query);
 }
 
+export async function listNotices() {
+  return api.listNotices();
+}
+
 export default api;
