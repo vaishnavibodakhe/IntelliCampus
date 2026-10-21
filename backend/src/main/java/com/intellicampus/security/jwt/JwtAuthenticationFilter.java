@@ -22,10 +22,18 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtTokenProvider tokenProvider;
     private final RevokedTokenRepository revokedTokenRepository;
+    private final com.intellicampus.user.repository.UserRepository userRepository;
+    private final com.intellicampus.user.repository.TokenDenylistRepository tokenDenylistRepository;
 
-    public JwtAuthenticationFilter(JwtTokenProvider tokenProvider, RevokedTokenRepository revokedTokenRepository) {
+    public JwtAuthenticationFilter(
+            JwtTokenProvider tokenProvider,
+            RevokedTokenRepository revokedTokenRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.user.repository.UserRepository userRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.user.repository.TokenDenylistRepository tokenDenylistRepository) {
         this.tokenProvider = tokenProvider;
         this.revokedTokenRepository = revokedTokenRepository;
+        this.userRepository = userRepository;
+        this.tokenDenylistRepository = tokenDenylistRepository;
     }
 
     @Override
@@ -35,22 +43,38 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         try {
             String jwt = getJwtFromRequest(request);
 
-            if (StringUtils.hasText(jwt) && tokenProvider.validateToken(jwt)) {
-                // Check if token has been blacklisted / revoked
-                String tokenHash = DigestUtils.sha256Hex(jwt);
-                if (!revokedTokenRepository.existsByTokenHash(tokenHash)) {
-                    String email = tokenProvider.getEmailFromToken(jwt);
-                    String role = tokenProvider.getRoleFromToken(jwt);
+            if (StringUtils.hasText(jwt)) {
+                // 1. Check student token denylist
+                if (tokenDenylistRepository != null && tokenDenylistRepository.existsByToken(jwt)) {
+                    filterChain.doFilter(request, response);
+                    return;
+                }
 
-                    if (role != null) {
-                        String roleAuthority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
-                        SimpleGrantedAuthority authority = new SimpleGrantedAuthority(roleAuthority);
+                if (tokenProvider.validateToken(jwt)) {
+                    // 2. Check faculty/mentor revoked token repository
+                    String tokenHash = DigestUtils.sha256Hex(jwt);
+                    if (revokedTokenRepository == null || !revokedTokenRepository.existsByTokenHash(tokenHash)) {
+                        String email = tokenProvider.getEmailFromToken(jwt);
+                        String role = tokenProvider.getRoleFromToken(jwt);
 
-                        UsernamePasswordAuthenticationToken authentication =
-                                new UsernamePasswordAuthenticationToken(email, null, Collections.singletonList(authority));
-                        authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+                        if (role != null) {
+                            String roleAuthority = role.startsWith("ROLE_") ? role : "ROLE_" + role;
+                            SimpleGrantedAuthority authority = new SimpleGrantedAuthority(roleAuthority);
 
-                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                            Object principal = email;
+                            if (userRepository != null && email != null) {
+                                java.util.Optional<com.intellicampus.user.model.User> userOpt = userRepository.findByEmail(email);
+                                if (userOpt.isPresent()) {
+                                    principal = userOpt.get();
+                                }
+                            }
+
+                            UsernamePasswordAuthenticationToken authentication =
+                                    new UsernamePasswordAuthenticationToken(principal, null, Collections.singletonList(authority));
+                            authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
+
+                            SecurityContextHolder.getContext().setAuthentication(authentication);
+                        }
                     }
                 }
             }

@@ -155,8 +155,8 @@ services:
     environment:
       MYSQL_DATABASE: intellicampus
       MYSQL_USER: campus_admin
-      MYSQL_PASSWORD: SecureCampusPassword2026!
-      MYSQL_ROOT_PASSWORD: RootSecurePassword2026!
+      MYSQL_PASSWORD: ${DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
     volumes:
       - mysql_data:/var/lib/mysql
 

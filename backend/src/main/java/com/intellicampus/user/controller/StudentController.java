@@ -1,21 +1,24 @@
 package com.intellicampus.user.controller;
 
+import com.intellicampus.user.dto.CaptureTokenResponseDto;
+import com.intellicampus.user.dto.FaceEnrollmentRequestDto;
 import com.intellicampus.user.model.StudentProfile;
-import com.intellicampus.user.model.User;
 import com.intellicampus.user.repository.StudentProfileRepository;
 import com.intellicampus.user.repository.UserRepository;
 import com.intellicampus.user.service.FaceEnrollmentService;
-import org.springframework.core.io.Resource;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.MediaType;
+import com.intellicampus.user.model.User;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @RestController
@@ -36,13 +39,30 @@ public class StudentController {
         this.userRepository = userRepository;
     }
 
-    @PostMapping(value = "/{studentId}/face-enroll", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    /**
+     * Issues a one-time capture token bound to pending student account and client IP (5 min TTL).
+     */
+    @PostMapping("/{studentId}/capture-token")
+    public ResponseEntity<CaptureTokenResponseDto> issueCaptureToken(
+            @PathVariable Long studentId,
+            HttpServletRequest request) {
+        String clientIp = extractClientIp(request);
+        CaptureTokenResponseDto tokenDto = faceEnrollmentService.issueCaptureToken(studentId, clientIp);
+        return ResponseEntity.ok(tokenDto);
+    }
+
+    /**
+     * Completes biometric face enrollment using 3 live camera frames (front, left, right),
+     * one-time capture token, and liveness result.
+     */
+    @PostMapping("/{studentId}/face-enroll")
     public ResponseEntity<Map<String, Object>> enrollFace(
             @PathVariable Long studentId,
-            @RequestParam("photo") MultipartFile photo,
-            @RequestParam(value = "consentVersion", required = false, defaultValue = "1.0") String consentVersion) {
+            @RequestBody FaceEnrollmentRequestDto req,
+            HttpServletRequest request) {
 
-        StudentProfile profile = faceEnrollmentService.enrollStudentFace(studentId, photo, consentVersion);
+        String clientIp = extractClientIp(request);
+        StudentProfile profile = faceEnrollmentService.enrollStudentFace(studentId, req, clientIp);
 
         Map<String, Object> response = new HashMap<>();
         response.put("status", "SUCCESS");
@@ -51,44 +71,103 @@ public class StudentController {
         response.put("faceEnrolled", profile.getFaceEnrolled());
         response.put("consentAt", profile.getConsentAt());
         response.put("consentVersion", profile.getConsentVersion());
-        response.put("message", "Biometric face template enrolled successfully.");
+        response.put("message", "Biometric face template enrolled successfully from live camera.");
 
         return ResponseEntity.ok(response);
     }
 
-    @GetMapping("/{studentId}/face-photo")
-    public ResponseEntity<Resource> getFacePhoto(
+    @GetMapping("/{studentId}")
+    public ResponseEntity<Map<String, Object>> getStudent(
             @PathVariable Long studentId,
-            @RequestParam(value = "requesterId", required = false) Long requesterId) {
-
-        User requester = null;
-        if (requesterId != null) {
-            requester = userRepository.findById(requesterId).orElse(null);
+            Authentication authentication) {
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new AccessDeniedException("Authentication required");
         }
 
-        Resource resource = faceEnrollmentService.loadStudentFacePhoto(studentId, requester);
-        String filename = resource.getFilename() != null ? resource.getFilename() : "photo.jpg";
-        MediaType mediaType = filename.endsWith(".png") ? MediaType.IMAGE_PNG : MediaType.IMAGE_JPEG;
-
-        return ResponseEntity.ok()
-                .contentType(mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + filename + "\"")
-                .body(resource);
-    }
-
-    @GetMapping("/{studentId}")
-    public ResponseEntity<Map<String, Object>> getStudent(@PathVariable Long studentId) {
         StudentProfile p = faceEnrollmentService.findStudent(studentId);
+
+        boolean isStaff = authentication.getAuthorities().stream()
+                .map(GrantedAuthority::getAuthority)
+                .anyMatch(role -> role.equals("ROLE_ADMIN")
+                               || role.equals("ROLE_HOD")
+                               || role.equals("ROLE_FACULTY")
+                               || role.equals("ROLE_MENTOR"));
+
+        if (!isStaff) {
+            if (!isStudentOwnRecord(p, authentication)) {
+                throw new AccessDeniedException("Access is denied: students may only access their own record");
+            }
+        }
+
         return ResponseEntity.ok(mapStudentToSafeDto(p));
     }
 
     @GetMapping("/division/{divisionId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR')")
     public ResponseEntity<List<Map<String, Object>>> getStudentsByDivision(@PathVariable Long divisionId) {
         List<StudentProfile> students = studentProfileRepository.findByDivisionId(divisionId);
         List<Map<String, Object>> result = students.stream()
                 .map(this::mapStudentToSafeDto)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(result);
+    }
+
+    private boolean isStudentOwnRecord(StudentProfile p, Authentication authentication) {
+        if (p == null || authentication == null) {
+            return false;
+        }
+
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof User user) {
+            if (p.getUser() != null && user.getId() != null && user.getId().equals(p.getUser().getId())) {
+                return true;
+            }
+            if (p.getUser() != null && user.getEmail() != null && user.getEmail().equalsIgnoreCase(p.getUser().getEmail())) {
+                return true;
+            }
+        }
+
+        String authName = authentication.getName();
+        if (authName != null && !authName.isBlank()) {
+            if (p.getUser() != null) {
+                if (authName.equalsIgnoreCase(p.getUser().getEmail())) {
+                    return true;
+                }
+                if (authName.equalsIgnoreCase(p.getUser().getUserCode())) {
+                    return true;
+                }
+            }
+            if (authName.equalsIgnoreCase(p.getRollNo())) {
+                return true;
+            }
+            if (p.getId() != null && authName.equals(String.valueOf(p.getId()))) {
+                return true;
+            }
+            if (p.getUser() != null && p.getUser().getId() != null && authName.equals(String.valueOf(p.getUser().getId()))) {
+                return true;
+            }
+
+            Optional<User> authUserOpt = userRepository.findByEmail(authName)
+                    .or(() -> userRepository.findByUserCode(authName));
+            if (authUserOpt.isPresent()) {
+                User authUser = authUserOpt.get();
+                if (p.getUser() != null && authUser.getId().equals(p.getUser().getId())) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    private String extractClientIp(HttpServletRequest request) {
+        if (request == null) return "127.0.0.1";
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isBlank()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        String remoteAddr = request.getRemoteAddr();
+        return (remoteAddr != null && !remoteAddr.isBlank()) ? remoteAddr : "127.0.0.1";
     }
 
     private Map<String, Object> mapStudentToSafeDto(StudentProfile p) {

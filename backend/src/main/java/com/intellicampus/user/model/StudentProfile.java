@@ -21,6 +21,9 @@ public class StudentProfile {
     @Column(name = "roll_no", nullable = false, unique = true, length = 30)
     private String rollNo;
 
+    @Column(name = "contact_no", length = 20)
+    private String contactNo;
+
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "division_id", nullable = false)
     private Division division;
@@ -52,6 +55,9 @@ public class StudentProfile {
 
     @Column(name = "face_embedding", columnDefinition = "JSON")
     private String faceEmbedding;
+
+    @Column(name = "face_embeddings_multi", columnDefinition = "JSON")
+    private String faceEmbeddingsMulti;
 
     @Column(name = "consent_at")
     private LocalDateTime consentAt;
@@ -130,6 +136,12 @@ public class StudentProfile {
 
     public String getConsentVersion() { return consentVersion; }
     public void setConsentVersion(String consentVersion) { this.consentVersion = consentVersion; }
+
+    public String getContactNo() { return contactNo; }
+    public void setContactNo(String contactNo) { this.contactNo = contactNo; }
+
+    public String getFaceEmbeddingsMulti() { return faceEmbeddingsMulti; }
+    public void setFaceEmbeddingsMulti(String faceEmbeddingsMulti) { this.faceEmbeddingsMulti = faceEmbeddingsMulti; }
 
     public LocalDateTime getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }

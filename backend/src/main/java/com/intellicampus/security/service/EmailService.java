@@ -10,7 +10,7 @@ import org.springframework.mail.javamail.MimeMessageHelper;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
-@Service
+@Service("securityEmailService")
 public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
@@ -23,8 +23,8 @@ public class EmailService {
     @Value("${app.mail-from:noreply@intellicampus.edu}")
     private String mailFrom;
 
-    @Value("${spring.mail.username:}")
-    private String smtpUsername;
+    @Value("${spring.mail.username:${MAIL_USERNAME:}}")
+    private String mailUsername;
 
     public EmailService(@Autowired(required = false) JavaMailSender mailSender) {
         this.mailSender = mailSender;
@@ -35,13 +35,13 @@ public class EmailService {
      * Uses HTML email formatting and strict delivery confirmation.
      */
     public void sendPasswordResetOtp(String toEmail, String otp) {
-        boolean isSmtpConfigured = mailSender != null && smtpUsername != null && !smtpUsername.trim().isEmpty();
+        boolean isSmtpConfigured = mailSender != null && mailUsername != null && !mailUsername.trim().isEmpty();
 
         if (!isSmtpConfigured) {
-            log.error("SMTP service is not configured (mailSender is null or spring.mail.username is empty).");
+            log.error("SMTP delivery failed: SMTP service is not configured (mailSender is null or mail username is empty)");
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Email delivery service is not configured. Please contact the administrator.");
+                    "Failed to dispatch verification code: Email delivery service is not configured. Please ensure MAIL_USERNAME and MAIL_PASSWORD are set.");
         }
 
         try {
@@ -49,7 +49,7 @@ public class EmailService {
             MimeMessageHelper helper = new MimeMessageHelper(message, true, "UTF-8");
 
             // For Gmail SMTP, the From address should match the authenticated account
-            String senderEmail = (smtpUsername != null && !smtpUsername.isBlank()) ? smtpUsername.trim() : mailFrom;
+            String senderEmail = (mailUsername != null && !mailUsername.isBlank()) ? mailUsername.trim() : mailFrom;
             try {
                 helper.setFrom(new jakarta.mail.internet.InternetAddress(senderEmail, "IntelliCampus Academic Portal"));
             } catch (Exception e) {
@@ -65,14 +65,38 @@ public class EmailService {
             helper.setText(textFallback, htmlBody);
 
             mailSender.send(message);
-            log.info("Password reset OTP email successfully delivered to '{}'", toEmail);
+            log.info("Password reset OTP email successfully sent to '{}'", toEmail);
         } catch (org.springframework.web.server.ResponseStatusException rse) {
             throw rse;
-        } catch (Exception ex) {
-            log.error("Failed to deliver password reset OTP email to '{}': {}", toEmail, ex.getMessage(), ex);
+        } catch (org.springframework.mail.MailAuthenticationException mae) {
+            String reason = mae.getMessage();
+            if (mae.getCause() != null && mae.getCause().getMessage() != null) {
+                reason = mae.getCause().getMessage();
+            }
+            log.error("SMTP delivery failed: Authentication failure for user '{}' - {}", mailUsername, reason);
             throw new org.springframework.web.server.ResponseStatusException(
                     org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
-                    "Failed to deliver verification code to your email inbox: " + ex.getMessage());
+                    "Failed to dispatch verification code: SMTP authentication failed (" + reason + ")");
+        } catch (org.springframework.mail.MailSendException mse) {
+            String reason = mse.getMessage();
+            if (mse.getRootCause() != null && mse.getRootCause().getMessage() != null) {
+                reason = mse.getRootCause().getMessage();
+            } else if (mse.getCause() != null && mse.getCause().getMessage() != null) {
+                reason = mse.getCause().getMessage();
+            }
+            log.error("SMTP delivery failed: {}", reason, mse);
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to dispatch verification code: " + (reason != null ? reason : "SMTP delivery error"));
+        } catch (Exception ex) {
+            String reason = ex.getMessage();
+            if (ex.getCause() != null && ex.getCause().getMessage() != null) {
+                reason = ex.getCause().getMessage();
+            }
+            log.error("SMTP delivery failed: {}", reason, ex);
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to dispatch verification code: " + (reason != null ? reason : "SMTP delivery error"));
         }
     }
 

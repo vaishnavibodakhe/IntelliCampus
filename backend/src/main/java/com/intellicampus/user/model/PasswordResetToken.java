@@ -62,6 +62,9 @@ public class PasswordResetToken {
     public LocalDateTime getExpiresAt() { return expiresAt; }
     public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
 
+    public LocalDateTime getExpiryDate() { return expiresAt; }
+    public void setExpiryDate(LocalDateTime expiryDate) { this.expiresAt = expiryDate; }
+
     public Boolean getUsed() { return used; }
     public void setUsed(Boolean used) { this.used = used; }
 

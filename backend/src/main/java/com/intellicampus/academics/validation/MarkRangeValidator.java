@@ -37,24 +37,7 @@ public class MarkRangeValidator {
     }
 
     /**
-     * Validates that the justification reason for a mark correction request is provided and sufficient.
-     *
-     * @param reason Faculty explanation for correction
-     * @throws IllegalArgumentException If reason is null, empty, or shorter than 15 characters
-     */
-    public void validateCorrectionReason(String reason) {
-        // Criterion 2: Ensure mark correction reason is mandatory and at least 15 characters long
-        if (reason == null || reason.trim().length() < MIN_CORRECTION_REASON_LENGTH) {
-            int length = (reason == null) ? 0 : reason.trim().length();
-            throw new IllegalArgumentException(
-                    String.format("Mark correction justification is mandatory and must be at least %d characters (provided: %d characters).",
-                            MIN_CORRECTION_REASON_LENGTH, length)
-            );
-        }
-    }
-
-    /**
-     * Validates full proposed mark correction request.
+     * Validates that assigned marks (floating point) fall within the allowable range [0, maxMarks].
      */
     public void validateMarks(Double marks, Double maxMarks) {
         if (maxMarks == null || maxMarks <= 0) {
@@ -73,14 +56,36 @@ public class MarkRangeValidator {
         }
     }
 
+    /**
+     * Validates that the justification reason for a mark correction request is provided and sufficient.
+     *
+     * @param reason Faculty explanation for correction
+     * @throws IllegalArgumentException If reason is null, empty, or shorter than 15 characters
+     */
+    public void validateCorrectionReason(String reason) {
+        // Criterion 2: Ensure mark correction reason is mandatory and at least 15 characters long
+        if (reason == null || reason.trim().length() < MIN_CORRECTION_REASON_LENGTH) {
+            int length = (reason == null) ? 0 : reason.trim().length();
+            throw new IllegalArgumentException(
+                    String.format("Mark correction justification is mandatory and must be at least %d characters (provided: %d characters).",
+                            MIN_CORRECTION_REASON_LENGTH, length)
+            );
+        }
+    }
+
+    /**
+     * Validates full proposed mark correction request with double values.
+     */
     public void validateCorrection(Double proposedMarks, Double maxMarks, String reason) {
         validateMarks(proposedMarks, maxMarks);
         validateCorrectionReason(reason);
     }
 
+    /**
+     * Validates full proposed mark correction request with integer values.
+     */
     public void validateCorrection(Integer proposedMarks, Integer maxMarks, String reason) {
         validateMarks(proposedMarks, maxMarks);
         validateCorrectionReason(reason);
     }
 }
-

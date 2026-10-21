@@ -16,7 +16,7 @@ public interface AuditLogEntryRepository extends JpaRepository<AuditLogEntry, Lo
     Optional<AuditLogEntry> findTopByOrderByCreatedAtDesc();
     List<AuditLogEntry> findByEntityTypeAndEntityIdOrderByIdAsc(String entityType, String entityId);
 
-    @Query("SELECT a FROM AuditLogEntry a ORDER BY a.id DESC LIMIT 1")
+    @Query(value = "SELECT * FROM audit_logs ORDER BY id DESC LIMIT 1", nativeQuery = true)
     Optional<AuditLogEntry> findLatestEntry();
 
     long count();

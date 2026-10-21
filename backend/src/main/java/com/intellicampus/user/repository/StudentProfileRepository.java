@@ -13,6 +13,9 @@ public interface StudentProfileRepository extends JpaRepository<StudentProfile, 
     Optional<StudentProfile> findByUser(User user);
     Optional<StudentProfile> findByUserId(Long userId);
     Optional<StudentProfile> findByRollNo(String rollNo);
+    boolean existsByRollNo(String rollNo);
     List<StudentProfile> findByMentor(User mentor);
     List<StudentProfile> findByDivisionId(Long divisionId);
+    List<StudentProfile> findByFaceEnrolledTrue();
+    void deleteByUser(User user);
 }

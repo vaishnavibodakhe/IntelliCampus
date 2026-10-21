@@ -9,8 +9,11 @@ import {
   ArrowRight,
   TrendingDown,
   Clock,
-  ShieldCheck
+  ShieldCheck,
+  LogOut,
+  KeyRound
 } from 'lucide-react';
+import StaffChangePasswordView from './staff/StaffChangePasswordView';
 
 export default function HodView({
   leaveRequests,
@@ -20,9 +23,13 @@ export default function HodView({
   marks,
   setMarks,
   users,
-  onAddAuditLog
+  onAddAuditLog,
+  staffSession,
+  onLogout,
+  onChangePassword
 }) {
   const [activeTab, setActiveTab] = useState('leaves');
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState('defaulters');
   const [rejectReasonModal, setRejectReasonModal] = useState({ open: false, type: '', id: null });
   const [rejectReasonText, setRejectReasonText] = useState('');
@@ -191,8 +198,32 @@ export default function HodView({
             Head of Department governance: Final leave decisions, published mark correction authorization, and academic compliance metrics.
           </p>
         </div>
-        <div className="header-meta-badge">
-          <span className="dot online" /> Dr. Ananya Sharma (Computer Science & Eng)
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className="header-meta-badge">
+            <span className="dot online" /> {staffSession?.user ? `${staffSession.user.name} (${staffSession.user.department || 'HOD'})` : 'Dr. Ananya Sharma (Computer Science & Eng)'}
+          </div>
+          <button
+            type="button"
+            onClick={() => setShowChangePasswordModal(true)}
+            className="action-icon-btn"
+            style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}
+            title="Change HOD Password"
+          >
+            <KeyRound size={15} />
+            <span>Change Password</span>
+          </button>
+          {onLogout && (
+            <button
+              type="button"
+              onClick={onLogout}
+              className="action-icon-btn"
+              style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '5px' }}
+              title="Sign Out of HOD Dashboard"
+            >
+              <LogOut size={15} />
+              <span>Logout</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -482,6 +513,33 @@ export default function HodView({
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* Change Password Modal */}
+      {showChangePasswordModal && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.75)',
+          backdropFilter: 'blur(6px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}>
+          <StaffChangePasswordView
+            staffSession={staffSession}
+            onClose={() => setShowChangePasswordModal(false)}
+            onPasswordChanged={() => {
+              setShowChangePasswordModal(false);
+              alert('Password updated successfully!');
+            }}
+          />
         </div>
       )}
     </div>

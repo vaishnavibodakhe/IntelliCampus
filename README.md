@@ -158,6 +158,68 @@ curl -X POST http://localhost:8080/api/ai/risk/evaluate/10
 
 ---
 
+## 💻 Run on a New Laptop (Setup Guide)
+
+Full Guide: [**docs/SETUP.md**](docs/SETUP.md)
+
+### 1. Prerequisites
+- **Java JDK 17+**
+- **Node.js 18+ / 20+ (LTS)** and **npm**
+- **MySQL Server 8.0+**
+
+### 2. MySQL Setup
+Run in MySQL:
+```sql
+CREATE DATABASE IF NOT EXISTS intellicampus_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' IDENTIFIED BY 'your_db_password_here';
+GRANT ALL PRIVILEGES ON intellicampus_db.* TO 'campus_admin'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+### 3. Environment Variables (.env)
+Copy the example file:
+```bash
+# Windows
+copy .env.example .env
+# macOS / Linux
+cp .env.example .env
+```
+Fill in your Gmail credentials in `.env`:
+- `MAIL_USERNAME=your-email@gmail.com`
+- `MAIL_PASSWORD=your16charpassword` *(Generate at Google Account > Security > 2-Step Verification > App passwords; remove spaces)*.
+
+### 4. Start Backend
+```bash
+cd backend
+.\mvnw.cmd spring-boot:run   # Windows
+# or ./mvnw spring-boot:run  # macOS / Linux
+```
+*Expected log lines:*
+- `[DOTENV] Successfully loaded 5 properties from .env`
+- `SMTP auth check: OK`
+- `Tomcat started on port 8080 (http)`
+
+### 5. Start Frontend
+```bash
+# In the root repository directory:
+npm install
+npm run dev
+```
+Open [http://localhost:5173](http://localhost:5173).
+
+### 6. Testing Admin/HOD Register, Login & Forgot-Password OTP
+1. On `http://localhost:5173`, select **Admin** or **HOD** and register using a real email inbox.
+2. Log in with your new account.
+3. Test **Forgot Password**: request a 6-digit OTP, check your inbox (and Spam folder), enter the OTP, and set a new password.
+
+### 7. Troubleshooting
+- **502 Bad Gateway (`Failed to request OTP (502)`)**: Backend is not running on port 8080. Start backend via `.\mvnw.cmd spring-boot:run`.
+- **535 Authentication Failed (`SMTP auth check: FAILED (535)`)**: Incorrect 16-letter Gmail App Password or 2-Step Verification disabled.
+- **"Success message, but no email arrived"**: Email not registered under that specific role (`ADMIN` vs `HOD`), or the message went into the **Spam** folder.
+
+
+---
+
 ## 🧪 Automated Testing
 
 Run the automated test suite:
@@ -199,11 +261,11 @@ DB_NAME=intellicampus
 DB_USER=campus_admin
 DB_PASSWORD=your_mysql_password_here
 
-# Spring Mail SMTP Configuration
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your_email@gmail.com
-SMTP_PASSWORD=your_gmail_16_digit_app_password
+# Spring Mail (SMTP) Configuration for Password Reset OTP
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_gmail_16_digit_app_password
 MAIL_FROM=noreply@intellicampus.edu
 ```
 
@@ -212,7 +274,7 @@ MAIL_FROM=noreply@intellicampus.edu
 2. Ensure **2-Step Verification** is enabled.
 3. Search for **App Passwords** in the search bar.
 4. Create a new App Password named `IntelliCampus`.
-5. Copy the generated 16-character code into `SMTP_PASSWORD` in `.env`.
+5. Copy the generated 16-character code into `MAIL_PASSWORD` in `.env`.
 
 ### Quick Setup Steps
 1. Install frontend dependencies:

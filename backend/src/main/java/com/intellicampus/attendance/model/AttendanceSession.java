@@ -40,6 +40,9 @@ public class AttendanceSession {
     @Column(name = "challenge_code", nullable = false, length = 8)
     private String challengeCode;
 
+    @Column(name = "session_nonce", length = 64)
+    private String sessionNonce;
+
     @Enumerated(EnumType.STRING)
     @JdbcTypeCode(SqlTypes.VARCHAR)
     @Column(nullable = false, length = 16)
@@ -50,6 +53,12 @@ public class AttendanceSession {
 
     @Column(name = "photo_window_ends_at")
     private LocalDateTime photoWindowEndsAt;
+
+    @Column(name = "photo_count", nullable = false)
+    private Integer photoCount = 0;
+
+    @Column(name = "expires_at")
+    private LocalDateTime expiresAt;
 
     @Column(name = "finalised_at")
     private LocalDateTime finalisedAt;
@@ -101,6 +110,15 @@ public class AttendanceSession {
 
     public LocalDateTime getFinalisedAt() { return finalisedAt; }
     public void setFinalisedAt(LocalDateTime finalisedAt) { this.finalisedAt = finalisedAt; }
+
+    public String getSessionNonce() { return sessionNonce; }
+    public void setSessionNonce(String sessionNonce) { this.sessionNonce = sessionNonce; }
+
+    public Integer getPhotoCount() { return photoCount; }
+    public void setPhotoCount(Integer photoCount) { this.photoCount = photoCount; }
+
+    public LocalDateTime getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }

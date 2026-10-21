@@ -62,7 +62,7 @@ For the Forgot/Reset Password feature to dispatch real emails:
 3. Search for **"App Passwords"** in the top search bar (or go to [https://myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords)).
 4. Enter an App name, e.g., `IntelliCampus`.
 5. Click **Create**. Google will display a 16-character code (e.g., `abcd efgh ijkl mnop`).
-6. Copy this password (without spaces) and use it for `SMTP_PASSWORD`.
+6. Copy this password (without spaces) and use it for `MAIL_PASSWORD`.
 
 ---
 
@@ -84,10 +84,10 @@ DB_PASSWORD=your_mysql_password_here
 # PowerShell: -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
 JWT_SECRET=your_generated_jwt_secret_here_min_32_chars
 FRONTEND_URL=http://localhost:5173
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USERNAME=your_email@gmail.com
-SMTP_PASSWORD=your_16_digit_app_password
+MAIL_HOST=smtp.gmail.com
+MAIL_PORT=587
+MAIL_USERNAME=your_email@gmail.com
+MAIL_PASSWORD=your_16_digit_app_password
 MAIL_FROM=noreply@intellicampus.edu
 ```
 
@@ -100,10 +100,10 @@ $env:DB_USER="campus_admin"
 $env:DB_PASSWORD="your_mysql_password_here"
 # Generate your own secret:
 $env:JWT_SECRET = -join ((1..64) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
-$env:SMTP_HOST="smtp.gmail.com"
-$env:SMTP_PORT="587"
-$env:SMTP_USERNAME="your_email@gmail.com"
-$env:SMTP_PASSWORD="your_16_digit_app_password"
+$env:MAIL_HOST="smtp.gmail.com"
+$env:MAIL_PORT="587"
+$env:MAIL_USERNAME="your_email@gmail.com"
+$env:MAIL_PASSWORD="your_16_digit_app_password"
 $env:MAIL_FROM="noreply@intellicampus.edu"
 $env:FRONTEND_URL="http://localhost:5173"
 ```

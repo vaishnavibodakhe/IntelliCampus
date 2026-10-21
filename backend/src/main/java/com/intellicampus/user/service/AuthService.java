@@ -12,6 +12,7 @@ import com.intellicampus.user.model.PasswordResetToken;
 import com.intellicampus.user.model.RevokedToken;
 import com.intellicampus.user.model.Role;
 import com.intellicampus.user.model.User;
+import com.intellicampus.user.model.UserStatus;
 import com.intellicampus.user.repository.PasswordResetTokenRepository;
 import com.intellicampus.user.repository.RevokedTokenRepository;
 import com.intellicampus.user.repository.UserRepository;
@@ -40,7 +41,7 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 
-@Service
+@Service("facultyMentorAuthService")
 @Transactional
 public class AuthService {
 
@@ -287,6 +288,10 @@ public class AuthService {
             return new ApiResponse(true, genericSuccessMessage);
         }
 
+        if (user.getStatus() != null && user.getStatus() != UserStatus.ACTIVE) {
+            log.warn("Faculty forgot-password requested for inactive account '{}' (status: {})", email, user.getStatus());
+        }
+
         // Invalidate any older active tokens for this user
         passwordResetTokenRepository.invalidateAllActiveTokensForUser(user);
 
@@ -302,7 +307,21 @@ public class AuthService {
         passwordResetTokenRepository.save(resetToken);
 
         // Dispatch email via SMTP
-        emailService.sendPasswordResetOtp(user.getEmail(), otp);
+        try {
+            emailService.sendPasswordResetOtp(user.getEmail(), otp);
+            log.info("Password reset OTP email successfully sent to '{}'", user.getEmail());
+        } catch (ResponseStatusException rse) {
+            log.error("SMTP delivery failed: {}", rse.getReason());
+            throw rse;
+        } catch (Exception ex) {
+            String reason = ex.getMessage();
+            if (ex.getCause() != null && ex.getCause().getMessage() != null) {
+                reason = ex.getCause().getMessage();
+            }
+            log.error("SMTP delivery failed: {}", reason, ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to dispatch verification code: " + (reason != null ? reason : "SMTP delivery error"));
+        }
 
         return new ApiResponse(true, "A 6-digit password reset code has been dispatched to your registered institutional email.");
     }
@@ -475,6 +494,10 @@ public class AuthService {
             return new ApiResponse(true, genericSuccessMessage);
         }
 
+        if (user.getStatus() != null && user.getStatus() != UserStatus.ACTIVE) {
+            log.warn("Mentor forgot-password requested for inactive account '{}' (status: {})", email, user.getStatus());
+        }
+
         // Invalidate any older active tokens for this user
         passwordResetTokenRepository.invalidateAllActiveTokensForUser(user);
 
@@ -490,7 +513,21 @@ public class AuthService {
         passwordResetTokenRepository.save(resetToken);
 
         // Dispatch email
-        emailService.sendPasswordResetOtp(user.getEmail(), otp);
+        try {
+            emailService.sendPasswordResetOtp(user.getEmail(), otp);
+            log.info("Password reset OTP email successfully sent to '{}'", user.getEmail());
+        } catch (ResponseStatusException rse) {
+            log.error("SMTP delivery failed: {}", rse.getReason());
+            throw rse;
+        } catch (Exception ex) {
+            String reason = ex.getMessage();
+            if (ex.getCause() != null && ex.getCause().getMessage() != null) {
+                reason = ex.getCause().getMessage();
+            }
+            log.error("SMTP delivery failed: {}", reason, ex);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to dispatch verification code: " + (reason != null ? reason : "SMTP delivery error"));
+        }
 
         return new ApiResponse(true, "A 6-digit password reset code has been dispatched to your registered institutional email.");
     }
