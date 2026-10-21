@@ -251,23 +251,9 @@ export default function LoginPage({
         </button>
       </form>
 
-      {/* Navigation Footer */}
-      <div className="auth-footer">
-        <span>Don't have an account? </span>
-        <button
-          type="button"
-          id={`login-register-link-${roleClass}`}
-          className="auth-link"
-          onClick={() => {
-            if (onNavigateRegister) {
-              onNavigateRegister();
-            } else {
-              navigate(isFaculty ? '/faculty/register' : '/mentor/register');
-            }
-          }}
-        >
-          Register as {isFaculty ? 'Faculty' : 'Mentor'}
-        </button>
+      {/* Navigation Footer - Staff accounts are admin-provisioned */}
+      <div className="auth-footer" style={{ fontSize: '0.82rem', color: 'var(--text-secondary, #94a3b8)', textAlign: 'center', marginTop: '1.25rem' }}>
+        <span>Institutional {isFaculty ? 'Faculty' : 'Mentor'} accounts are provisioned exclusively by Campus Administration.</span>
       </div>
     </AuthLayout>
   );

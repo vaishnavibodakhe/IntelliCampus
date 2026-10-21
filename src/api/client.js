@@ -6,25 +6,67 @@
 const TOKEN_STORAGE_KEY = 'intellicampus_auth_token';
 const USER_STORAGE_KEY = 'intellicampus_auth_user';
 
+const ALL_STORAGE_KEYS = [
+  'intellicampus_auth_token',
+  'intellicampus_auth_user',
+  'intellicampus_token',
+  'intellicampus_user',
+  'intellicampus_token_faculty',
+  'intellicampus_token_mentor',
+  'intellicampus_staff_session',
+  'intellicampus_student_session'
+];
+
 export function getStoredToken() {
   try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY);
+    const direct = localStorage.getItem(TOKEN_STORAGE_KEY) || 
+                   sessionStorage.getItem(TOKEN_STORAGE_KEY) ||
+                   localStorage.getItem('intellicampus_token') || 
+                   sessionStorage.getItem('intellicampus_token');
+    if (direct) return direct;
+
+    const staffRaw = localStorage.getItem('intellicampus_staff_session') || sessionStorage.getItem('intellicampus_staff_session');
+    if (staffRaw) {
+      const parsed = JSON.parse(staffRaw);
+      const staffToken = parsed.accessToken || parsed.token;
+      if (staffToken) return staffToken;
+    }
+
+    const studentRaw = localStorage.getItem('intellicampus_student_session') || sessionStorage.getItem('intellicampus_student_session');
+    if (studentRaw) {
+      const parsed = JSON.parse(studentRaw);
+      const studentToken = parsed.token || parsed.accessToken;
+      if (studentToken) return studentToken;
+    }
+
+    return null;
   } catch {
     return null;
   }
 }
 
-export function setStoredToken(token, user = null) {
+export function setStoredToken(token, user = null, rememberMe = true) {
   try {
+    const primaryStorage = rememberMe ? localStorage : sessionStorage;
     if (token) {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
+      primaryStorage.setItem(TOKEN_STORAGE_KEY, token);
+      primaryStorage.setItem('intellicampus_token', token);
     } else {
       localStorage.removeItem(TOKEN_STORAGE_KEY);
+      sessionStorage.removeItem(TOKEN_STORAGE_KEY);
+      localStorage.removeItem('intellicampus_token');
+      sessionStorage.removeItem('intellicampus_token');
     }
+
     if (user) {
-      localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+      const userStr = JSON.stringify(user);
+      primaryStorage.setItem(USER_STORAGE_KEY, userStr);
+      primaryStorage.setItem('intellicampus_user', userStr);
     } else if (token === null) {
       localStorage.removeItem(USER_STORAGE_KEY);
+      sessionStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem('intellicampus_user');
+      sessionStorage.removeItem('intellicampus_user');
     }
   } catch (err) {
     console.warn('Storage access unavailable:', err);
@@ -33,8 +75,25 @@ export function setStoredToken(token, user = null) {
 
 export function getStoredUser() {
   try {
-    const raw = localStorage.getItem(USER_STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    const raw = localStorage.getItem(USER_STORAGE_KEY) || 
+                sessionStorage.getItem(USER_STORAGE_KEY) ||
+                localStorage.getItem('intellicampus_user') || 
+                sessionStorage.getItem('intellicampus_user');
+    if (raw) return JSON.parse(raw);
+
+    const staffRaw = localStorage.getItem('intellicampus_staff_session') || sessionStorage.getItem('intellicampus_staff_session');
+    if (staffRaw) {
+      const parsed = JSON.parse(staffRaw);
+      if (parsed.user) return parsed.user;
+    }
+
+    const studentRaw = localStorage.getItem('intellicampus_student_session') || sessionStorage.getItem('intellicampus_student_session');
+    if (studentRaw) {
+      const parsed = JSON.parse(studentRaw);
+      if (parsed.user) return parsed.user;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -42,21 +101,17 @@ export function getStoredUser() {
 
 export function clearAuthSession() {
   try {
-    localStorage.removeItem(TOKEN_STORAGE_KEY);
-    localStorage.removeItem(USER_STORAGE_KEY);
-  } catch {}
+    ALL_STORAGE_KEYS.forEach((key) => {
+      localStorage.removeItem(key);
+      sessionStorage.removeItem(key);
+    });
+  } catch (err) {
+    console.warn('Error clearing auth storage:', err);
+  }
 }
 
 function getAuthHeaders(extraHeaders = {}) {
-  let token = getStoredToken() || localStorage.getItem('intellicampus_token') || sessionStorage.getItem('intellicampus_token');
-  if (!token) {
-    try {
-      const staffSession = JSON.parse(localStorage.getItem('intellicampus_staff_session') || '{}');
-      token = staffSession.accessToken || staffSession.token || null;
-    } catch {
-      // ignore
-    }
-  }
+  const token = getStoredToken();
   const headers = { ...extraHeaders };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -67,13 +122,44 @@ function getAuthHeaders(extraHeaders = {}) {
 async function handleResponse(response) {
   if (!response.ok) {
     let errorMsg = `HTTP ${response.status}: ${response.statusText}`;
+    let errJson = null;
     try {
-      const errJson = await response.json();
+      errJson = await response.json();
       errorMsg = errJson.message || errJson.error || errJson.detail || errorMsg;
     } catch {
       // not JSON
     }
-    throw new Error(errorMsg);
+
+    // Force change password screen if must_change_password=true
+    if (response.status === 403 && (errorMsg.includes('PASSWORD_CHANGE_REQUIRED') || errJson?.error === 'PASSWORD_CHANGE_REQUIRED')) {
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        if (url.searchParams.get('view') !== 'change-password') {
+          url.searchParams.set('view', 'change-password');
+          window.history.pushState({}, '', url.toString());
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }
+      }
+      const err = new Error(errorMsg);
+      err.code = 'PASSWORD_CHANGE_REQUIRED';
+      err.status = 403;
+      throw err;
+    }
+
+    // On any other 401 or 403, clear session and redirect
+    if (response.status === 401 || response.status === 403) {
+      clearAuthSession();
+      if (typeof window !== 'undefined') {
+        const currentPath = window.location.pathname;
+        if (!currentPath.includes('/login') && currentPath !== '/unauthorized') {
+          window.location.href = '/unauthorized';
+        }
+      }
+    }
+
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
   }
   const contentType = response.headers.get('content-type');
   if (contentType && contentType.includes('application/json')) {

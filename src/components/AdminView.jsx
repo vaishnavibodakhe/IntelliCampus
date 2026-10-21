@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
+import AdminStaffManagementView from './staff/AdminStaffManagementView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
 
 export default function AdminView({
@@ -618,10 +619,10 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
           <BrainCircuit size={16} /> Chatbot Knowledge Base ({knowledgeDocs.length})
         </button>
         <button 
-          onClick={() => setActiveTab('approvals')} 
-          className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
+          onClick={() => setActiveTab('staff')} 
+          className={`tab-btn ${activeTab === 'staff' || activeTab === 'approvals' ? 'active' : ''}`}
         >
-          <ShieldCheck size={16} /> Staff Approvals
+          <ShieldCheck size={16} /> Staff Management
         </button>
       </div>
 
@@ -1073,11 +1074,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
         </div>
       )}
 
-      {/* TAB 6: STAFF APPROVALS */}
-      {activeTab === 'approvals' && (
-        <div className="tab-pane animate-fade-in">
-          <StaffPendingApprovalsView staffSession={staffSession} />
-        </div>
+      {/* TAB 6: STAFF MANAGEMENT */}
+      {(activeTab === 'staff' || activeTab === 'approvals') && (
+        <AdminStaffManagementView staffSession={staffSession} />
       )}
 
       {/* Add User Modal */}

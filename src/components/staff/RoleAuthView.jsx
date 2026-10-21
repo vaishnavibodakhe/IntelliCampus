@@ -373,30 +373,6 @@ export default function RoleAuthView({
             Sign In
           </button>
 
-          <button
-            type="button"
-            onClick={() => handleTabSwitch('register')}
-            className={`staff-tab-btn ${activeTab === 'register' ? 'active' : ''}`}
-            style={{
-              flex: 1,
-              padding: '0.65rem 0.5rem',
-              background: 'transparent',
-              border: 'none',
-              borderBottom: activeTab === 'register' ? `2px solid ${accentColor}` : '2px solid transparent',
-              color: activeTab === 'register' ? '#f8fafc' : '#94a3b8',
-              fontWeight: activeTab === 'register' ? 600 : 500,
-              fontSize: '0.88rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '0.4rem',
-              transition: 'all 0.2s'
-            }}
-          >
-            <UserPlus size={15} />
-            Register
-          </button>
 
           <button
             type="button"
@@ -495,150 +471,6 @@ export default function RoleAuthView({
           </form>
         )}
 
-        {/* TAB 2: REGISTER */}
-        {activeTab === 'register' && (
-          registerSuccess ? (
-            <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <div 
-                className="staff-auth-icon-wrap" 
-                style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24', margin: '0 auto 1.25rem auto' }}
-              >
-                <Clock size={32} />
-              </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 600, color: '#f8fafc', marginBottom: '0.5rem' }}>
-                Registration Submitted
-              </h3>
-              <p style={{ color: '#94a3b8', fontSize: '0.9rem', lineHeight: 1.5, marginBottom: '1.5rem' }}>
-                Your {roleName} account request for <strong>{registerSuccess.email}</strong> is currently pending administrator verification. You will be able to log in once an active System Administrator approves your account.
-              </p>
-              <button
-                type="button"
-                className="staff-submit-btn"
-                onClick={() => handleTabSwitch('login')}
-                style={{ background: accentColor }}
-              >
-                Back to {roleName} Sign In
-              </button>
-            </div>
-          ) : (
-            <form onSubmit={handleRegisterSubmit} className="staff-auth-form">
-              <div className="staff-field-group">
-                <label className="staff-field-label">Full Name</label>
-                <div className="staff-input-wrapper">
-                  <User className="staff-input-icon" size={18} />
-                  <input 
-                    type="text"
-                    value={registerForm.name}
-                    onChange={(e) => {
-                      setRegisterForm(prev => ({ ...prev, name: e.target.value }));
-                      if (errors.name) setErrors(prev => ({ ...prev, name: '' }));
-                    }}
-                    placeholder={isAdmin ? 'Administrator Name' : 'Dr. Jane Doe'}
-                    className={`staff-input ${errors.name ? 'has-error' : ''}`}
-                  />
-                </div>
-                {errors.name && <span className="staff-error-text">{errors.name}</span>}
-              </div>
-
-              <div className="staff-field-group">
-                <label className="staff-field-label">Institutional Email</label>
-                <div className="staff-input-wrapper">
-                  <Mail className="staff-input-icon" size={18} />
-                  <input 
-                    type="email"
-                    value={registerForm.email}
-                    onChange={(e) => {
-                      setRegisterForm(prev => ({ ...prev, email: e.target.value }));
-                      if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
-                    }}
-                    placeholder={isAdmin ? 'admin.name@intellicampus.edu' : 'hod.dept@intellicampus.edu'}
-                    className={`staff-input ${errors.email ? 'has-error' : ''}`}
-                  />
-                </div>
-                {errors.email && <span className="staff-error-text">{errors.email}</span>}
-              </div>
-
-              {/* Department field: ONLY shown for HOD, hidden for Admin */}
-              {!isAdmin && (
-                <div className="staff-field-group">
-                  <label className="staff-field-label">Department *</label>
-                  <div className="staff-input-wrapper">
-                    <Building2 className="staff-input-icon" size={18} />
-                    <select 
-                      value={registerForm.department}
-                      onChange={(e) => {
-                        setRegisterForm(prev => ({ ...prev, department: e.target.value }));
-                        if (errors.department) setErrors(prev => ({ ...prev, department: '' }));
-                      }}
-                      className={`staff-input staff-select ${errors.department ? 'has-error' : ''}`}
-                    >
-                      {departments.map(d => (
-                        <option key={d} value={d}>{d}</option>
-                      ))}
-                    </select>
-                  </div>
-                  {errors.department && <span className="staff-error-text">{errors.department}</span>}
-                </div>
-              )}
-
-              <div className="staff-field-group">
-                <label className="staff-field-label">Password (8+ chars: Upper, Lower, Number, Special)</label>
-                <div className="staff-input-wrapper">
-                  <Lock className="staff-input-icon" size={18} />
-                  <input 
-                    type={showPassword ? 'text' : 'password'}
-                    value={registerForm.password}
-                    onChange={(e) => {
-                      setRegisterForm(prev => ({ ...prev, password: e.target.value }));
-                      if (errors.password) setErrors(prev => ({ ...prev, password: '' }));
-                    }}
-                    placeholder="Create strong password"
-                    className={`staff-input ${errors.password ? 'has-error' : ''}`}
-                    autoComplete="new-password"
-                  />
-                  <button 
-                    type="button" 
-                    className="staff-eye-btn"
-                    onClick={() => setShowPassword(!showPassword)}
-                    tabIndex="-1"
-                  >
-                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                  </button>
-                </div>
-                {errors.password && <span className="staff-error-text">{errors.password}</span>}
-              </div>
-
-              <div className="staff-field-group">
-                <label className="staff-field-label">Confirm Password</label>
-                <div className="staff-input-wrapper">
-                  <Lock className="staff-input-icon" size={18} />
-                  <input 
-                    type={showPassword ? 'text' : 'password'}
-                    value={registerForm.confirmPassword}
-                    onChange={(e) => {
-                      setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }));
-                      if (errors.confirmPassword) setErrors(prev => ({ ...prev, confirmPassword: '' }));
-                    }}
-                    placeholder="Repeat password"
-                    className={`staff-input ${errors.confirmPassword ? 'has-error' : ''}`}
-                    autoComplete="new-password"
-                  />
-                </div>
-                {errors.confirmPassword && <span className="staff-error-text">{errors.confirmPassword}</span>}
-              </div>
-
-              <button 
-                type="submit" 
-                className="staff-submit-btn"
-                disabled={loading}
-                style={{ background: accentColor }}
-              >
-                {loading ? 'Submitting Application...' : `Register for ${roleName} Access`}
-                <ArrowRight size={18} />
-              </button>
-            </form>
-          )
-        )}
 
         {/* TAB 3: FORGOT PASSWORD (OTP FLOW) */}
         {activeTab === 'forgot' && (
@@ -823,6 +655,10 @@ export default function RoleAuthView({
             </button>
           </div>
         )}
+
+        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>
+          <span>{isAdmin ? 'System Administrator account is seeded via server environment.' : 'HOD accounts are provisioned exclusively by System Administrators.'}</span>
+        </div>
       </div>
     </div>
   );

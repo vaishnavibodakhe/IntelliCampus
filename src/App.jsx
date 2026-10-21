@@ -23,6 +23,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import AdminAuthView from './components/staff/AdminAuthView';
 import HodAuthView from './components/staff/HodAuthView';
 import StaffResetPasswordView from './components/staff/StaffResetPasswordView';
+import StaffChangePasswordView from './components/staff/StaffChangePasswordView';
 import { getStoredStaffSession, clearStaffSession, logoutStaffApi } from './utils/staffAuthService';
 
 import {
@@ -323,27 +324,45 @@ function MainAppContent() {
   const pathname = (currentPath || window.location.pathname).split('?')[0];
 
   // =========================================================================
-  // FACULTY AUTHENTICATION ROUTES
+  // DEDICATED ADMIN AUTHENTICATION ROUTE (No register link)
+  // =========================================================================
+  if (pathname === '/admin/login') {
+    if (staffSession?.user?.role === 'ADMIN') {
+      setCurrentRole('ADMIN');
+      navigate('/');
+      return null;
+    }
+    return (
+      <div className="auth-viewport" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <AdminAuthView 
+          onAuthSuccess={(session) => {
+            setStaffSession(session);
+            setCurrentRole('ADMIN');
+            navigate('/');
+          }}
+          noticeMessage={staffSession ? "Admin access required" : ""}
+          onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
+        />
+      </div>
+    );
+  }
+
+  // =========================================================================
+  // FACULTY AUTHENTICATION ROUTES (Self-registration disabled)
   // =========================================================================
   if (pathname === '/faculty/login') {
     return (
       <LoginPage
         role="FACULTY"
         onLoginSuccess={() => navigate('/faculty/dashboard')}
-        onNavigateRegister={() => navigate('/faculty/register')}
         onNavigateForgotPassword={() => navigate('/faculty/forgot-password')}
       />
     );
   }
 
   if (pathname === '/faculty/register') {
-    return (
-      <RegisterPage
-        role="FACULTY"
-        onRegisterSuccess={() => navigate('/faculty/login')}
-        onNavigateLogin={() => navigate('/faculty/login')}
-      />
-    );
+    navigate('/faculty/login', true);
+    return null;
   }
 
   if (pathname === '/faculty/forgot-password') {
@@ -360,27 +379,21 @@ function MainAppContent() {
   }
 
   // =========================================================================
-  // MENTOR AUTHENTICATION ROUTES
+  // MENTOR AUTHENTICATION ROUTES (Self-registration disabled)
   // =========================================================================
   if (pathname === '/mentor/login') {
     return (
       <LoginPage
         role="MENTOR"
         onLoginSuccess={() => navigate('/mentor/dashboard')}
-        onNavigateRegister={() => navigate('/mentor/register')}
         onNavigateForgotPassword={() => navigate('/mentor/forgot-password')}
       />
     );
   }
 
   if (pathname === '/mentor/register') {
-    return (
-      <RegisterPage
-        role="MENTOR"
-        onRegisterSuccess={() => navigate('/mentor/login')}
-        onNavigateLogin={() => navigate('/mentor/login')}
-      />
-    );
+    navigate('/mentor/login', true);
+    return null;
   }
 
   if (pathname === '/mentor/forgot-password') {
@@ -576,8 +589,22 @@ function MainAppContent() {
           />
         )}
 
+        {/* URL-driven Forced Password Change View (?view=change-password) */}
+        {activeUrlView === 'change-password' && (
+          <StaffChangePasswordView 
+            staffSession={staffSession}
+            onClose={() => navigateToView(null)}
+            onPasswordChanged={() => {
+              if (staffSession?.user) {
+                setStaffSession({ ...staffSession, user: { ...staffSession.user, mustChangePassword: false } });
+              }
+              navigateToView(null);
+            }}
+          />
+        )}
+
         {/* Regular Role Viewports when not on a specialized ?view= route */}
-        {activeUrlView !== 'reset-password' && (
+        {activeUrlView !== 'reset-password' && activeUrlView !== 'change-password' && (
           <>
             {/* Institutional Portal Selection Cards for Faculty & Mentor if not signed in */}
             {!isAuthenticated && !staffSession && !currentStudent && (
