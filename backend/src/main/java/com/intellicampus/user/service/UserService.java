@@ -89,8 +89,19 @@ public class UserService {
             Division div = null;
             final Department targetDept = dept;
             if (targetDept != null && req.getDivision() != null) {
-                div = divisionRepository.findByNameAndDepartmentId(req.getDivision(), targetDept.getId())
-                        .orElseGet(() -> divisionRepository.save(new Division(targetDept, 3, req.getDivision())));
+                String divName = req.getDivision().trim();
+                int yearNum = 3;
+                if (req.getYear() != null) {
+                    String digits = req.getYear().replaceAll("\\D+", "");
+                    if (!digits.isEmpty()) {
+                        yearNum = Integer.parseInt(digits);
+                    }
+                }
+                final int targetYear = yearNum;
+                String canonicalName = "Year " + targetYear + " " + divName;
+                div = divisionRepository.findByNameAndDepartmentId(canonicalName, targetDept.getId())
+                        .or(() -> divisionRepository.findByNameAndDepartmentId(divName, targetDept.getId()))
+                        .orElseGet(() -> divisionRepository.save(new Division(targetDept, targetYear, divName)));
             }
             StudentProfile profile = new StudentProfile(savedUser, req.getRollNo(), div, null);
             studentProfileRepository.save(profile);

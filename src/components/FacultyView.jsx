@@ -20,6 +20,8 @@ import {
 import { calculateHaversineDistance } from '../utils/cryptoAndGeo';
 import { api } from '../api/client';
 
+const DEFAULT_DIVISION_ID = 3;
+
 const normalizeSession = (sess) => {
   if (!sess) return null;
   const records = sess.attendanceRecords || sess.records || [];
@@ -91,7 +93,7 @@ export default function FacultyView({
     let isMounted = true;
     const fetchActiveSession = async () => {
       try {
-        const active = await api.getActiveSession(3);
+        const active = await api.getActiveSession(DEFAULT_DIVISION_ID);
         if (isMounted && active && active.status === 'OPEN') {
           const normalized = normalizeSession(active);
           setActiveSession(normalized);
@@ -131,7 +133,7 @@ export default function FacultyView({
         localStorage.setItem('intellicampus_staff_session', JSON.stringify(data));
         setApiError('Authenticated successfully as Prof. Vikram Verma (Faculty). Please retry capture.');
         try {
-          const active = await api.getActiveSession(3);
+          const active = await api.getActiveSession(DEFAULT_DIVISION_ID);
           if (active && active.status === 'OPEN') {
             const normalized = normalizeSession(active);
             setActiveSession(normalized);
@@ -401,7 +403,7 @@ export default function FacultyView({
       const sess = await api.startSession({
         facultyId: staffSession?.user?.id || 13,
         subjectId: selectedSubjectId || 12,
-        divisionId: 3,
+        divisionId: DEFAULT_DIVISION_ID,
         roomId: selectedRoomId || 7,
         challengeCode: code,
         photoWindowMinutes: 10
