@@ -24,15 +24,26 @@ public class CredentialService {
     private final StudentProfileRepository studentProfileRepository;
     private final AuditChainService auditChainService;
     private final HashChainValidator hashChainValidator;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     public CredentialService(VerifiableDocumentRepository documentRepository,
                              StudentProfileRepository studentProfileRepository,
                              AuditChainService auditChainService,
                              HashChainValidator hashChainValidator) {
+        this(documentRepository, studentProfileRepository, auditChainService, hashChainValidator, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public CredentialService(VerifiableDocumentRepository documentRepository,
+                             StudentProfileRepository studentProfileRepository,
+                             AuditChainService auditChainService,
+                             HashChainValidator hashChainValidator,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.documentRepository = documentRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.auditChainService = auditChainService;
         this.hashChainValidator = hashChainValidator;
+        this.securityUtils = securityUtils;
     }
 
     public DocumentResponseDto issueDocument(IssueDocumentRequestDto req) {
@@ -182,6 +193,10 @@ public class CredentialService {
     public List<DocumentResponseDto> getDocumentsForStudent(Long studentId) {
         StudentProfile student = studentProfileRepository.findById(studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+        }
 
         return documentRepository.findByStudentOrderByIssueDateDesc(student).stream()
                 .map(this::mapToDto)

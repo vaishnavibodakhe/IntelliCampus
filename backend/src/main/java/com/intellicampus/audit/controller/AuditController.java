@@ -4,12 +4,14 @@ import com.intellicampus.audit.dto.AuditLogResponseDto;
 import com.intellicampus.audit.dto.AuditVerificationResponseDto;
 import com.intellicampus.audit.service.AuditChainService;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 @RestController
 @RequestMapping("/api/audit")
+@PreAuthorize("hasRole('ADMIN')")
 @CrossOrigin(origins = "*")
 public class AuditController {
 

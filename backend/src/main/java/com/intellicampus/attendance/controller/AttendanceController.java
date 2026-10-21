@@ -6,6 +6,7 @@ import com.intellicampus.attendance.service.AttendanceService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -23,17 +24,20 @@ public class AttendanceController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY')")
     public ResponseEntity<SessionResponseDto> startSession(@RequestBody StartSessionRequestDto req) {
         SessionResponseDto session = attendanceService.startSession(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(session);
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionResponseDto> getSession(@PathVariable Long id) {
         return ResponseEntity.ok(attendanceService.getSessionDetails(id));
     }
 
     @PostMapping(value = "/{id}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY')")
     public ResponseEntity<PhotoRecognitionResultDto> uploadClassroomPhoto(
             @PathVariable Long id,
             @RequestParam("photo") MultipartFile photo,
@@ -45,6 +49,7 @@ public class AttendanceController {
     }
 
     @PutMapping("/{id}/status")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY')")
     public ResponseEntity<SessionResponseDto> updateSessionStatus(
             @PathVariable Long id,
             @RequestParam SessionStatus status) {
@@ -52,6 +57,7 @@ public class AttendanceController {
     }
 
     @PutMapping("/{id}/records/{studentId}/override")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY')")
     public ResponseEntity<AttendanceRecordResponseDto> overrideRecord(
             @PathVariable Long id,
             @PathVariable Long studentId,
@@ -60,6 +66,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/active")
+    @PreAuthorize("isAuthenticated()")
     public ResponseEntity<SessionResponseDto> getActiveSession(@RequestParam Long divisionId) {
         return attendanceService.getActiveSessionForDivision(divisionId)
                 .map(ResponseEntity::ok)
@@ -67,6 +74,7 @@ public class AttendanceController {
     }
 
     @GetMapping("/records/student/{studentId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR', 'STUDENT')")
     public ResponseEntity<List<AttendanceRecordResponseDto>> getStudentAttendanceHistory(@PathVariable Long studentId) {
         return ResponseEntity.ok(attendanceService.getRecordsForStudent(studentId));
     }

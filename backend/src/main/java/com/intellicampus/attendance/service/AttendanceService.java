@@ -61,6 +61,7 @@ public class AttendanceService {
     private final StudentProfileRepository studentProfileRepository;
     private final GeofenceValidator geofenceValidator;
     private final SpoofScoreValidator spoofScoreValidator;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     private RestTemplate restTemplate;
     private ObjectMapper objectMapper;
@@ -84,6 +85,21 @@ public class AttendanceService {
                              StudentProfileRepository studentProfileRepository,
                              GeofenceValidator geofenceValidator,
                              SpoofScoreValidator spoofScoreValidator) {
+        this(sessionRepository, recordRepository, sessionPhotoRepository, userRepository, subjectRepository, divisionRepository, classroomRepository, studentProfileRepository, geofenceValidator, spoofScoreValidator, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public AttendanceService(AttendanceSessionRepository sessionRepository,
+                             AttendanceRecordRepository recordRepository,
+                             SessionPhotoRepository sessionPhotoRepository,
+                             UserRepository userRepository,
+                             SubjectRepository subjectRepository,
+                             DivisionRepository divisionRepository,
+                             ClassroomRepository classroomRepository,
+                             StudentProfileRepository studentProfileRepository,
+                             GeofenceValidator geofenceValidator,
+                             SpoofScoreValidator spoofScoreValidator,
+                             @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.sessionRepository = sessionRepository;
         this.recordRepository = recordRepository;
         this.sessionPhotoRepository = sessionPhotoRepository;
@@ -94,6 +110,7 @@ public class AttendanceService {
         this.studentProfileRepository = studentProfileRepository;
         this.geofenceValidator = geofenceValidator;
         this.spoofScoreValidator = spoofScoreValidator;
+        this.securityUtils = securityUtils;
         this.restTemplate = new RestTemplate();
         this.objectMapper = new ObjectMapper();
     }
@@ -119,8 +136,19 @@ public class AttendanceService {
     }
 
     public SessionResponseDto startSession(StartSessionRequestDto req) {
-        User faculty = userRepository.findById(req.getFacultyId())
-                .orElseThrow(() -> new IllegalArgumentException("Faculty not found: " + req.getFacultyId()));
+        User faculty = null;
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.FACULTY) {
+                faculty = current;
+            }
+        }
+        if (faculty == null && req.getFacultyId() != null) {
+            faculty = userRepository.findById(req.getFacultyId()).orElse(null);
+        }
+        if (faculty == null) {
+            throw new IllegalArgumentException("Faculty not found or not specified");
+        }
         Subject subject = subjectRepository.findById(req.getSubjectId())
                 .orElseThrow(() -> new IllegalArgumentException("Subject not found: " + req.getSubjectId()));
         Division division = divisionRepository.findById(req.getDivisionId())
@@ -404,6 +432,10 @@ public class AttendanceService {
         StudentProfile student = studentProfileRepository.findById(studentId)
                 .or(() -> studentProfileRepository.findByUserId(studentId))
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+        }
 
         return recordRepository.findByStudentOrderByCreatedAtDesc(student)
                 .stream()

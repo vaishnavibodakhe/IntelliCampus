@@ -65,7 +65,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                             if (userRepository != null && email != null) {
                                 java.util.Optional<com.intellicampus.user.model.User> userOpt = userRepository.findByEmail(email);
                                 if (userOpt.isPresent()) {
-                                    principal = userOpt.get();
+                                    com.intellicampus.user.model.User user = userOpt.get();
+                                    if (user.getStatus() != com.intellicampus.user.model.UserStatus.ACTIVE) {
+                                        filterChain.doFilter(request, response);
+                                        return;
+                                    }
+                                    principal = user;
                                 }
                             }
 

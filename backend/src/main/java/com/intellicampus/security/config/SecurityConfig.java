@@ -6,6 +6,7 @@ import com.intellicampus.security.jwt.JwtAuthenticationFilter;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.Environment;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
@@ -33,6 +34,7 @@ public class SecurityConfig {
     private final JwtAuthenticationFilter jwtAuthenticationFilter;
     private final JwtAuthenticationEntryPoint authenticationEntryPoint;
     private final CustomAccessDeniedHandler accessDeniedHandler;
+    private final Environment environment;
 
     @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:5174,http://localhost:3000}")
     private String allowedOrigins;
@@ -41,10 +43,12 @@ public class SecurityConfig {
     public SecurityConfig(
             JwtAuthenticationFilter jwtAuthenticationFilter,
             @org.springframework.beans.factory.annotation.Autowired(required = false) JwtAuthenticationEntryPoint authenticationEntryPoint,
-            @org.springframework.beans.factory.annotation.Autowired(required = false) CustomAccessDeniedHandler accessDeniedHandler) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) CustomAccessDeniedHandler accessDeniedHandler,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) Environment environment) {
         this.jwtAuthenticationFilter = jwtAuthenticationFilter;
         this.authenticationEntryPoint = authenticationEntryPoint != null ? authenticationEntryPoint : new JwtAuthenticationEntryPoint();
         this.accessDeniedHandler = accessDeniedHandler != null ? accessDeniedHandler : new CustomAccessDeniedHandler();
+        this.environment = environment;
     }
 
     @Bean
@@ -88,85 +92,178 @@ public class SecurityConfig {
                 .accessDeniedHandler((request, response, accessDeniedException) -> {
                     response.setStatus(jakarta.servlet.http.HttpServletResponse.SC_FORBIDDEN);
                     response.setContentType("application/json");
-                    response.getWriter().write("{\"error\":\"FORBIDDEN\",\"message\":\"Access is denied: ADMIN authority required\"}");
+                    response.getWriter().write("{\"error\":\"FORBIDDEN\",\"message\":\"Access denied: insufficient permissions for this resource\"}");
                 })
             )
-            .authorizeHttpRequests(auth -> auth
+            .authorizeHttpRequests(auth -> {
                 // Allow CORS pre-flight requests
-                .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                auth.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll();
 
-                // ADMIN only endpoints for staff approvals (evaluated before public /api/auth/**)
-                .requestMatchers(
+                // Swagger / OpenAPI documentation (allowed in dev profile or error)
+                boolean isDev = environment != null && Arrays.asList(environment.getActiveProfiles()).contains("dev");
+                if (isDev) {
+                    auth.requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll();
+                }
+                auth.requestMatchers("/error").permitAll();
+
+                // 1. PUBLIC AUTH & VERIFICATION ENDPOINTS
+                auth.requestMatchers(
+                    "/api/auth/admin/login",
+                    "/api/auth/admin/register",
+                    "/api/auth/staff/login",
+                    "/api/auth/student/login",
+                    "/api/auth/login",
+                    "/api/auth/student/register",
+                    "/api/auth/register",
+                    "/api/auth/staff/register",
+                    "/api/auth/hod/register",
+                    "/api/faculty/login",
+                    "/api/faculty/register",
+                    "/api/auth/faculty/login",
+                    "/api/auth/faculty/register",
+                    "/api/mentor/login",
+                    "/api/mentor/register",
+                    "/api/auth/mentor/login",
+                    "/api/auth/mentor/register",
+                    "/api/auth/staff/refresh",
+                    "/api/auth/staff/forgot-password",
+                    "/api/auth/staff/reset-password",
+                    "/api/auth/staff/verify-otp",
+                    "/api/faculty/forgot-password",
+                    "/api/faculty/verify-otp",
+                    "/api/faculty/reset-password",
+                    "/api/faculty/reset-password/**",
+                    "/api/auth/faculty/forgot-password",
+                    "/api/auth/faculty/verify-otp",
+                    "/api/auth/faculty/reset-password",
+                    "/api/auth/faculty/reset-password/**",
+                    "/api/mentor/forgot-password",
+                    "/api/mentor/verify-otp",
+                    "/api/mentor/reset-password",
+                    "/api/mentor/reset-password/**",
+                    "/api/auth/mentor/forgot-password",
+                    "/api/auth/mentor/verify-otp",
+                    "/api/auth/mentor/reset-password",
+                    "/api/auth/mentor/reset-password/**",
+                    "/api/auth/forgot-password",
+                    "/api/auth/reset-password",
+                    "/api/auth/validate-reset-token",
+                    "/api/logout",
+                    "/api/auth/logout",
+                    "/api/auth/student/logout",
+                    "/api/public/**",
+                    "/api/credentials/verify/**",
+                    "/api/credentials/public/**"
+                ).permitAll();
+
+                // Student face enrollment and one-time capture tokens during registration
+                auth.requestMatchers(
+                    HttpMethod.POST,
+                    "/api/students/*/capture-token",
+                    "/api/students/*/face-enroll",
+                    "/api/students/{studentId}/capture-token",
+                    "/api/students/{studentId}/face-enroll"
+                ).permitAll();
+
+                // 2. ADMIN ONLY ENDPOINTS
+                auth.requestMatchers(
+                    "/api/users/**",
+                    "/api/audit/**",
                     "/api/auth/staff/pending",
                     "/api/auth/staff/pending/**",
                     "/api/auth/staff/*/approve",
                     "/api/auth/staff/*/reject",
                     "/api/auth/staff/{id}/approve",
                     "/api/auth/staff/{id}/reject"
-                ).hasRole("ADMIN")
+                ).hasRole("ADMIN");
 
-                // Authenticated staff endpoints (staff only: ADMIN, HOD, FACULTY, MENTOR)
-                .requestMatchers("/api/auth/staff/me", "/api/auth/staff/change-password").hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
-
-                // Public student auth endpoints
-                .requestMatchers(
-                    "/api/auth/student/register",
-                    "/api/auth/student/login",
-                    "/api/auth/student/logout",
-                    "/api/auth/student/me"
-                ).permitAll()
-
-                // Biometric face enrollment and capture-token endpoints
-                .requestMatchers(
+                auth.requestMatchers(
                     HttpMethod.POST,
-                    "/api/students/*/capture-token",
-                    "/api/students/*/face-enroll",
-                    "/api/students/{studentId}/capture-token",
-                    "/api/students/{studentId}/face-enroll"
-                ).permitAll()
+                    "/api/academic/rooms",
+                    "/api/academic/rooms/**",
+                    "/api/academic/subjects",
+                    "/api/academic/subjects/**",
+                    "/api/credentials/issue"
+                ).hasRole("ADMIN");
 
-                // Division list restricted to staff (ADMIN, HOD, FACULTY, MENTOR)
-                .requestMatchers(
-                    HttpMethod.GET,
+                auth.requestMatchers(
+                    HttpMethod.PUT,
+                    "/api/credentials/*/revoke",
+                    "/api/credentials/{code}/revoke"
+                ).hasRole("ADMIN");
+
+                // 3. ADMIN + HOD ENDPOINTS
+                auth.requestMatchers(
+                    "/api/marks/corrections/*/decision",
+                    "/api/marks/corrections/{id}/decision",
+                    "/api/marks/corrections/pending",
+                    "/api/leaves/*/hod",
+                    "/api/leaves/{id}/hod",
+                    "/api/leaves/hod/pending",
+                    "/api/credentials"
+                ).hasAnyRole("ADMIN", "HOD");
+
+                // 4. ADMIN + HOD + MENTOR ENDPOINTS
+                auth.requestMatchers(
+                    "/api/leaves/*/mentor",
+                    "/api/leaves/{id}/mentor",
+                    "/api/leaves/mentor/*/pending",
+                    "/api/leaves/mentor/{mentorId}/pending",
+                    "/api/mentor/**"
+                ).hasAnyRole("ADMIN", "HOD", "MENTOR");
+
+                // 5. ADMIN + HOD + FACULTY ENDPOINTS
+                auth.requestMatchers(
+                    "/api/faculty/**",
+                    "/api/attendance/sessions",
+                    "/api/attendance/sessions/**",
+                    "/api/marks",
+                    "/api/marks/corrections",
+                    "/api/marks/subject/**"
+                ).hasAnyRole("ADMIN", "HOD", "FACULTY");
+
+                // 6. STAFF ROLES (ADMIN, HOD, FACULTY, MENTOR)
+                auth.requestMatchers(
                     "/api/students/division/**",
-                    "/api/students/division/{divisionId}"
-                ).hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
+                    "/api/students/division/{divisionId}",
+                    "/api/academic/rooms/**",
+                    "/api/academic/subjects/**",
+                    "/api/ai/risk/high",
+                    "/api/ai/risk/evaluate",
+                    "/api/ai/risk/student/**",
+                    "/api/leaves"
+                ).hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR");
 
-                // All other /api/students/** require authentication
-                .requestMatchers("/api/students/**").authenticated()
+                auth.requestMatchers(
+                    HttpMethod.POST,
+                    "/api/notices"
+                ).hasAnyRole("ADMIN", "HOD", "FACULTY");
 
-                // Faculty & Mentor auth endpoints
-                .requestMatchers(
-                    "/api/faculty/login",
-                    "/api/faculty/register",
-                    "/api/faculty/forgot-password",
-                    "/api/faculty/verify-otp",
-                    "/api/faculty/reset-password",
-                    "/api/faculty/reset-password/**",
-                    "/api/mentor/login",
-                    "/api/mentor/register",
-                    "/api/mentor/forgot-password",
-                    "/api/mentor/verify-otp",
-                    "/api/mentor/reset-password",
-                    "/api/mentor/reset-password/**",
-                    "/api/logout"
-                ).permitAll()
+                // 7. ALL AUTHENTICATED ROLES (Specific verified endpoints)
+                auth.requestMatchers(
+                    "/api/notices/**",
+                    "/api/auth/staff/me",
+                    "/api/auth/staff/change-password",
+                    "/api/auth/student/me",
+                    "/api/students/{studentId}",
+                    "/api/marks/student/**",
+                    "/api/leaves/student/**",
+                    "/api/leaves/{id}",
+                    "/api/attendance/sessions/active",
+                    "/api/attendance/sessions/{id}",
+                    "/api/attendance/sessions/records/student/**",
+                    "/api/credentials/student/**"
+                ).authenticated();
 
-                // Public verification & Swagger docs
-                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html", "/error").permitAll()
-                .requestMatchers("/api/public/**", "/api/credentials/verify/**", "/api/credentials/public/**").permitAll()
+                auth.requestMatchers(
+                    HttpMethod.POST,
+                    "/api/leaves"
+                ).authenticated();
 
-                // Public auth endpoints
-                .requestMatchers("/api/auth/**").permitAll()
-
-                // Role-specific protected routes
-                .requestMatchers("/api/faculty/**").hasRole("FACULTY")
-                .requestMatchers("/api/mentor/**").hasRole("MENTOR")
-
-                // All other API endpoints require authentication
-                .requestMatchers("/api/**").authenticated()
-                .anyRequest().permitAll()
-            );
+                // 8. STRICT DEFAULT DENY
+                auth.requestMatchers("/api/**").denyAll();
+                auth.anyRequest().denyAll();
+            });
 
         http.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 

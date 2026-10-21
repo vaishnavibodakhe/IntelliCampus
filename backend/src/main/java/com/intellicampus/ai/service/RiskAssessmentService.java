@@ -23,18 +23,32 @@ public class RiskAssessmentService {
     private final RiskAssessmentRecordRepository riskRepository;
     private final StudentProfileRepository studentRepository;
     private final AiServiceClient aiServiceClient;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     public RiskAssessmentService(RiskAssessmentRecordRepository riskRepository,
                                  StudentProfileRepository studentRepository,
                                  AiServiceClient aiServiceClient) {
+        this(riskRepository, studentRepository, aiServiceClient, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public RiskAssessmentService(RiskAssessmentRecordRepository riskRepository,
+                                 StudentProfileRepository studentRepository,
+                                 AiServiceClient aiServiceClient,
+                                 @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.riskRepository = riskRepository;
         this.studentRepository = studentRepository;
         this.aiServiceClient = aiServiceClient;
+        this.securityUtils = securityUtils;
     }
 
     public RiskResponseDto evaluateAndSaveStudentRisk(Long studentId) {
         StudentProfile student = studentRepository.findById(studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
+
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+        }
 
         StudentFeatureRowDto row = new StudentFeatureRowDto(
                 student.getId(),
@@ -67,6 +81,12 @@ public class RiskAssessmentService {
     @Transactional(readOnly = true)
     public Optional<RiskAssessmentRecord> getLatestRiskForStudent(Long studentId) {
         return studentRepository.findById(studentId)
+                .map(student -> {
+                    if (securityUtils != null) {
+                        securityUtils.verifyCanAccessStudent(student);
+                    }
+                    return student;
+                })
                 .flatMap(riskRepository::findFirstByStudentOrderByEvaluatedAtDesc);
     }
 

@@ -33,6 +33,7 @@ public class MarksService {
     private final UserRepository userRepository;
     private final MarkRangeValidator markRangeValidator;
     private final AuditChainService auditChainService;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     public MarksService(MarkEntryRepository markEntryRepository,
                         MarkCorrectionRequestRepository correctionRepository,
@@ -41,6 +42,18 @@ public class MarksService {
                         UserRepository userRepository,
                         MarkRangeValidator markRangeValidator,
                         AuditChainService auditChainService) {
+        this(markEntryRepository, correctionRepository, studentProfileRepository, subjectRepository, userRepository, markRangeValidator, auditChainService, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MarksService(MarkEntryRepository markEntryRepository,
+                        MarkCorrectionRequestRepository correctionRepository,
+                        StudentProfileRepository studentProfileRepository,
+                        SubjectRepository subjectRepository,
+                        UserRepository userRepository,
+                        MarkRangeValidator markRangeValidator,
+                        AuditChainService auditChainService,
+                        @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.markEntryRepository = markEntryRepository;
         this.correctionRepository = correctionRepository;
         this.studentProfileRepository = studentProfileRepository;
@@ -48,6 +61,7 @@ public class MarksService {
         this.userRepository = userRepository;
         this.markRangeValidator = markRangeValidator;
         this.auditChainService = auditChainService;
+        this.securityUtils = securityUtils;
     }
 
     public MarkResponseDto saveOrUpdateMark(SaveMarkRequestDto req) {
@@ -58,7 +72,13 @@ public class MarksService {
         Subject subject = subjectRepository.findById(req.getSubjectId())
                 .orElseThrow(() -> new IllegalArgumentException("Subject not found: " + req.getSubjectId()));
         User faculty = null;
-        if (req.getFacultyId() != null) {
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.FACULTY) {
+                faculty = current;
+            }
+        }
+        if (faculty == null && req.getFacultyId() != null) {
             faculty = userRepository.findById(req.getFacultyId()).orElse(null);
         }
 
@@ -79,9 +99,17 @@ public class MarksService {
         StudentProfile student = studentProfileRepository.findById(studentId)
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
 
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+            if (securityUtils.isStudent()) {
+                onlyPublished = true;
+            }
+        }
+
         List<MarkEntry> marks = markEntryRepository.findByStudentOrderByCreatedAtDesc(student);
+        boolean finalOnlyPublished = onlyPublished;
         return marks.stream()
-                .filter(m -> !onlyPublished || m.getStatus() == MarkStatus.PUBLISHED)
+                .filter(m -> !finalOnlyPublished || m.getStatus() == MarkStatus.PUBLISHED)
                 .map(this::mapMarkToDto)
                 .collect(Collectors.toList());
     }
@@ -102,8 +130,20 @@ public class MarksService {
 
         markRangeValidator.validateCorrection(req.getNewMarks(), mark.getMaxMarks(), req.getReason());
 
-        User faculty = userRepository.findById(req.getFacultyId())
-                .orElseThrow(() -> new IllegalArgumentException("Faculty not found: " + req.getFacultyId()));
+        User faculty = null;
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.FACULTY) {
+                faculty = current;
+            }
+        }
+        if (faculty == null && req.getFacultyId() != null) {
+            faculty = userRepository.findById(req.getFacultyId())
+                    .orElseThrow(() -> new IllegalArgumentException("Faculty not found: " + req.getFacultyId()));
+        }
+        if (faculty == null) {
+            throw new IllegalArgumentException("Faculty identity must be provided");
+        }
 
         MarkCorrectionRequest correction = new MarkCorrectionRequest(
                 mark,
@@ -128,12 +168,33 @@ public class MarksService {
         MarkCorrectionRequest correction = correctionRepository.findById(correctionId)
                 .orElseThrow(() -> new IllegalArgumentException("Correction request not found: " + correctionId));
 
-        if (decision.getHodId() != null) {
+        User hodUser = null;
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.HOD || current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+                if (current.getRole() == com.intellicampus.user.model.Role.HOD && current.getDepartment() != null
+                        && correction.getMarkEntry() != null
+                        && correction.getMarkEntry().getSubject() != null
+                        && correction.getMarkEntry().getSubject().getDepartment() != null) {
+                    if (!current.getDepartment().getId().equals(correction.getMarkEntry().getSubject().getDepartment().getId())) {
+                        throw new org.springframework.security.access.AccessDeniedException("HOD can only decide mark corrections within their own department");
+                    }
+                }
+                hodUser = current;
+                correction.setHod(hodUser);
+            }
+        }
+
+        if (hodUser == null && decision.getHodId() != null) {
             userRepository.findById(decision.getHodId()).ifPresent(correction::setHod);
+            hodUser = correction.getHod();
         }
 
         correction.setDecisionComment(decision.getComment());
         correction.setDecidedAt(LocalDateTime.now());
+
+        Long effectiveHodId = (hodUser != null && hodUser.getId() != null) ? hodUser.getId() : (decision.getHodId() != null ? decision.getHodId() : 1L);
+        String effectiveHodName = (hodUser != null && hodUser.getName() != null) ? hodUser.getName() : "HOD";
 
         if (decision.isApproved()) {
             correction.setStatus(CorrectionStatus.APPROVED);
@@ -145,10 +206,9 @@ public class MarksService {
 
             // Record HOD approval on cryptographic audit chain
             if (auditChainService != null) {
-                String hodName = (correction.getHod() != null) ? correction.getHod().getName() : "HOD";
                 auditChainService.recordEntry(
-                        decision.getHodId() != null ? decision.getHodId() : 1L,
-                        hodName,
+                        effectiveHodId,
+                        effectiveHodName,
                         "MARK_CORRECTION_APPROVED",
                         "MARK",
                         String.valueOf(mark.getId()),
@@ -160,10 +220,9 @@ public class MarksService {
         } else {
             correction.setStatus(CorrectionStatus.REJECTED);
             if (auditChainService != null) {
-                String hodName = (correction.getHod() != null) ? correction.getHod().getName() : "HOD";
                 auditChainService.recordEntry(
-                        decision.getHodId() != null ? decision.getHodId() : 1L,
-                        hodName,
+                        effectiveHodId,
+                        effectiveHodName,
                         "MARK_CORRECTION_REJECTED",
                         "MARK",
                         String.valueOf(correction.getMarkEntry().getId()),

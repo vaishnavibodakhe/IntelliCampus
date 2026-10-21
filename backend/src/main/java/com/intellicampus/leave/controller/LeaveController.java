@@ -6,6 +6,7 @@ import com.intellicampus.leave.dto.SubmitLeaveRequestDto;
 import com.intellicampus.leave.service.LeaveService;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,12 +23,14 @@ public class LeaveController {
     }
 
     @PostMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'STUDENT')")
     public ResponseEntity<LeaveResponseDto> submitLeave(@RequestBody SubmitLeaveRequestDto req) {
         LeaveResponseDto created = leaveService.submitLeave(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PutMapping("/{id}/mentor")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'MENTOR')")
     public ResponseEntity<LeaveResponseDto> processMentorReview(
             @PathVariable Long id,
             @RequestBody LeaveDecisionDto decision) {
@@ -35,6 +38,7 @@ public class LeaveController {
     }
 
     @PutMapping("/{id}/hod")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD')")
     public ResponseEntity<LeaveResponseDto> processHodReview(
             @PathVariable Long id,
             @RequestBody LeaveDecisionDto decision) {
@@ -42,26 +46,31 @@ public class LeaveController {
     }
 
     @GetMapping("/student/{studentId}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR', 'STUDENT')")
     public ResponseEntity<List<LeaveResponseDto>> getStudentLeaves(@PathVariable Long studentId) {
         return ResponseEntity.ok(leaveService.getStudentLeaves(studentId));
     }
 
     @GetMapping("/mentor/{mentorId}/pending")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'MENTOR')")
     public ResponseEntity<List<LeaveResponseDto>> getPendingMentorLeaves(@PathVariable Long mentorId) {
         return ResponseEntity.ok(leaveService.getPendingMentorLeaves(mentorId));
     }
 
     @GetMapping("/hod/pending")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD')")
     public ResponseEntity<List<LeaveResponseDto>> getPendingHodLeaves() {
         return ResponseEntity.ok(leaveService.getPendingHodLeaves());
     }
 
     @GetMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR', 'STUDENT')")
     public ResponseEntity<LeaveResponseDto> getLeaveById(@PathVariable Long id) {
         return ResponseEntity.ok(leaveService.getLeaveById(id));
     }
 
     @GetMapping
+    @PreAuthorize("hasAnyRole('ADMIN', 'HOD')")
     public ResponseEntity<List<LeaveResponseDto>> getAllLeaves() {
         return ResponseEntity.ok(leaveService.getAllLeaves());
     }

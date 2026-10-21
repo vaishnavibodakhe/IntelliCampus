@@ -27,17 +27,29 @@ public class NoticeService {
     private final UserRepository userRepository;
     private final StudentProfileRepository studentProfileRepository;
     private final NoticeAudienceValidator noticeAudienceValidator;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     public NoticeService(NoticeRepository noticeRepository,
                          NoticeReadReceiptRepository noticeReadReceiptRepository,
                          UserRepository userRepository,
                          StudentProfileRepository studentProfileRepository,
                          NoticeAudienceValidator noticeAudienceValidator) {
+        this(noticeRepository, noticeReadReceiptRepository, userRepository, studentProfileRepository, noticeAudienceValidator, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public NoticeService(NoticeRepository noticeRepository,
+                         NoticeReadReceiptRepository noticeReadReceiptRepository,
+                         UserRepository userRepository,
+                         StudentProfileRepository studentProfileRepository,
+                         NoticeAudienceValidator noticeAudienceValidator,
+                         @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.noticeRepository = noticeRepository;
         this.noticeReadReceiptRepository = noticeReadReceiptRepository;
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.noticeAudienceValidator = noticeAudienceValidator;
+        this.securityUtils = securityUtils;
     }
 
     @Transactional(readOnly = true)
@@ -49,6 +61,16 @@ public class NoticeService {
 
     @Transactional(readOnly = true)
     public List<NoticeDto> getFeedForUser(Long userId) {
+        if (userId == null && securityUtils != null) {
+            userId = securityUtils.getCurrentUserId();
+        } else if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            userId = securityUtils.getCurrentUserId();
+        }
+
+        if (userId == null) {
+            return getAllNotices();
+        }
+
         Optional<User> userOpt = userRepository.findById(userId);
         if (userOpt.isEmpty()) {
             return getAllNotices();
@@ -81,7 +103,12 @@ public class NoticeService {
         );
 
         User publisher = null;
-        if (req.getPublisherId() != null) {
+        String publisherRole = req.getPublisherRole();
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            publisher = securityUtils.getCurrentUser().get();
+            publisherRole = publisher.getRole().name();
+        }
+        if (publisher == null && req.getPublisherId() != null) {
             publisher = userRepository.findById(req.getPublisherId()).orElse(null);
         }
 
@@ -91,7 +118,7 @@ public class NoticeService {
                 req.getTargetDepartment(),
                 req.getTargetYear(),
                 req.getTargetDivision(),
-                req.getPublisherRole() != null ? req.getPublisherRole() : "Admin Office",
+                publisherRole != null ? publisherRole : "Admin Office",
                 publisher,
                 req.getDeadline()
         );
@@ -105,6 +132,13 @@ public class NoticeService {
     }
 
     public boolean markAsRead(Long noticeId, Long userId) {
+        if (userId == null && securityUtils != null) {
+            userId = securityUtils.getCurrentUserId();
+        } else if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            userId = securityUtils.getCurrentUserId();
+        }
+        if (userId == null) return false;
+
         Optional<Notice> noticeOpt = noticeRepository.findById(noticeId);
         Optional<User> userOpt = userRepository.findById(userId);
 

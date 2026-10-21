@@ -27,15 +27,26 @@ public class LeaveService {
     private final StudentProfileRepository studentProfileRepository;
     private final UserRepository userRepository;
     private final LeaveDateValidator leaveDateValidator;
+    private final com.intellicampus.security.util.SecurityUtils securityUtils;
 
     public LeaveService(LeaveRequestRepository leaveRepository,
                         StudentProfileRepository studentProfileRepository,
                         UserRepository userRepository,
                         LeaveDateValidator leaveDateValidator) {
+        this(leaveRepository, studentProfileRepository, userRepository, leaveDateValidator, null);
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public LeaveService(LeaveRequestRepository leaveRepository,
+                        StudentProfileRepository studentProfileRepository,
+                        UserRepository userRepository,
+                        LeaveDateValidator leaveDateValidator,
+                        @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.security.util.SecurityUtils securityUtils) {
         this.leaveRepository = leaveRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.userRepository = userRepository;
         this.leaveDateValidator = leaveDateValidator;
+        this.securityUtils = securityUtils;
     }
 
     public LeaveResponseDto submitLeave(SubmitLeaveRequestDto req) {
@@ -47,9 +58,24 @@ public class LeaveService {
                 req.getAttachmentUrl()
         );
 
+        if (securityUtils != null && securityUtils.isStudent()) {
+            StudentProfile currentStudent = securityUtils.getCurrentStudentProfile().orElse(null);
+            if (currentStudent != null) {
+                if (req.getStudentId() != null && !req.getStudentId().equals(currentStudent.getId())
+                        && (currentStudent.getUser() == null || !req.getStudentId().equals(currentStudent.getUser().getId()))) {
+                    throw new org.springframework.security.access.AccessDeniedException("Students can only submit leave requests for themselves");
+                }
+                req.setStudentId(currentStudent.getId());
+            }
+        }
+
         StudentProfile student = studentProfileRepository.findById(req.getStudentId())
                 .or(() -> userRepository.findById(req.getStudentId()).flatMap(studentProfileRepository::findByUser))
                 .orElseThrow(() -> new IllegalArgumentException("Student not found for id: " + req.getStudentId()));
+
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+        }
 
         int daysCount = leaveDateValidator.calculateDays(req.getFromDate(), req.getToDate());
 
@@ -72,7 +98,22 @@ public class LeaveService {
         LeaveRequest leave = leaveRepository.findById(leaveId)
                 .orElseThrow(() -> new IllegalArgumentException("Leave request not found: " + leaveId));
 
-        if (decision.getApproverId() != null) {
+        User mentor = null;
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.MENTOR) {
+                if (leave.getMentor() != null && current.getId() != null && !current.getId().equals(leave.getMentor().getId())) {
+                    throw new org.springframework.security.access.AccessDeniedException("Mentors may only review leave requests for their assigned mentees");
+                }
+                mentor = current;
+            } else if (current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+                mentor = current;
+            }
+        }
+
+        if (mentor != null) {
+            leave.setMentor(mentor);
+        } else if (decision.getApproverId() != null) {
             userRepository.findById(decision.getApproverId()).ifPresent(leave::setMentor);
         }
 
@@ -95,7 +136,27 @@ public class LeaveService {
         LeaveRequest leave = leaveRepository.findById(leaveId)
                 .orElseThrow(() -> new IllegalArgumentException("Leave request not found: " + leaveId));
 
-        if (decision.getApproverId() != null) {
+        User hod = null;
+        if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
+            User current = securityUtils.getCurrentUser().get();
+            if (current.getRole() == com.intellicampus.user.model.Role.HOD) {
+                if (current.getDepartment() != null
+                        && leave.getStudent() != null
+                        && leave.getStudent().getDivision() != null
+                        && leave.getStudent().getDivision().getDepartment() != null) {
+                    if (!current.getDepartment().getId().equals(leave.getStudent().getDivision().getDepartment().getId())) {
+                        throw new org.springframework.security.access.AccessDeniedException("HOD may only approve leave requests for students within their own department");
+                    }
+                }
+                hod = current;
+            } else if (current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+                hod = current;
+            }
+        }
+
+        if (hod != null) {
+            leave.setHod(hod);
+        } else if (decision.getApproverId() != null) {
             userRepository.findById(decision.getApproverId()).ifPresent(leave::setHod);
         }
 
@@ -120,6 +181,10 @@ public class LeaveService {
                 .or(() -> userRepository.findById(studentId).flatMap(studentProfileRepository::findByUser))
                 .orElseThrow(() -> new IllegalArgumentException("Student not found for id: " + studentId));
 
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(student);
+        }
+
         return leaveRepository.findByStudentOrderBySubmittedAtDesc(student).stream()
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
@@ -127,6 +192,13 @@ public class LeaveService {
 
     @Transactional(readOnly = true)
     public List<LeaveResponseDto> getPendingMentorLeaves(Long mentorId) {
+        if (securityUtils != null && securityUtils.isMentor()) {
+            Long currentId = securityUtils.getCurrentUserId();
+            if (currentId != null && !currentId.equals(mentorId)) {
+                throw new org.springframework.security.access.AccessDeniedException("Mentors can only view their own pending leave queue");
+            }
+        }
+
         User mentor = userRepository.findById(mentorId)
                 .orElseThrow(() -> new IllegalArgumentException("Mentor not found for id: " + mentorId));
 
@@ -137,8 +209,17 @@ public class LeaveService {
 
     @Transactional(readOnly = true)
     public List<LeaveResponseDto> getPendingHodLeaves() {
+        User currentHod = (securityUtils != null) ? securityUtils.getCurrentUser().orElse(null) : null;
         return leaveRepository.findByHodStatus(LeaveStatus.SUBMITTED).stream()
                 .filter(l -> l.getMentorStatus() == LeaveStatus.RECOMMENDED)
+                .filter(l -> {
+                    if (currentHod != null && currentHod.getRole() == com.intellicampus.user.model.Role.HOD && currentHod.getDepartment() != null) {
+                        return l.getStudent() != null && l.getStudent().getDivision() != null
+                                && l.getStudent().getDivision().getDepartment() != null
+                                && currentHod.getDepartment().getId().equals(l.getStudent().getDivision().getDepartment().getId());
+                    }
+                    return true;
+                })
                 .map(this::mapToDto)
                 .collect(Collectors.toList());
     }
@@ -152,9 +233,12 @@ public class LeaveService {
 
     @Transactional(readOnly = true)
     public LeaveResponseDto getLeaveById(Long id) {
-        return leaveRepository.findById(id)
-                .map(this::mapToDto)
+        LeaveRequest leave = leaveRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("Leave request not found: " + id));
+        if (securityUtils != null) {
+            securityUtils.verifyCanAccessStudent(leave.getStudent());
+        }
+        return mapToDto(leave);
     }
 
     private LeaveResponseDto mapToDto(LeaveRequest l) {
