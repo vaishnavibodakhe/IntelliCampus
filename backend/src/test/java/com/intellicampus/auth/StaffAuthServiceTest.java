@@ -444,7 +444,7 @@ class StaffAuthServiceTest {
                     staffAuthService.resetPasswordWithOtp(req));
 
             assertEquals(HttpStatus.BAD_REQUEST, ex.getStatusCode());
-            assertTrue(ex.getReason().contains("at least 8 characters"));
+            assertTrue(ex.getReason().contains("at least 10 characters"));
         }
     }
 

@@ -87,4 +87,44 @@ public class JwtTokenProvider {
             return false;
         }
     }
+
+    public String generateAccessToken(User user, String rollNo) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + accessExpirationMs);
+
+        return Jwts.builder()
+                .subject(user.getEmail())
+                .claim("userId", user.getId())
+                .claim("userCode", user.getUserCode())
+                .claim("name", user.getName())
+                .claim("role", user.getRole().name())
+                .claim("rollNo", rollNo != null ? rollNo : "")
+                .claim("department", user.getDepartment() != null ? user.getDepartment().getName() : "")
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(key)
+                .compact();
+    }
+
+    public String generateRefreshToken(User user) {
+        Date now = new Date();
+        Date expiryDate = new Date(now.getTime() + 7L * 24 * 60 * 60 * 1000);
+
+        return Jwts.builder()
+                .subject(user.getEmail())
+                .claim("userId", user.getId())
+                .claim("type", "REFRESH")
+                .issuedAt(now)
+                .expiration(expiryDate)
+                .signWith(key)
+                .compact();
+    }
+
+    public long getAccessExpirationSeconds() {
+        return accessExpirationMs / 1000;
+    }
+
+    public Claims getClaims(String token) {
+        return getClaimsFromToken(token);
+    }
 }

@@ -44,6 +44,13 @@ public class StaffAuthService {
     @Value("${app.dev-mode:false}")
     private boolean devMode = false;
 
+    @Value("${app.security.admin-otp-enabled:false}")
+    private boolean adminOtpEnabled = false;
+
+    public void setAdminOtpEnabled(boolean adminOtpEnabled) {
+        this.adminOtpEnabled = adminOtpEnabled;
+    }
+
     private final UserRepository userRepository;
     private final DepartmentRepository departmentRepository;
     private final PasswordEncoder passwordEncoder;
@@ -207,7 +214,7 @@ public class StaffAuthService {
                 auditChainService.recordEntry(
                         user.getId(),
                         user.getName(),
-                        "LOGIN_FAILURE",
+                        "LOGIN_FAILED",
                         "USER",
                         user.getId().toString(),
                         "{}",
@@ -334,6 +341,17 @@ public class StaffAuthService {
         admin.setLockedUntil(null);
         userRepository.save(admin);
 
+        if (adminOtpEnabled) {
+            String otp = String.format("%06d", secureRandom.nextInt(1_000_000));
+            String tokenHash = DigestUtils.sha256Hex(otp);
+            PasswordResetToken otpToken = new PasswordResetToken(admin, tokenHash, LocalDateTime.now().plusMinutes(5));
+            passwordResetTokenRepository.save(otpToken);
+            if (emailService != null && emailService.isMailConfigured()) {
+                emailService.sendPasswordResetOtp(admin.getEmail(), otp);
+            }
+            return new AuthResponseDto(true, "A 6-digit one-time password has been sent to your administrator email address.");
+        }
+
         // Generate tokens
         String accessToken = jwtTokenProvider.generateAccessToken(admin, null);
         String rawRefreshToken = generateSecureRandomToken();
@@ -352,6 +370,74 @@ public class StaffAuthService {
                 "{}",
                 "{\"email\":\"" + admin.getEmail() + "\",\"role\":\"ADMIN\"}",
                 "Administrator successfully logged in"
+        );
+
+        UserSummaryDto userSummary = new UserSummaryDto(
+                admin.getId(),
+                admin.getUserCode(),
+                admin.getName(),
+                admin.getEmail(),
+                admin.getRole(),
+                null,
+                "Central Administration",
+                null,
+                null
+        );
+
+        return new AuthResponseDto(accessToken, rawRefreshToken, jwtTokenProvider.getAccessExpirationSeconds(), userSummary);
+    }
+
+    public AuthResponseDto verifyAdminOtp(com.intellicampus.auth.dto.AdminOtpVerifyDto req) {
+        String email = req.getEmail() != null ? req.getEmail().trim().toLowerCase() : "";
+        String enteredOtp = req.getOtp() != null ? req.getOtp().trim() : "";
+
+        User admin = userRepository.findByEmail(email)
+                .orElseThrow(() -> new BadCredentialsException("Invalid or expired OTP."));
+
+        if (admin.getRole() != Role.ADMIN) {
+            throw new BadCredentialsException("Invalid or expired OTP.");
+        }
+
+        PasswordResetToken otpToken = passwordResetTokenRepository
+                .findFirstByUserAndUsedFalseOrderByCreatedAtDesc(admin)
+                .orElseThrow(() -> new BadCredentialsException("Invalid or expired OTP."));
+
+        if (otpToken.isExpired() || otpToken.getAttempts() >= 5) {
+            otpToken.setUsed(true);
+            passwordResetTokenRepository.save(otpToken);
+            throw new BadCredentialsException("OTP has expired. Please log in again.");
+        }
+
+        String enteredHash = DigestUtils.sha256Hex(enteredOtp);
+        if (!otpToken.getTokenHash().equals(enteredHash)) {
+            otpToken.incrementAttempts();
+            passwordResetTokenRepository.save(otpToken);
+            throw new BadCredentialsException("Invalid OTP.");
+        }
+
+        otpToken.setUsed(true);
+        passwordResetTokenRepository.save(otpToken);
+
+        admin.setFailedAttempts(0);
+        admin.setLockedUntil(null);
+        userRepository.save(admin);
+
+        String accessToken = jwtTokenProvider.generateAccessToken(admin, null);
+        String rawRefreshToken = generateSecureRandomToken();
+        String hashedRefreshToken = DigestUtils.sha256Hex(rawRefreshToken);
+        refreshTokenRepository.revokeAllForUser(admin);
+        LocalDateTime expDate = LocalDateTime.now().plusDays(7);
+        refreshTokenRepository.save(new RefreshToken(admin, hashedRefreshToken, expDate));
+
+        auditChainService.recordEntry(
+                admin.getId(),
+                admin.getName(),
+                "ADMIN_LOGIN_SUCCESS",
+                "USER",
+                admin.getId().toString(),
+                "{}",
+                "{\"email\":\"" + admin.getEmail() + "\",\"role\":\"ADMIN\",\"2fa\":true}",
+                "Administrator successfully logged in via 2FA OTP"
         );
 
         UserSummaryDto userSummary = new UserSummaryDto(
@@ -660,8 +746,12 @@ public class StaffAuthService {
     }
 
     private void validateStrongPassword(String password) {
-        if (password == null || password.length() < 8) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters long.");
+        validateStrongPassword(password, null, null);
+    }
+
+    private void validateStrongPassword(String password, String email, String name) {
+        if (password == null || password.length() < 10) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 10 characters long.");
         }
         boolean hasUpper = password.chars().anyMatch(Character::isUpperCase);
         boolean hasLower = password.chars().anyMatch(Character::isLowerCase);
@@ -672,12 +762,30 @@ public class StaffAuthService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
                     "Password must include uppercase, lowercase, number, and special character.");
         }
+
+        if (email != null && !email.isBlank()) {
+            String emailPrefix = email.split("@")[0].toLowerCase();
+            if (password.equalsIgnoreCase(email) || password.toLowerCase().contains(emailPrefix)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Password cannot be equal to or contain your email address.");
+            }
+        }
+
+        if (name != null && !name.isBlank() && name.trim().length() >= 3) {
+            String cleanName = name.trim().toLowerCase();
+            if (password.toLowerCase().contains(cleanName)) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                        "Password cannot contain your name.");
+            }
+        }
     }
 
     public void changePassword(User currentUser, ChangePasswordRequestDto req) {
         if (!passwordEncoder.matches(req.getCurrentPassword(), currentUser.getPasswordHash())) {
             throw new BadCredentialsException("Current password does not match.");
         }
+
+        validateStrongPassword(req.getNewPassword(), currentUser.getEmail(), currentUser.getName());
 
         currentUser.setPasswordHash(passwordEncoder.encode(req.getNewPassword()));
         currentUser.setMustChangePassword(false);

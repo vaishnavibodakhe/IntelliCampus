@@ -28,4 +28,10 @@ public class AdminAuthController {
         AuthResponseDto response = staffAuthService.loginAdmin(req);
         return ResponseEntity.ok(response);
     }
+
+    @PostMapping("/verify-otp")
+    public ResponseEntity<AuthResponseDto> verifyOtp(@Valid @RequestBody com.intellicampus.auth.dto.AdminOtpVerifyDto req) {
+        AuthResponseDto response = staffAuthService.verifyAdminOtp(req);
+        return ResponseEntity.ok(response);
+    }
 }

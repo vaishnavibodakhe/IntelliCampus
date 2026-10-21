@@ -48,6 +48,7 @@ public class StudentAuthService {
     private final PasswordEncoder passwordEncoder;
     private final IpRateLimiterService ipRateLimiterService;
     private final AuditChainService auditChainService;
+    private static final String DUMMY_BCRYPT_HASH = "$2a$12$e8xOQjZc1zF6W6qf1D0JMeZ8L9u2F1A7E9b8C0d1E2F3a4B5c6D7e";
 
     @Value("${app.jwt.lockout-max-attempts:5}")
     private int lockoutMaxAttempts = 5;
@@ -199,6 +200,7 @@ public class StudentAuthService {
             if (ipRateLimiterService != null) {
                 ipRateLimiterService.recordFailedLogin(clientIp);
             }
+            passwordEncoder.matches(req.getPassword() != null ? req.getPassword() : "", DUMMY_BCRYPT_HASH);
             throw new IllegalArgumentException("Invalid credentials. Please verify your email/roll number and password.");
         }
 
@@ -215,6 +217,9 @@ public class StudentAuthService {
                 // Lock has expired; reset
                 user.setLockedUntil(null);
                 user.setFailedAttempts(0);
+                if (user.getStatus() == UserStatus.LOCKED) {
+                    user.setStatus(UserStatus.ACTIVE);
+                }
                 userRepository.save(user);
             }
         }
@@ -229,10 +234,37 @@ public class StudentAuthService {
 
             if (failed >= lockoutMaxAttempts) {
                 user.setLockedUntil(LocalDateTime.now().plusMinutes(lockoutDurationMinutes));
+                user.setStatus(UserStatus.LOCKED);
                 userRepository.save(user);
+
+                if (auditChainService != null) {
+                    auditChainService.recordEntry(
+                            user.getId(),
+                            user.getName(),
+                            "ACCOUNT_LOCKED",
+                            "USER",
+                            String.valueOf(user.getId()),
+                            "{\"failedAttempts\":" + failed + "}",
+                            "{\"status\":\"LOCKED\"}",
+                            "Student account locked for " + lockoutDurationMinutes + " minutes"
+                    );
+                }
                 throw new IllegalStateException(String.format("Account locked due to %d consecutive failed login attempts. Please try again after %d minutes.", lockoutMaxAttempts, lockoutDurationMinutes));
             } else {
                 userRepository.save(user);
+
+                if (auditChainService != null) {
+                    auditChainService.recordEntry(
+                            user.getId(),
+                            user.getName(),
+                            "LOGIN_FAILED",
+                            "USER",
+                            String.valueOf(user.getId()),
+                            "{}",
+                            "{\"attempts\":" + failed + "}",
+                            "Failed student login attempt"
+                    );
+                }
                 int remaining = lockoutMaxAttempts - failed;
                 throw new IllegalArgumentException(String.format("Invalid credentials. %d attempt%s remaining before account lockout.", remaining, remaining == 1 ? "" : "s"));
             }
@@ -253,12 +285,12 @@ public class StudentAuthService {
             auditChainService.recordEntry(
                     user.getId(),
                     user.getName(),
-                    "STUDENT_LOGIN",
+                    "LOGIN_SUCCESS",
                     "USER",
                     String.valueOf(user.getId()),
                     "{}",
                     "{\"email\":\"" + user.getEmail() + "\",\"role\":\"" + user.getRole().name() + "\"}",
-                    "Student " + user.getName() + " signed in successfully via JWT token"
+                    "Student authenticated successfully"
             );
         }
 

@@ -3,6 +3,8 @@ server:
   error:
     include-message: always
     include-binding-errors: always
+    include-stacktrace: never
+    include-exception: false
   servlet:
     context-path: /
   tomcat:
@@ -67,6 +69,7 @@ app:
   security:
     admin-email: ${ADMIN_EMAIL:admin@intellicampus.edu}
     superadmin-password: ${SUPERADMIN_PASSWORD:}
+    admin-otp-enabled: ${ADMIN_OTP_ENABLED:false}
   jwt:
     secret: ${JWT_SECRET}
     access-expiration-minutes: 15

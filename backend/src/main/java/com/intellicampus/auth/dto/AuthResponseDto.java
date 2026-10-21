@@ -7,6 +7,9 @@ public class AuthResponseDto {
     private Long expiresInSeconds;
     private UserSummaryDto user;
 
+    private Boolean otpRequired;
+    private String message;
+
     public AuthResponseDto() {}
 
     public AuthResponseDto(String accessToken, String refreshToken, Long expiresInSeconds, UserSummaryDto user) {
@@ -15,6 +18,11 @@ public class AuthResponseDto {
         this.tokenType = "Bearer";
         this.expiresInSeconds = expiresInSeconds;
         this.user = user;
+    }
+
+    public AuthResponseDto(Boolean otpRequired, String message) {
+        this.otpRequired = otpRequired;
+        this.message = message;
     }
 
     public String getAccessToken() { return accessToken; }
@@ -31,4 +39,10 @@ public class AuthResponseDto {
 
     public UserSummaryDto getUser() { return user; }
     public void setUser(UserSummaryDto user) { this.user = user; }
+
+    public Boolean getOtpRequired() { return otpRequired; }
+    public void setOtpRequired(Boolean otpRequired) { this.otpRequired = otpRequired; }
+
+    public String getMessage() { return message; }
+    public void setMessage(String message) { this.message = message; }
 }

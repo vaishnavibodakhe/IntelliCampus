@@ -339,11 +339,11 @@ class StudentAuthServiceTest {
         assertEquals(0, user.getFailedAttempts());
         assertNull(user.getLockedUntil());
 
-        // Verify STUDENT_LOGIN audit entry recorded
+        // Verify LOGIN_SUCCESS audit entry recorded
         verify(auditChainService).recordEntry(
                 eq(100L),
                 eq("Aarav Shah"),
-                eq("STUDENT_LOGIN"),
+                eq("LOGIN_SUCCESS"),
                 eq("USER"),
                 eq("100"),
                 eq("{}"),

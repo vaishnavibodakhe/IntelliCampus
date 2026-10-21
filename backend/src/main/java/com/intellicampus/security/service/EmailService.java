@@ -26,6 +26,9 @@ public class EmailService {
     @Value("${spring.mail.username:${MAIL_USERNAME:}}")
     private String mailUsername;
 
+    @Autowired(required = false)
+    private com.intellicampus.auth.service.EmailService authEmailService;
+
     public EmailService(@Autowired(required = false) JavaMailSender mailSender) {
         this.mailSender = mailSender;
     }
@@ -35,6 +38,10 @@ public class EmailService {
      * Uses HTML email formatting and strict delivery confirmation.
      */
     public void sendPasswordResetOtp(String toEmail, String otp) {
+        if (authEmailService != null) {
+            authEmailService.sendPasswordResetOtp(toEmail, otp);
+            return;
+        }
         boolean isSmtpConfigured = mailSender != null && mailUsername != null && !mailUsername.trim().isEmpty();
 
         if (!isSmtpConfigured) {
