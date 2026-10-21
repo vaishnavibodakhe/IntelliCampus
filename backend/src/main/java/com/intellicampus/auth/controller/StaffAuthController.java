@@ -25,17 +25,6 @@ public class StaffAuthController {
         this.staffAuthService = staffAuthService;
     }
 
-    @PostMapping("/register")
-    public ResponseEntity<PendingStaffApprovalDto> register(@Valid @RequestBody StaffRegisterRequestDto req, HttpServletRequest request) {
-        if (req.getRole() == com.intellicampus.user.model.Role.ADMIN) {
-            throw new IllegalArgumentException("Registration of ADMIN accounts is strictly prohibited.");
-        }
-        if (req.getRole() == null) {
-            req.setRole(com.intellicampus.user.model.Role.HOD);
-        }
-        PendingStaffApprovalDto response = staffAuthService.registerStaff(req);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
 
     @PostMapping("/login")
     public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto req) {

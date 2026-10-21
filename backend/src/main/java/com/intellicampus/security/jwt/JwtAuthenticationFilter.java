@@ -70,6 +70,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                                         filterChain.doFilter(request, response);
                                         return;
                                     }
+                                    if (Boolean.TRUE.equals(user.getMustChangePassword())) {
+                                        String uri = request.getRequestURI();
+                                        if (!isPasswordChangeOrLogoutAllowed(uri)) {
+                                            response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                                            response.setContentType("application/json");
+                                            response.setCharacterEncoding("UTF-8");
+                                            response.getWriter().write("{\"error\":\"PASSWORD_CHANGE_REQUIRED\",\"message\":\"Password change required before accessing the application.\"}");
+                                            return;
+                                        }
+                                    }
                                     principal = user;
                                 }
                             }
@@ -88,6 +98,16 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         }
 
         filterChain.doFilter(request, response);
+    }
+
+    private boolean isPasswordChangeOrLogoutAllowed(String uri) {
+        if (uri == null) {
+            return false;
+        }
+        String lower = uri.toLowerCase();
+        return lower.contains("/change-password")
+                || lower.contains("/logout")
+                || lower.contains("/refresh");
     }
 
     private String getJwtFromRequest(HttpServletRequest request) {

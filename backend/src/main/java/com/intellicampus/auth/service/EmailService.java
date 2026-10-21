@@ -180,4 +180,58 @@ public class EmailService {
     public boolean isMailConfigured() {
         return mailSender != null && !fromEmail.isEmpty() && !mailPassword.isEmpty();
     }
+
+    public void sendStaffWelcomeEmail(String toEmail, String name, String tempPassword) {
+        if (!isMailConfigured()) {
+            logger.info("SMTP service not configured. Staff welcome email skipped for {}", toEmail);
+            return;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            if (!fromEmail.isEmpty()) {
+                message.setFrom(fromEmail);
+            }
+            message.setTo(toEmail);
+            message.setSubject("Welcome to IntelliCampus - Your Temporary Credentials");
+            message.setText("Hello " + name + ",\n\n"
+                    + "An institutional staff account has been created for you on IntelliCampus.\n\n"
+                    + "Your temporary credentials:\n"
+                    + "Username/Email: " + toEmail + "\n"
+                    + "Temporary Password: " + tempPassword + "\n\n"
+                    + "For security reasons, you will be required to change this password immediately upon your first login.\n"
+                    + "Login portal: " + frontendUrl + "\n\n"
+                    + "Regards,\nIntelliCampus Administration");
+            mailSender.send(message);
+            logger.info("Staff welcome credentials successfully dispatched via email to {}", toEmail);
+        } catch (Exception e) {
+            logger.error("Failed to deliver staff welcome credentials email to {}: {}", toEmail, e.getMessage());
+        }
+    }
+
+    public void sendStaffPasswordResetEmail(String toEmail, String name, String tempPassword) {
+        if (!isMailConfigured()) {
+            logger.info("SMTP service not configured. Staff password reset email skipped for {}", toEmail);
+            return;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            if (!fromEmail.isEmpty()) {
+                message.setFrom(fromEmail);
+            }
+            message.setTo(toEmail);
+            message.setSubject("IntelliCampus - Temporary Password Reset");
+            message.setText("Hello " + name + ",\n\n"
+                    + "An administrator has reset your IntelliCampus account password.\n\n"
+                    + "Your temporary password is: " + tempPassword + "\n\n"
+                    + "You will be required to change this password immediately upon your next login.\n"
+                    + "Login portal: " + frontendUrl + "\n\n"
+                    + "Regards,\nIntelliCampus Administration");
+            mailSender.send(message);
+            logger.info("Staff temporary password reset successfully dispatched via email to {}", toEmail);
+        } catch (Exception e) {
+            logger.error("Failed to deliver staff temporary password reset email to {}: {}", toEmail, e.getMessage());
+        }
+    }
 }

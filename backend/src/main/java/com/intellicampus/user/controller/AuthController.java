@@ -17,23 +17,6 @@ public class AuthController {
         this.authService = authService;
     }
 
-    /**
-     * Faculty Registration (supports /api/auth/faculty/register and alias /api/faculty/register)
-     */
-    @PostMapping({"/api/auth/faculty/register", "/api/faculty/register"})
-    public ResponseEntity<AuthResponse> registerFaculty(@Valid @RequestBody FacultyRegisterRequest request) {
-        AuthResponse response = authService.registerFaculty(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
-
-    /**
-     * Mentor Registration (supports /api/auth/mentor/register and alias /api/mentor/register)
-     */
-    @PostMapping({"/api/auth/mentor/register", "/api/mentor/register"})
-    public ResponseEntity<AuthResponse> registerMentor(@Valid @RequestBody MentorRegisterRequest request) {
-        AuthResponse response = authService.registerMentor(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
-    }
 
     /**
      * Faculty Login (supports /api/auth/faculty/login and alias /api/faculty/login)

@@ -21,4 +21,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByUserCodeAndRole(String userCode, Role role);
     boolean existsByEmail(String email);
     boolean existsByEmailIgnoreCase(String email);
+    List<User> findByRoleIn(List<Role> roles);
+    List<User> findByDepartmentAndRoleAndStatus(com.intellicampus.academic.model.Department department, Role role, com.intellicampus.user.model.UserStatus status);
 }

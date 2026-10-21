@@ -115,16 +115,10 @@ public class SecurityConfig {
                     "/api/auth/login",
                     "/api/auth/student/register",
                     "/api/auth/register",
-                    "/api/auth/staff/register",
-                    "/api/auth/hod/register",
                     "/api/faculty/login",
-                    "/api/faculty/register",
                     "/api/auth/faculty/login",
-                    "/api/auth/faculty/register",
                     "/api/mentor/login",
-                    "/api/mentor/register",
                     "/api/auth/mentor/login",
-                    "/api/auth/mentor/register",
                     "/api/auth/staff/refresh",
                     "/api/auth/staff/forgot-password",
                     "/api/auth/staff/reset-password",
@@ -167,6 +161,7 @@ public class SecurityConfig {
 
                 // 2. ADMIN ONLY ENDPOINTS
                 auth.requestMatchers(
+                    "/api/admin/**",
                     "/api/users/**",
                     "/api/audit/**",
                     "/api/auth/staff/pending",

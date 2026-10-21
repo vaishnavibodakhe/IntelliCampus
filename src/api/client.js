@@ -316,6 +316,63 @@ export const api = {
     });
     return handleResponse(res);
   },
+
+  // Admin Staff Management Endpoints
+  async getAdminStaff(filters = {}) {
+    const params = new URLSearchParams();
+    if (filters.role) params.append('role', filters.role);
+    if (filters.department) params.append('department', filters.department);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.search) params.append('search', filters.search);
+    const qs = params.toString() ? `?${params.toString()}` : '';
+    const res = await fetch(`/api/admin/staff${qs}`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async createAdminStaff(staffData) {
+    const res = await fetch('/api/admin/staff', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(staffData)
+    });
+    return handleResponse(res);
+  },
+
+  async updateAdminStaff(id, staffData) {
+    const res = await fetch(`/api/admin/staff/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(staffData)
+    });
+    return handleResponse(res);
+  },
+
+  async updateAdminStaffStatus(id, statusData) {
+    const res = await fetch(`/api/admin/staff/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(statusData)
+    });
+    return handleResponse(res);
+  },
+
+  async resetAdminStaffPassword(id) {
+    const res = await fetch(`/api/admin/staff/${id}/reset-password`, {
+      method: 'POST',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async deleteAdminStaff(id) {
+    const res = await fetch(`/api/admin/staff/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
 };
 
 export default api;
