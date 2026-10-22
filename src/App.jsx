@@ -396,6 +396,7 @@ export default function App() {
                   activeSession={activeSession}
                   sessions={sessions}
                   setSessions={setSessions}
+                  subjects={subjects}
                   marks={marks}
                   leaveRequests={leaveRequests}
                   setLeaveRequests={setLeaveRequests}

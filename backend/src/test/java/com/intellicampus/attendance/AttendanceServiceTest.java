@@ -1404,4 +1404,120 @@ class AttendanceServiceTest {
             verify(userRepository, never()).findById(999L); // Impersonated ID was rejected!
         }
     }
+
+    @Nested
+    @DisplayName("Student Attendance History & Authorization Tests")
+    class StudentAttendanceHistoryTests {
+
+        private User studentUser2;
+        private StudentProfile studentProfile2;
+        private AttendanceRecord recordStudent1;
+        private AttendanceRecord recordStudent2;
+
+        @BeforeEach
+        void setUpStudentHistory() {
+            studentUser2 = new User("Priya Sharma", "priya@intellicampus.edu", "pass123", Role.STUDENT, "STU-102");
+            ReflectionTestUtils.setField(studentUser2, "id", 20L);
+
+            studentProfile2 = new StudentProfile(studentUser2, "2024-CS-043");
+            ReflectionTestUtils.setField(studentProfile2, "id", 200L);
+
+            openSession.setStatus(SessionStatus.FINALISED);
+
+            recordStudent1 = new AttendanceRecord(openSession, studentProfile, 0.85, null, AttendanceStatus.PRESENT);
+            recordStudent1.setConfirmed(true);
+            recordStudent1.setStatusReason("Biometric face recognition verified");
+            ReflectionTestUtils.setField(recordStudent1, "id", 501L);
+
+            recordStudent2 = new AttendanceRecord(openSession, studentProfile2, null, null, AttendanceStatus.ABSENT);
+            recordStudent2.setConfirmed(false);
+            recordStudent2.setStatusReason("Student did not verify attendance before session finalisation");
+            ReflectionTestUtils.setField(recordStudent2, "id", 502L);
+        }
+
+        @Test
+        @DisplayName("Criterion 1 & 4: Authenticated student can view own attendance by Profile ID or User ID")
+        void testStudentCanViewOwnAttendanceByProfileOrUserId() {
+            when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(studentProfile));
+            when(recordRepository.findByStudentOrderByCreatedAtDesc(studentProfile)).thenReturn(List.of(recordStudent1));
+
+            // Query using Profile ID (10L)
+            List<AttendanceRecordResponseDto> byProfileId = attendanceService.getRecordsForStudent(10L, studentUser);
+            assertNotNull(byProfileId);
+            assertEquals(1, byProfileId.size());
+            assertEquals(10L, byProfileId.get(0).getStudentId());
+            assertEquals(AttendanceStatus.PRESENT, byProfileId.get(0).getFinalStatus());
+            assertEquals("CS301", byProfileId.get(0).getSubjectCode());
+            assertEquals("Distributed Systems", byProfileId.get(0).getSubjectName());
+            assertEquals(100L, byProfileId.get(0).getSessionId());
+            assertEquals(SessionStatus.FINALISED, byProfileId.get(0).getSessionStatus());
+
+            // Query using User ID (2L)
+            List<AttendanceRecordResponseDto> byUserId = attendanceService.getRecordsForStudent(2L, studentUser);
+            assertNotNull(byUserId);
+            assertEquals(1, byUserId.size());
+            assertEquals(10L, byUserId.get(0).getStudentId());
+        }
+
+        @Test
+        @DisplayName("Criterion 2: Student CANNOT access another student's attendance history (403 AccessDeniedException)")
+        void testStudentCannotAccessAnotherStudentAttendance() {
+            when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(studentProfile));
+
+            // Student 1 (User ID 2, Profile ID 10) attempts to query Student 2's ID (200L or 20L)
+            AccessDeniedException ex1 = assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.getRecordsForStudent(200L, studentUser));
+            assertTrue(ex1.getMessage().contains("only permitted to view their own"));
+
+            AccessDeniedException ex2 = assertThrows(AccessDeniedException.class, () ->
+                    attendanceService.getRecordsForStudent(20L, studentUser));
+            assertTrue(ex2.getMessage().contains("only permitted to view their own"));
+
+            verify(recordRepository, never()).findByStudentOrderByCreatedAtDesc(studentProfile2);
+        }
+
+        @Test
+        @DisplayName("Criterion 1: Two different students receive their own distinct attendance records")
+        void testTwoDifferentStudentsReceiveOwnAttendanceRecords() {
+            when(studentProfileRepository.findByUserId(2L)).thenReturn(Optional.of(studentProfile));
+            when(studentProfileRepository.findByUserId(20L)).thenReturn(Optional.of(studentProfile2));
+
+            when(recordRepository.findByStudentOrderByCreatedAtDesc(studentProfile)).thenReturn(List.of(recordStudent1));
+            when(recordRepository.findByStudentOrderByCreatedAtDesc(studentProfile2)).thenReturn(List.of(recordStudent2));
+
+            // Student 1 query
+            List<AttendanceRecordResponseDto> student1Records = attendanceService.getRecordsForStudent(10L, studentUser);
+            assertEquals(1, student1Records.size());
+            assertEquals(AttendanceStatus.PRESENT, student1Records.get(0).getFinalStatus());
+            assertEquals(0.85, student1Records.get(0).getFaceScore());
+            assertEquals("Aarav Mehta", student1Records.get(0).getStudentName());
+
+            // Student 2 query
+            List<AttendanceRecordResponseDto> student2Records = attendanceService.getRecordsForStudent(200L, studentUser2);
+            assertEquals(1, student2Records.size());
+            assertEquals(AttendanceStatus.ABSENT, student2Records.get(0).getFinalStatus());
+            assertNull(student2Records.get(0).getFaceScore());
+            assertEquals("Priya Sharma", student2Records.get(0).getStudentName());
+        }
+
+        @Test
+        @DisplayName("Criterion 3 & 5: Faculty and Admin can view attendance records for any student")
+        void testFacultyAndAdminCanViewStudentAttendance() {
+            User adminUser = new User("Admin", "admin@intellicampus.edu", "pass123", Role.ADMIN, "ADM-001");
+            ReflectionTestUtils.setField(adminUser, "id", 999L);
+
+            when(studentProfileRepository.findById(10L)).thenReturn(Optional.of(studentProfile));
+            when(recordRepository.findByStudentOrderByCreatedAtDesc(studentProfile)).thenReturn(List.of(recordStudent1));
+
+            // Faculty query
+            List<AttendanceRecordResponseDto> facultyResult = attendanceService.getRecordsForStudent(10L, facultyUser);
+            assertEquals(1, facultyResult.size());
+            assertEquals("Aarav Mehta", facultyResult.get(0).getStudentName());
+
+            // Admin query
+            List<AttendanceRecordResponseDto> adminResult = attendanceService.getRecordsForStudent(10L, adminUser);
+            assertEquals(1, adminResult.size());
+            assertEquals("Aarav Mehta", adminResult.get(0).getStudentName());
+        }
+    }
 }

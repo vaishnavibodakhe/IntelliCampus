@@ -102,11 +102,9 @@ public class AttendanceController {
             @PathVariable Long studentId,
             Authentication authentication) {
         User currentUser = resolveCurrentUser(authentication);
-        if (currentUser != null && currentUser.getRole() == Role.STUDENT) {
-            if (!currentUser.getId().equals(studentId)) {
-                throw new AccessDeniedException("Students are only permitted to view their own attendance records.");
-            }
-        }
-        return ResponseEntity.ok(attendanceService.getRecordsForStudent(studentId));
+        List<AttendanceRecordResponseDto> records = currentUser != null
+                ? attendanceService.getRecordsForStudent(studentId, currentUser)
+                : attendanceService.getRecordsForStudent(studentId);
+        return ResponseEntity.ok(records);
     }
 }

@@ -656,6 +656,26 @@ public class AttendanceService {
 
     @Transactional(readOnly = true)
     public List<AttendanceRecordResponseDto> getRecordsForStudent(Long studentId) {
+        return getRecordsForStudent(studentId, null);
+    }
+
+    @Transactional(readOnly = true)
+    public List<AttendanceRecordResponseDto> getRecordsForStudent(Long studentId, User caller) {
+        if (caller != null && caller.getRole() == Role.STUDENT) {
+            StudentProfile profile = studentProfileRepository.findByUserId(caller.getId())
+                    .orElseThrow(() -> new AccessDeniedException("Student profile not found for user: " + caller.getId()));
+
+            boolean matchesUserId = caller.getId().equals(studentId);
+            boolean matchesProfileId = profile.getId().equals(studentId);
+            if (!matchesUserId && !matchesProfileId) {
+                throw new AccessDeniedException("Students are only permitted to view their own attendance records.");
+            }
+            return recordRepository.findByStudentOrderByCreatedAtDesc(profile)
+                    .stream()
+                    .map(this::mapRecordToDto)
+                    .collect(Collectors.toList());
+        }
+
         StudentProfile student = studentProfileRepository.findById(studentId)
                 .or(() -> studentProfileRepository.findByUserId(studentId))
                 .orElseThrow(() -> new IllegalArgumentException("Student not found: " + studentId));
@@ -669,15 +689,30 @@ public class AttendanceService {
     private AttendanceRecordResponseDto mapRecordToDto(AttendanceRecord r) {
         AttendanceRecordResponseDto dto = new AttendanceRecordResponseDto();
         dto.setId(r.getId());
-        dto.setStudentId(r.getStudent().getId());
-        dto.setStudentName(r.getStudent().getUser().getName());
-        dto.setRollNo(r.getStudent().getRollNo());
+        if (r.getStudent() != null) {
+            dto.setStudentId(r.getStudent().getId());
+            if (r.getStudent().getUser() != null) {
+                dto.setStudentName(r.getStudent().getUser().getName());
+            }
+            dto.setRollNo(r.getStudent().getRollNo());
+        }
         dto.setFaceScore(r.getFaceScore());
         dto.setSpoofScore(r.getSpoofScore());
         dto.setConfirmed(r.getConfirmed());
         dto.setConfirmedAt(r.getConfirmedAt());
         dto.setFinalStatus(r.getFinalStatus());
         dto.setStatusReason(r.getStatusReason());
+        if (r.getSession() != null) {
+            dto.setSessionId(r.getSession().getId());
+            dto.setSessionStatus(r.getSession().getStatus());
+            dto.setSessionDate(r.getSession().getStartedAt());
+            if (r.getSession().getSubject() != null) {
+                dto.setSubjectId(r.getSession().getSubject().getId());
+                dto.setSubjectCode(r.getSession().getSubject().getCode());
+                dto.setSubjectName(r.getSession().getSubject().getName());
+            }
+        }
+        dto.setCreatedAt(r.getCreatedAt());
         return dto;
     }
 

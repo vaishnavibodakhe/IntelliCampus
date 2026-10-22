@@ -211,7 +211,9 @@ export const api = {
   },
 
   async getStudentAttendanceRecords(studentId) {
-    const res = await fetch(`/api/attendance/sessions/records/student/${studentId}`);
+    const res = await fetch(`/api/attendance/sessions/records/student/${studentId}`, {
+      headers: getAuthHeaders({}, 'student'),
+    });
     return handleResponse(res);
   },
 
