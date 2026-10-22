@@ -70,8 +70,9 @@ app:
     confirm-timeout-seconds: 120
     geofence-default-radius-m: 50
     geofence-max-accuracy-m: 100
-    face-match-threshold: 0.45
-    face-match-margin: 0.05
+    face-match-threshold: 0.50
+    face-review-threshold: 0.20
+    face-match-margin: 0.0
     spoof-min-score: 0.60
     phash-max-distance: 8
     defaulter-threshold-percent: 75

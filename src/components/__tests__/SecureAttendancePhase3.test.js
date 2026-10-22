@@ -276,43 +276,26 @@ describe('Phase 3 - Secure Live-Camera Attendance Frontend Invariants', () => {
     });
   });
 
-  describe('Safe Anti-Spoofing & Unverified Liveness Decision Policy', () => {
-    const SPOOF_THRESHOLD = 0.60;
-    const MATCH_THRESHOLD = 0.45;
-    const MATCH_MARGIN = 0.05;
+  describe('Face Recognition Decision Policy (20% / 50% Rules without Spoof Dependency)', () => {
+    const MATCH_THRESHOLD = 0.50;
+    const REVIEW_THRESHOLD = 0.20;
 
     function evaluateBiometricDecision(similarity, secondSimilarity, spoofScore) {
-      const margin = similarity - (secondSimilarity || 0);
-
-      // 1. Anti-spoofing alert: telemetry explicitly below threshold
-      if (spoofScore !== null && spoofScore !== undefined && spoofScore < SPOOF_THRESHOLD) {
-        return {
-          status: 'REVIEW',
-          reason: `Anti-spoofing alert: Confidence score (${spoofScore.toFixed(2)}) below threshold (${SPOOF_THRESHOLD.toFixed(2)}). Flagged for faculty verification.`
-        };
-      }
-
-      // 2. Unverified liveness: no spoof telemetry available; cannot treat as verified
-      if (spoofScore === null || spoofScore === undefined) {
-        if (similarity >= (MATCH_THRESHOLD - 0.10)) {
-          return {
-            status: 'REVIEW',
-            reason: `Unverified liveness: Biometric match detected (Cosine: ${similarity.toFixed(2)}), but anti-spoof telemetry unavailable. Routed to REVIEW for faculty confirmation.`
-          };
-        }
+      if (similarity === null || similarity === undefined) {
         return { status: 'UNMATCHED', reason: 'Similarity below threshold' };
       }
+      const isAmbiguousTie = (secondSimilarity || 0) > 0 && Math.abs(similarity - (secondSimilarity || 0)) < 1e-6;
 
-      // 3. Genuine verified liveness AND high-confidence match
-      if (similarity >= MATCH_THRESHOLD && margin >= MATCH_MARGIN && spoofScore >= SPOOF_THRESHOLD) {
+      // 1. Qualifying match at or above 0.50: automatically marked PRESENT without requiring spoofScore
+      if (similarity >= MATCH_THRESHOLD && !isAmbiguousTie) {
         return {
           status: 'PRESENT',
-          reason: `Biometric face recognition and liveness verified (Cosine: ${similarity.toFixed(2)}, Liveness: ${spoofScore.toFixed(2)})`
+          reason: `Biometric face recognition verified (Cosine: ${similarity.toFixed(2)} >= ${MATCH_THRESHOLD.toFixed(2)})`
         };
       }
 
-      // 4. Borderline similarity
-      if (similarity >= (MATCH_THRESHOLD - 0.10)) {
+      // 2. Ambiguous tie or review range in [0.20, 0.50)
+      if ((similarity >= REVIEW_THRESHOLD && similarity < MATCH_THRESHOLD) || isAmbiguousTie) {
         return {
           status: 'REVIEW',
           reason: `Borderline biometric match (Cosine: ${similarity.toFixed(2)}). Requires faculty verification.`
@@ -322,22 +305,35 @@ describe('Phase 3 - Secure Live-Camera Attendance Frontend Invariants', () => {
       return { status: 'UNMATCHED', reason: 'Similarity below threshold' };
     }
 
-    it('should route high-confidence match to REVIEW when spoofScore is null (unverified liveness)', () => {
+    it('should mark high-confidence match (>= 0.50) as PRESENT when spoofScore is null without requiring liveness', () => {
       const decision = evaluateBiometricDecision(0.85, 0.20, null);
-      assert.strictEqual(decision.status, 'REVIEW', 'Must NOT mark PRESENT when liveness is unverified');
-      assert.ok(decision.reason.includes('Unverified liveness'));
+      assert.strictEqual(decision.status, 'PRESENT', 'Must mark PRESENT without requiring spoofScore');
+      assert.ok(decision.reason.includes('Biometric face recognition verified'));
+      assert.ok(!decision.reason.includes('liveness verified'));
     });
 
-    it('should route match to REVIEW when spoofScore is below threshold (< 0.60)', () => {
-      const decision = evaluateBiometricDecision(0.85, 0.20, 0.45);
+    it('should route match in [0.20, 0.50) to REVIEW requiring faculty verification', () => {
+      const decision = evaluateBiometricDecision(0.35, 0.20, null);
       assert.strictEqual(decision.status, 'REVIEW');
-      assert.ok(decision.reason.includes('Anti-spoofing alert'));
+      assert.ok(decision.reason.includes('Requires faculty verification'));
     });
 
-    it('should mark PRESENT ONLY when BOTH high-confidence match and verified liveness are present', () => {
-      const decision = evaluateBiometricDecision(0.85, 0.20, 0.95);
+    it('should classify score below 0.20 as UNMATCHED', () => {
+      const decision = evaluateBiometricDecision(0.18, 0.10, null);
+      assert.strictEqual(decision.status, 'UNMATCHED');
+    });
+
+    it('should verify exact boundaries: 0.1999 (UNMATCHED), 0.20 (REVIEW), 0.4999 (REVIEW), 0.50 (PRESENT), 0.5001 (PRESENT)', () => {
+      assert.strictEqual(evaluateBiometricDecision(0.1999).status, 'UNMATCHED');
+      assert.strictEqual(evaluateBiometricDecision(0.20).status, 'REVIEW');
+      assert.strictEqual(evaluateBiometricDecision(0.4999).status, 'REVIEW');
+      assert.strictEqual(evaluateBiometricDecision(0.50).status, 'PRESENT');
+      assert.strictEqual(evaluateBiometricDecision(0.5001).status, 'PRESENT');
+    });
+
+    it('should allow high-confidence match with small margin to be marked PRESENT', () => {
+      const decision = evaluateBiometricDecision(0.52, 0.50, null);
       assert.strictEqual(decision.status, 'PRESENT');
-      assert.ok(decision.reason.includes('liveness verified'));
     });
   });
 });

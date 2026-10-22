@@ -85,7 +85,7 @@ export default function FacultyView({
     ? photoStats.detectedFaces.filter(f => f.status === 'REVIEW').length
     : (photoStats.studentsInReview ?? 0)) : 0;
   const photoUnmatched = photoStats ? (photoStats.detectedFaces && photoStats.detectedFaces.length > 0
-    ? photoStats.detectedFaces.filter(f => f.status === 'UNMATCHED').length
+    ? photoStats.detectedFaces.filter(f => f.status === 'UNMATCHED' || f.status === 'LOW_CONFIDENCE').length
     : (photoStats.unmatchedFaces ?? photoStats.unmatchedFaceCount ?? Math.max(0, photoFacesDetected - photoMatched - photoInReview))) : 0;
 
   // Load real active session from backend on mount
@@ -863,12 +863,10 @@ export default function FacultyView({
                           : `Face #${face.faceId}`;
                       } else if (isReview) {
                         const name = face.studentName || `Face #${face.faceId}`;
-                        const sim = face.similarity !== undefined && face.similarity !== null
-                          ? (typeof face.similarity === 'number'
-                              ? (Number.isInteger(face.similarity) ? face.similarity : Number(face.similarity.toFixed(2)))
-                              : face.similarity)
+                        const simPercent = face.similarity !== undefined && face.similarity !== null
+                          ? `${Math.round(face.similarity * 100)}%`
                           : null;
-                        label = sim !== null ? `${name} (similarity ${sim})` : name;
+                        label = simPercent !== null ? `${name} (${simPercent})` : name;
                       } else {
                         label = 'Unmatched';
                       }
@@ -1013,7 +1011,7 @@ export default function FacultyView({
                   <span>Live camera feed capture required. Manual file uploads and synthetic fallbacks are strictly prohibited (`ATT-03`).</span>
                 </div>
                 <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
-                  Cosine threshold: <strong>&ge; 0.45</strong> (PRESENT) | <strong>0.35 &ndash; 0.45</strong> (REVIEW). Hungarian bipartite matching prevents duplicate student assignments.
+                  Cosine threshold: <strong>&ge; 50%</strong> (PRESENT) | <strong>20% &ndash; 50%</strong> (REVIEW). Hungarian bipartite matching prevents duplicate student assignments.
                 </p>
               </div>
             </div>
@@ -1059,8 +1057,8 @@ export default function FacultyView({
                       <td className="font-mono">{rec.rollNo}</td>
                       <td><strong>{rec.studentName}</strong></td>
                       <td>
-                        <span className={rec.faceScore >= 0.45 ? 'text-success font-mono font-bold' : rec.faceScore >= 0.35 ? 'text-warning font-mono font-bold' : 'text-muted font-mono'}>
-                          {rec.faceScore ? (rec.faceScore * 100).toFixed(1) + '%' : '0.0%'}
+                        <span className={rec.faceScore >= 0.50 ? 'text-success font-mono font-bold' : rec.faceScore >= 0.20 ? 'text-warning font-mono font-bold' : 'text-muted font-mono'}>
+                          {rec.faceScore ? `${Math.round(rec.faceScore * 100)}%` : '0%'}
                         </span>
                       </td>
                       <td>

@@ -15,43 +15,69 @@ import {
  * No rotating QR code logic.
  */
 describe('Smart Attendance - Face Recognition Matching & Threshold Logic', () => {
-  const DEFAULT_THRESHOLD = 0.45;
-  const DEFAULT_MARGIN = 0.05;
+  const DEFAULT_THRESHOLD = 0.50;
+  const REVIEW_THRESHOLD = 0.20;
 
   // Evaluates face recognition decision logic
-  function classifyFaceMatch(similarity, secondSimilarity = 0, threshold = DEFAULT_THRESHOLD, margin = DEFAULT_MARGIN) {
-    if (similarity >= threshold && (similarity - secondSimilarity) >= margin) {
+  function classifyFaceMatch(similarity, secondSimilarity = 0, threshold = DEFAULT_THRESHOLD, reviewThreshold = REVIEW_THRESHOLD) {
+    if (similarity === null || similarity === undefined) {
+      return { status: 'UNMATCHED', reason: 'Similarity below recognition threshold' };
+    }
+    const isAmbiguousTie = secondSimilarity > 0 && Math.abs(similarity - secondSimilarity) < 1e-6;
+    if (similarity >= threshold && !isAmbiguousTie) {
       return { status: 'PRESENT', reason: 'Verified by ArcFace facial recognition' };
     }
-    if (similarity >= (threshold - 0.10) && similarity < threshold) {
+    if (similarity >= reviewThreshold && similarity < threshold) {
       return { status: 'REVIEW', reason: 'Borderline similarity score; requires faculty review' };
+    }
+    if (similarity >= threshold && isAmbiguousTie) {
+      return { status: 'REVIEW', reason: 'Ambiguous match with multiple candidates; requires faculty review' };
     }
     return { status: 'UNMATCHED', reason: 'Similarity below recognition threshold' };
   }
 
-  it('should classify high-confidence match with sufficient margin as PRESENT', () => {
+  it('should classify high-confidence match (>= 0.50) as PRESENT', () => {
     const result = classifyFaceMatch(0.78, 0.42);
     assert.strictEqual(result.status, 'PRESENT');
     assert.ok(result.reason.includes('Verified by ArcFace'));
   });
 
-  it('should classify borderline match in [threshold - 0.10, threshold) as REVIEW', () => {
-    // 0.38 is in [0.35, 0.45)
+  it('should classify match in [0.20, 0.50) as REVIEW', () => {
+    // 0.38 is in [0.20, 0.50)
     const result = classifyFaceMatch(0.38, 0.20);
     assert.strictEqual(result.status, 'REVIEW');
     assert.ok(result.reason.includes('requires faculty review'));
   });
 
-  it('should classify low similarity below 0.35 as UNMATCHED', () => {
-    const result = classifyFaceMatch(0.28, 0.22);
+  it('should classify low similarity below 0.20 as UNMATCHED', () => {
+    const result = classifyFaceMatch(0.18, 0.12);
     assert.strictEqual(result.status, 'UNMATCHED');
   });
 
-  it('should flag as REVIEW if top similarity is above threshold but margin over second candidate is insufficient', () => {
-    // Similarity 0.48 >= 0.45, but second similarity is 0.46 (margin 0.02 < 0.05)
-    const result = classifyFaceMatch(0.48, 0.46);
-    // Because margin is not satisfied, it doesn't meet PRESENT criteria
-    assert.notStrictEqual(result.status, 'PRESENT');
+  it('should verify exact boundary rules for 0.1999, 0.20, 0.4999, 0.50, and 0.5001', () => {
+    assert.strictEqual(classifyFaceMatch(0.1999).status, 'UNMATCHED');
+    assert.strictEqual(classifyFaceMatch(0.20).status, 'REVIEW');
+    assert.strictEqual(classifyFaceMatch(0.4999).status, 'REVIEW');
+    assert.strictEqual(classifyFaceMatch(0.50).status, 'PRESENT');
+    assert.strictEqual(classifyFaceMatch(0.5001).status, 'PRESENT');
+  });
+
+  it('should allow match >= 0.50 with a small margin to be marked PRESENT', () => {
+    // Similarity 0.52 >= 0.50, second similarity 0.50 (margin 0.02 < old 0.05 margin)
+    const result = classifyFaceMatch(0.52, 0.50);
+    assert.strictEqual(result.status, 'PRESENT');
+  });
+
+  it('should flag ambiguous tie where multiple candidates share identical top similarity as REVIEW', () => {
+    // Exact tie: similarity 0.52, second similarity 0.52
+    const result = classifyFaceMatch(0.52, 0.52);
+    assert.strictEqual(result.status, 'REVIEW');
+    assert.ok(result.reason.includes('Ambiguous match'));
+  });
+
+  it('should handle missing or null similarity safely as UNMATCHED', () => {
+    assert.strictEqual(classifyFaceMatch(null).status, 'UNMATCHED');
+    assert.strictEqual(classifyFaceMatch(undefined).status, 'UNMATCHED');
   });
 });
 
@@ -287,12 +313,10 @@ describe('FacultyView - Unmatched Face Detection & Bounding Box Invariants', () 
         : `Face #${face.faceId}`;
     } else if (isReview) {
       const name = face.studentName || `Face #${face.faceId}`;
-      const sim = face.similarity !== undefined && face.similarity !== null
-        ? (typeof face.similarity === 'number'
-            ? (Number.isInteger(face.similarity) ? face.similarity : Number(face.similarity.toFixed(2)))
-            : face.similarity)
+      const simPercent = face.similarity !== undefined && face.similarity !== null
+        ? `${Math.round(face.similarity * 100)}%`
         : null;
-      label = sim !== null ? `${name} (similarity ${sim})` : name;
+      label = simPercent !== null ? `${name} (${simPercent})` : name;
     } else {
       label = 'Unmatched';
     }
@@ -375,7 +399,7 @@ describe('FacultyView - Unmatched Face Detection & Bounding Box Invariants', () 
     assert.ok(box, 'Bounding box must be computed');
     assert.strictEqual(box.color, '#f59e0b', 'REVIEW face must have an amber box');
     assert.ok(box.label.includes('Priya Jadhav'), 'REVIEW face must render student name');
-    assert.strictEqual(box.label, 'Priya Jadhav (similarity 0.84)', 'REVIEW face must format as "<name> (similarity <score>)"');
+    assert.strictEqual(box.label, 'Priya Jadhav (84%)', 'REVIEW face must format as "<name> (<percentage>%)"');
     assert.strictEqual(box.isReview, true);
     assert.strictEqual(box.isUnmatched, false);
     assert.strictEqual(box.isPresent, false);

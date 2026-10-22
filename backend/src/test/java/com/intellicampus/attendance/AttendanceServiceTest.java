@@ -97,8 +97,9 @@ class AttendanceServiceTest {
         objectMapper = new ObjectMapper();
         attendanceService.setRestTemplate(restTemplate);
         attendanceService.setObjectMapper(objectMapper);
-        attendanceService.setFaceMatchThreshold(0.45);
-        attendanceService.setFaceMatchMargin(0.05);
+        attendanceService.setFaceMatchThreshold(0.50);
+        attendanceService.setFaceReviewThreshold(0.20);
+        attendanceService.setFaceMatchMargin(0.0);
         lenient().when(spoofScoreValidator.getSpoofThreshold()).thenReturn(0.60);
 
         facultyUser = new User("Dr. Ramesh Joshi", "ramesh@intellicampus.edu", "pass123", Role.FACULTY, "FAC-001");
@@ -137,7 +138,7 @@ class AttendanceServiceTest {
     class FaceRecognitionTests {
 
         @Test
-        @DisplayName("Criterion 1: Cosine similarity >= 0.45 and margin >= 0.05 marks student PRESENT")
+        @DisplayName("Criterion 1: Cosine similarity >= 0.50 marks student PRESENT")
         void testRecognitionMatchPresent() throws Exception {
             MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
 
@@ -176,12 +177,12 @@ class AttendanceServiceTest {
             assertTrue(record.getConfirmed());
             assertEquals(0.72, record.getFaceScore());
             assertEquals(0.95, record.getSpoofScore());
-            assertTrue(record.getStatusReason().contains("Biometric face recognition and liveness verified"));
+            assertTrue(record.getStatusReason().contains("Biometric face recognition verified"));
         }
 
         @Test
-        @DisplayName("Criterion 1b: Unverified liveness (spoofScore is null) routes high-confidence match to REVIEW")
-        void testUnverifiedLivenessWhenSpoofScoreNullRoutesToReview() throws Exception {
+        @DisplayName("Criterion 1b: Null spoofScore with similarity >= 0.50 automatically marks PRESENT without requiring liveness")
+        void testNullSpoofScoreWithHighSimilarityMarksPresent() throws Exception {
             MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
 
             when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
@@ -214,14 +215,16 @@ class AttendanceServiceTest {
 
             assertNotNull(result);
             assertEquals(1, result.getFacesDetected());
-            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
             assertNull(record.getSpoofScore());
             assertEquals(0.72, record.getFaceScore());
-            assertTrue(record.getStatusReason().contains("Unverified liveness"));
+            assertTrue(record.getStatusReason().contains("Biometric face recognition verified"));
+            assertFalse(record.getStatusReason().contains("liveness verified"));
         }
 
         @Test
-        @DisplayName("Criterion 2: Borderline similarity in [0.35, 0.45) flags student for REVIEW")
+        @DisplayName("Criterion 2: Borderline similarity in [0.20, 0.50) flags student for REVIEW")
         void testRecognitionBorderlineReview() throws Exception {
             MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{5, 6, 7, 8});
 
@@ -611,8 +614,8 @@ class AttendanceServiceTest {
         }
 
         @Test
-        @DisplayName("Failed anti-spoof liveness check routes match to REVIEW even with high similarity")
-        void testAntiSpoofFailureRoutesToReview() throws Exception {
+        @DisplayName("Anti-spoof check does not override similarity rules: >= 0.50 marks student PRESENT even if spoofScore is low or null")
+        void testAntiSpoofDoesNotOverrideSimilarityRule() throws Exception {
             MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
 
             when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
@@ -621,7 +624,7 @@ class AttendanceServiceTest {
             when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
             when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
 
-            // Liveness score 0.40 is below threshold 0.60
+            // Low spoofScore (0.40) does not prevent qualifying similarity 0.85 from becoming PRESENT
             String aiResponseJson = "{" +
                     "\"faceCount\": 1," +
                     "\"matchedCount\": 1," +
@@ -645,9 +648,464 @@ class AttendanceServiceTest {
             PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
 
             assertNotNull(result);
-            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
+            assertEquals(0.85, record.getFaceScore());
             assertEquals(0.40, record.getSpoofScore());
-            assertTrue(record.getStatusReason().contains("Anti-spoofing alert"));
+            assertTrue(record.getStatusReason().contains("Biometric face recognition verified"));
+            assertFalse(record.getStatusReason().contains("liveness verified"));
+        }
+
+        @Test
+        @DisplayName("Exact boundary 0.1999 => UNMATCHED / LOW_CONFIDENCE with no student identity assigned")
+        void testBoundary1999IsUnmatchedWithoutIdentityAttribution() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.1999," +
+                    "  \"secondSimilarity\": 0.10," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(1, result.getFacesDetected());
+            assertEquals(0, result.getStudentsMatched());
+            assertEquals(0, result.getStudentsInReview());
+            assertEquals(1, result.getUnmatchedFaces());
+            assertEquals(1, result.getUnmatchedFaceCount());
+
+            assertEquals(AttendanceStatus.PENDING, record.getFinalStatus());
+            assertFalse(Boolean.TRUE.equals(record.getConfirmed()));
+
+            DetectedFaceDto faceDto = result.getDetectedFaces().get(0);
+            assertEquals("UNMATCHED", faceDto.getStatus());
+            assertNull(faceDto.getMatchedStudentId());
+            assertNull(faceDto.getStudentName());
+        }
+
+        @Test
+        @DisplayName("Exact boundary 0.20 => REVIEW")
+        void testBoundary20RoutesToReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.20," +
+                    "  \"secondSimilarity\": 0.10," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(1, result.getStudentsInReview());
+            assertEquals(0, result.getStudentsMatched());
+            assertEquals(0, result.getUnmatchedFaces());
+            assertEquals("REVIEW", result.getDetectedFaces().get(0).getStatus());
+            assertEquals(Long.valueOf(10L), result.getDetectedFaces().get(0).getMatchedStudentId());
+        }
+
+        @Test
+        @DisplayName("Exact boundary 0.4999 => REVIEW")
+        void testBoundary4999RoutesToReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.4999," +
+                    "  \"secondSimilarity\": 0.20," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertEquals(1, result.getStudentsInReview());
+            assertEquals(0, result.getStudentsMatched());
+            assertEquals("REVIEW", result.getDetectedFaces().get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("Exact boundary 0.50 => automatic PRESENT")
+        void testBoundary50AutomaticallyPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.50," +
+                    "  \"secondSimilarity\": 0.20," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
+            assertEquals(1, result.getStudentsMatched());
+            assertEquals(0, result.getStudentsInReview());
+            assertEquals("PRESENT", result.getDetectedFaces().get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("Exact boundary 0.5001 => automatic PRESENT")
+        void testBoundary5001AutomaticallyPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.5001," +
+                    "  \"secondSimilarity\": 0.20," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
+            assertEquals(1, result.getStudentsMatched());
+            assertEquals("PRESENT", result.getDetectedFaces().get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("Similarity >= 0.50 with a small margin (e.g. 0.02) qualifies as automatic PRESENT")
+        void testSimilarityAbove50PercentWithSmallMarginMarksPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            // sim 0.52, secondSim 0.50 -> margin 0.02 (< old 0.05 margin)
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.52," +
+                    "  \"secondSimilarity\": 0.50," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.PRESENT, record.getFinalStatus());
+            assertTrue(record.getConfirmed());
+            assertEquals("PRESENT", result.getDetectedFaces().get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("Identity safety: Ambiguous tie with identical top similarity routes to REVIEW")
+        void testAmbiguousTieAcrossCandidatesRoutesToReview() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            // sim 0.52, secondSim 0.52 -> identical score tie
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.52," +
+                    "  \"secondSimilarity\": 0.52," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(record));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.REVIEW, record.getFinalStatus());
+            assertTrue(record.getStatusReason().contains("Ambiguous biometric match"));
+            assertEquals("REVIEW", result.getDetectedFaces().get(0).getStatus());
+        }
+
+        @Test
+        @DisplayName("Missing or null similarity safely handled as UNMATCHED and never accidental PRESENT")
+        void testMissingOrNullSimilaritySafelyHandledAsUnmatched() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 0," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.90," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": null," +
+                    "  \"secondSimilarity\": null," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.PENDING, record.getFinalStatus());
+            assertFalse(Boolean.TRUE.equals(record.getConfirmed()));
+            assertEquals(1, result.getUnmatchedFaces());
+            assertEquals("UNMATCHED", result.getDetectedFaces().get(0).getStatus());
+            assertNull(result.getDetectedFaces().get(0).getMatchedStudentId());
+        }
+
+        @Test
+        @DisplayName("Candidate not enrolled in session division is rejected as UNMATCHED")
+        void testIneligibleOrUnenrolledCandidateNotMarkedPresent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            User otherDivUser = new User("External Student", "ext@intellicampus.edu", "pass123", Role.STUDENT, "EXT-001");
+            ReflectionTestUtils.setField(otherDivUser, "id", 999L);
+            StudentProfile otherDivStudent = new StudentProfile(otherDivUser, "2024-EXT-099");
+            Division otherDiv = new Division("TE-CS-B", 2024);
+            ReflectionTestUtils.setField(otherDiv, "id", 99L);
+            otherDivStudent.setDivision(otherDiv);
+            ReflectionTestUtils.setField(otherDivStudent, "id", 999L);
+
+            when(studentProfileRepository.findById(999L)).thenReturn(Optional.of(otherDivStudent));
+            when(recordRepository.findBySessionIdAndStudentId(100L, 999L)).thenReturn(Optional.empty());
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 999," +
+                    "  \"similarity\": 0.88," +
+                    "  \"secondSimilarity\": 0.10," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(0, result.getStudentsMatched());
+            assertEquals(1, result.getUnmatchedFaces());
+            assertEquals("UNMATCHED", result.getDetectedFaces().get(0).getStatus());
+            assertNull(result.getDetectedFaces().get(0).getMatchedStudentId());
+        }
+
+        @Test
+        @DisplayName("Low confidence face (< 0.20) does not mark nearest candidate ABSENT; keeps record PENDING")
+        void testLowConfidenceFaceDoesNotMarkCandidateAbsent() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(0L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.85," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.15," +
+                    "  \"secondSimilarity\": 0.08," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            AttendanceRecord record = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.PENDING);
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(record));
+
+            PhotoRecognitionResultDto result = attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertNotNull(result);
+            assertEquals(AttendanceStatus.PENDING, record.getFinalStatus());
+            verify(recordRepository, never()).save(record);
+        }
+
+        @Test
+        @DisplayName("Faculty manual override is preserved against subsequent photo AI detections")
+        void testFacultyManualOverridePreservedAgainstSubsequentPhoto() throws Exception {
+            MockMultipartFile photo = new MockMultipartFile("photo", "class.jpg", "image/jpeg", new byte[]{1, 2, 3, 4});
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(sessionPhotoRepository.countBySession(openSession)).thenReturn(1L);
+            when(sessionPhotoRepository.existsBySessionIdAndSha256(eq(100L), anyString())).thenReturn(false);
+            when(sessionPhotoRepository.save(any(SessionPhoto.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(studentProfileRepository.findByDivisionId(3L)).thenReturn(List.of(studentProfile));
+
+            AttendanceRecord overriddenRecord = new AttendanceRecord(openSession, studentProfile, null, null, AttendanceStatus.ABSENT);
+            overriddenRecord.setStatusReason("Faculty manual override: Student excused");
+            when(recordRepository.findBySessionIdAndStudentId(100L, 10L)).thenReturn(Optional.of(overriddenRecord));
+            when(recordRepository.save(any(AttendanceRecord.class))).thenAnswer(inv -> inv.getArgument(0));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(overriddenRecord));
+
+            String aiResponseJson = "{" +
+                    "\"faceCount\": 1," +
+                    "\"matchedCount\": 1," +
+                    "\"faces\": [{" +
+                    "  \"faceId\": 1," +
+                    "  \"quality\": 0.95," +
+                    "  \"matchedStudentId\": 10," +
+                    "  \"similarity\": 0.80," +
+                    "  \"secondSimilarity\": 0.15," +
+                    "  \"spoofScore\": null" +
+                    "}]}";
+
+            when(restTemplate.postForEntity(contains("/ai/recognize"), any(HttpEntity.class), eq(String.class)))
+                    .thenReturn(new ResponseEntity<>(aiResponseJson, HttpStatus.OK));
+
+            attendanceService.processClassroomPhoto(100L, photo, 18.52043, 73.85674, 10.0);
+
+            assertEquals(AttendanceStatus.ABSENT, overriddenRecord.getFinalStatus());
+            assertTrue(overriddenRecord.getStatusReason().startsWith("Faculty manual override"));
         }
 
         @Test
@@ -731,6 +1189,50 @@ class AttendanceServiceTest {
             assertEquals(SessionStatus.FINALISED, openSession.getStatus());
             assertEquals(AttendanceStatus.ABSENT, pendingRecord.getFinalStatus());
             verify(recordRepository).save(pendingRecord);
+        }
+
+        @Test
+        @DisplayName("Finalising session preserves confirmed PRESENT and faculty REVIEW records, converting only unresolved PENDING to ABSENT")
+        void testFinaliseSessionPreservesPresentAndReviewWhileMarkingPendingAbsent() {
+            // Student 1: Confirmed PRESENT
+            AttendanceRecord presentRecord = new AttendanceRecord(openSession, studentProfile, 0.75, null, AttendanceStatus.PRESENT);
+            presentRecord.setConfirmed(true);
+
+            // Student 2: REVIEW (borderline match awaiting faculty decision)
+            User user2 = new User("Priya Sharma", "priya@intellicampus.edu", "pass123", Role.STUDENT, "STU-102");
+            ReflectionTestUtils.setField(user2, "id", 22L);
+            StudentProfile profile2 = new StudentProfile(user2, "2024-CS-043");
+            ReflectionTestUtils.setField(profile2, "id", 20L);
+            AttendanceRecord reviewRecord = new AttendanceRecord(openSession, profile2, 0.35, null, AttendanceStatus.REVIEW);
+            reviewRecord.setConfirmed(false);
+
+            // Student 3: PENDING (no qualifying face match / low confidence detection < 0.20)
+            User user3 = new User("Rohan Verma", "rohan@intellicampus.edu", "pass123", Role.STUDENT, "STU-103");
+            ReflectionTestUtils.setField(user3, "id", 33L);
+            StudentProfile profile3 = new StudentProfile(user3, "2024-CS-044");
+            ReflectionTestUtils.setField(profile3, "id", 30L);
+            AttendanceRecord pendingRecord = new AttendanceRecord(openSession, profile3, null, null, AttendanceStatus.PENDING);
+
+            when(sessionRepository.findById(100L)).thenReturn(Optional.of(openSession));
+            when(recordRepository.findBySession(openSession)).thenReturn(List.of(presentRecord, reviewRecord, pendingRecord));
+            when(sessionRepository.save(openSession)).thenReturn(openSession);
+
+            SessionResponseDto result = attendanceService.transitionSessionStatus(100L, SessionStatus.FINALISED);
+
+            assertNotNull(result);
+            assertEquals(SessionStatus.FINALISED, openSession.getStatus());
+            // Confirmed PRESENT is preserved
+            assertEquals(AttendanceStatus.PRESENT, presentRecord.getFinalStatus());
+            assertTrue(presentRecord.getConfirmed());
+            // REVIEW is preserved so faculty can still inspect/verify
+            assertEquals(AttendanceStatus.REVIEW, reviewRecord.getFinalStatus());
+            // Unresolved PENDING transitions to ABSENT
+            assertEquals(AttendanceStatus.ABSENT, pendingRecord.getFinalStatus());
+            assertTrue(pendingRecord.getStatusReason().contains("Student did not verify attendance before session finalisation"));
+
+            verify(recordRepository, times(1)).save(pendingRecord);
+            verify(recordRepository, never()).save(presentRecord);
+            verify(recordRepository, never()).save(reviewRecord);
         }
 
         @Test

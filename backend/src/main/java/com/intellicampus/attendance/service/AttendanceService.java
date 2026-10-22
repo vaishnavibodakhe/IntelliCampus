@@ -71,11 +71,14 @@ public class AttendanceService {
     private RestTemplate restTemplate;
     private ObjectMapper objectMapper;
 
-    @Value("${app.attendance.face-match-threshold:0.45}")
-    private double faceMatchThreshold = 0.45;
+    @Value("${app.attendance.face-match-threshold:0.50}")
+    private double faceMatchThreshold = 0.50;
 
-    @Value("${app.attendance.face-match-margin:0.05}")
-    private double faceMatchMargin = 0.05;
+    @Value("${app.attendance.face-review-threshold:0.20}")
+    private double faceReviewThreshold = 0.20;
+
+    @Value("${app.attendance.face-match-margin:0.0}")
+    private double faceMatchMargin = 0.0;
 
     @Value("${app.ai.service-url:http://localhost:8000}")
     private String aiServiceUrl = "http://localhost:8000";
@@ -116,8 +119,24 @@ public class AttendanceService {
         this.faceMatchThreshold = faceMatchThreshold;
     }
 
+    public void setFaceReviewThreshold(double faceReviewThreshold) {
+        this.faceReviewThreshold = faceReviewThreshold;
+    }
+
     public void setFaceMatchMargin(double faceMatchMargin) {
         this.faceMatchMargin = faceMatchMargin;
+    }
+
+    public double getFaceMatchThreshold() {
+        return faceMatchThreshold;
+    }
+
+    public double getFaceReviewThreshold() {
+        return faceReviewThreshold;
+    }
+
+    public double getFaceMatchMargin() {
+        return faceMatchMargin;
     }
 
     public void setAiServiceUrl(String aiServiceUrl) {
@@ -343,86 +362,76 @@ public class AttendanceService {
         int unmatchedCount = 0;
 
         for (AiFaceResult face : aiResp.faces) {
-            if (face.matchedStudentId != null && face.similarity != null) {
-                Long studentId = face.matchedStudentId;
-                double sim = face.similarity;
-                double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
-                double margin = sim - secondSim;
-
-                AttendanceRecord record = recordRepository.findBySessionIdAndStudentId(sessionId, studentId)
-                        .orElseGet(() -> {
-                            StudentProfile sp = studentProfileRepository.findById(studentId).orElse(null);
-                            return sp != null ? new AttendanceRecord(session, sp, null, null, AttendanceStatus.PENDING) : null;
-                        });
-
-                if (record == null) {
-                    unmatchedCount++;
-                    continue;
-                }
-
-                // Rule: Never downgrade a record already PRESENT or manually overridden
-                if (record.getFinalStatus() == AttendanceStatus.PRESENT) {
-                    if (record.getFaceScore() == null || sim > record.getFaceScore()) {
-                        record.setFaceScore(sim);
-                    }
-                    record.setSpoofScore(face.spoofScore);
-                    recordRepository.save(record);
-                } else if (record.getStatusReason() != null && record.getStatusReason().startsWith("Faculty manual override")) {
-                    if (record.getFaceScore() == null || sim > record.getFaceScore()) {
-                        record.setFaceScore(sim);
-                    }
-                    record.setSpoofScore(face.spoofScore);
-                    recordRepository.save(record);
-                } else {
-                    // Safe Anti-Spoofing & Face Match Policy:
-                    // 1. If spoofScore is provided and fails threshold (< 0.60), route to REVIEW with anti-spoof alert.
-                    if (face.spoofScore != null && face.spoofScore < spoofScoreValidator.getSpoofThreshold()) {
-                        record.setFinalStatus(AttendanceStatus.REVIEW);
-                        record.setFaceScore(sim);
-                        record.setSpoofScore(face.spoofScore);
-                        record.setStatusReason(String.format("Anti-spoofing alert: Confidence score (%.2f) below threshold (%.2f). Flagged for faculty verification.",
-                                face.spoofScore, spoofScoreValidator.getSpoofThreshold()));
-                        recordRepository.save(record);
-                        newlyInReview++;
-                    } else if (sim >= faceMatchThreshold && margin >= faceMatchMargin) {
-                        // High-confidence match branch
-                        if (face.spoofScore != null && face.spoofScore >= spoofScoreValidator.getSpoofThreshold()) {
-                            // Both face match and genuine liveness verified
-                            record.setFinalStatus(AttendanceStatus.PRESENT);
-                            record.setConfirmed(true);
-                            record.setConfirmedAt(LocalDateTime.now());
-                            record.setFaceScore(sim);
-                            record.setSpoofScore(face.spoofScore);
-                            record.setStatusReason(String.format("Biometric face recognition and liveness verified (Cosine: %.2f >= %.2f, Margin: %.2f, Liveness: %.2f >= %.2f)",
-                                    sim, faceMatchThreshold, margin, face.spoofScore, spoofScoreValidator.getSpoofThreshold()));
-                            recordRepository.save(record);
-                            newlyMatched++;
-                        } else {
-                            // Unverified liveness policy: High-confidence match, but spoofScore is null.
-                            // Do not treat unverified liveness as verified. Route to REVIEW for faculty confirmation.
-                            record.setFinalStatus(AttendanceStatus.REVIEW);
-                            record.setFaceScore(sim);
-                            record.setSpoofScore(null);
-                            record.setStatusReason(String.format("Unverified liveness: Biometric match detected (Cosine: %.2f >= %.2f, Margin: %.2f), but anti-spoof telemetry unavailable. Routed to REVIEW for faculty verification.",
-                                    sim, faceMatchThreshold, margin));
-                            recordRepository.save(record);
-                            newlyInReview++;
-                        }
-                    } else if (sim >= (faceMatchThreshold - 0.10)) {
-                        // Borderline match
-                        record.setFinalStatus(AttendanceStatus.REVIEW);
-                        record.setFaceScore(sim);
-                        record.setSpoofScore(face.spoofScore);
-                        record.setStatusReason(String.format("Borderline biometric match (Cosine: %.2f in [%.2f, %.2f]). Requires faculty verification.",
-                                sim, faceMatchThreshold - 0.10, faceMatchThreshold));
-                        recordRepository.save(record);
-                        newlyInReview++;
-                    } else {
-                        unmatchedCount++;
-                    }
-                }
-            } else {
+            // Guard: missing similarity or similarity below REVIEW threshold (0.20)
+            // Low-confidence faces (< 0.20) must NOT falsely attribute identity or alter student attendance
+            if (face.matchedStudentId == null || face.similarity == null || face.similarity < faceReviewThreshold) {
                 unmatchedCount++;
+                continue;
+            }
+
+            Long studentId = face.matchedStudentId;
+            double sim = face.similarity;
+            double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
+            // Safeguard against ambiguous tie: identical top similarity across multiple candidates
+            boolean isAmbiguousTie = (secondSim > 0 && Math.abs(sim - secondSim) < 1e-6);
+
+            AttendanceRecord record = recordRepository.findBySessionIdAndStudentId(sessionId, studentId)
+                    .orElseGet(() -> {
+                        StudentProfile sp = studentProfileRepository.findById(studentId).orElse(null);
+                        if (sp != null && sp.getDivision() != null && sp.getDivision().getId().equals(session.getDivision().getId())) {
+                            return new AttendanceRecord(session, sp, null, null, AttendanceStatus.PENDING);
+                        }
+                        return null;
+                    });
+
+            if (record == null) {
+                unmatchedCount++;
+                continue;
+            }
+
+            // Rule: Never downgrade a record already PRESENT or manually overridden
+            if (record.getFinalStatus() == AttendanceStatus.PRESENT) {
+                if (record.getFaceScore() == null || sim > record.getFaceScore()) {
+                    record.setFaceScore(sim);
+                }
+                record.setSpoofScore(face.spoofScore);
+                recordRepository.save(record);
+            } else if (record.getStatusReason() != null && record.getStatusReason().startsWith("Faculty manual override")) {
+                if (record.getFaceScore() == null || sim > record.getFaceScore()) {
+                    record.setFaceScore(sim);
+                }
+                record.setSpoofScore(face.spoofScore);
+                recordRepository.save(record);
+            } else {
+                // Similarity Decision Rules:
+                // >= 0.50: automatically mark eligible enrolled student as PRESENT
+                // Anti-spoofing dependency removed; null spoofScore does not prevent automatic PRESENT.
+                if (sim >= faceMatchThreshold && !isAmbiguousTie) {
+                    record.setFinalStatus(AttendanceStatus.PRESENT);
+                    record.setConfirmed(true);
+                    record.setConfirmedAt(LocalDateTime.now());
+                    record.setFaceScore(sim);
+                    record.setSpoofScore(face.spoofScore);
+                    record.setStatusReason(String.format("Biometric face recognition verified (Cosine: %.2f >= %.2f)",
+                            sim, faceMatchThreshold));
+                    recordRepository.save(record);
+                    newlyMatched++;
+                } else {
+                    // >= 0.20 && < 0.50 (or ambiguous tie): mark result REVIEW and require faculty verification
+                    record.setFinalStatus(AttendanceStatus.REVIEW);
+                    record.setConfirmed(false);
+                    record.setFaceScore(sim);
+                    record.setSpoofScore(face.spoofScore);
+                    if (isAmbiguousTie) {
+                        record.setStatusReason(String.format("Ambiguous biometric match: identical similarity with multiple candidates (Cosine: %.2f). Requires faculty verification.",
+                                sim));
+                    } else {
+                        record.setStatusReason(String.format("Borderline biometric match (Cosine: %.2f in [%.2f, %.2f)). Requires faculty verification.",
+                                sim, faceReviewThreshold, faceMatchThreshold));
+                    }
+                    recordRepository.save(record);
+                    newlyInReview++;
+                }
             }
         }
 
@@ -434,8 +443,12 @@ public class AttendanceService {
         for (AiFaceResult face : aiResp.faces) {
             String outcomeStatus = "UNMATCHED";
             String studentName = null;
+            Long matchedStudentId = null;
             StudentProfile sp = null;
-            if (face.matchedStudentId != null) {
+            Double similarity = face.similarity;
+
+            // Only assign student identity if similarity >= faceReviewThreshold (0.20)
+            if (face.matchedStudentId != null && similarity != null && similarity >= faceReviewThreshold) {
                 if (divisionStudents != null) {
                     for (StudentProfile s : divisionStudents) {
                         if (face.matchedStudentId.equals(s.getId())) {
@@ -446,6 +459,9 @@ public class AttendanceService {
                 }
                 if (sp == null) {
                     sp = studentProfileRepository.findById(face.matchedStudentId).orElse(null);
+                    if (sp != null && sp.getDivision() != null && !sp.getDivision().getId().equals(session.getDivision().getId())) {
+                        sp = null;
+                    }
                 }
                 if (sp == null) {
                     AttendanceRecord r = recordRepository.findBySessionIdAndStudentId(sessionId, face.matchedStudentId).orElse(null);
@@ -454,25 +470,18 @@ public class AttendanceService {
                     }
                 }
                 if (sp != null) {
+                    matchedStudentId = face.matchedStudentId;
                     if (sp.getUser() != null) {
                         studentName = sp.getUser().getName();
                     }
-                    if (face.similarity != null) {
-                        double sim = face.similarity;
-                        double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
-                        double margin = sim - secondSim;
+                    double sim = similarity;
+                    double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
+                    boolean isAmbiguousTie = (secondSim > 0 && Math.abs(sim - secondSim) < 1e-6);
 
-                        if (face.spoofScore != null && face.spoofScore < spoofScoreValidator.getSpoofThreshold()) {
-                            outcomeStatus = "REVIEW";
-                        } else if (sim >= faceMatchThreshold && margin >= faceMatchMargin) {
-                            if (face.spoofScore != null && face.spoofScore >= spoofScoreValidator.getSpoofThreshold()) {
-                                outcomeStatus = "PRESENT";
-                            } else {
-                                outcomeStatus = "REVIEW";
-                            }
-                        } else if (sim >= (faceMatchThreshold - 0.10)) {
-                            outcomeStatus = "REVIEW";
-                        }
+                    if (sim >= faceMatchThreshold && !isAmbiguousTie) {
+                        outcomeStatus = "PRESENT";
+                    } else {
+                        outcomeStatus = "REVIEW";
                     }
                 }
             }
@@ -489,9 +498,9 @@ public class AttendanceService {
                     face.faceId,
                     face.bbox,
                     face.quality,
-                    face.matchedStudentId,
+                    matchedStudentId,
                     studentName,
-                    face.similarity,
+                    similarity,
                     face.spoofScore,
                     outcomeStatus
             ));
