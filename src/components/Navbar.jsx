@@ -12,6 +12,7 @@ import {
   Sparkles,
   BookOpen
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
 export default function Navbar({ 
   currentRole, 
@@ -21,7 +22,15 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-  notificationCount = 2
+  notificationCount = 0,
+  notices = [],
+  unreadCount,
+  isLoadingNotices = false,
+  noticeError = null,
+  onMarkNoticeRead,
+  onRefreshNotices,
+  onViewAllNotices,
+  currentUser = null
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
@@ -49,10 +58,7 @@ export default function Navbar({
           </svg>
         </div>
         <div className="brand-text">
-          <div className="brand-title">
-            IntelliCampus
-            <span className="brand-pill">v1.0</span>
-          </div>
+          <div className="brand-title">IntelliCampus</div>
           <div className="brand-subtitle">Intelligent College Platform</div>
         </div>
       </div>
@@ -91,30 +97,18 @@ export default function Navbar({
           </div>
         )}
 
-        {/* Notice Broadcast Alerts Indicator */}
-        <div className="action-icon-btn notice-bell-btn" title={`${notificationCount} Active Campus Notices`} style={{ position: 'relative' }}>
-          <Bell size={17} />
-          {notificationCount > 0 && (
-            <span className="badge-notification-count" style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              background: '#ef4444',
-              color: '#ffffff',
-              borderRadius: '9999px',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              minWidth: '16px',
-              height: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 3px'
-            }}>
-              {notificationCount}
-            </span>
-          )}
-        </div>
+        {/* Notice Broadcast Alerts Indicator & Dropdown */}
+        <NotificationBell 
+          notices={notices}
+          unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
+          isLoading={isLoadingNotices}
+          error={noticeError}
+          onMarkNoticeRead={onMarkNoticeRead}
+          onRefresh={onRefreshNotices}
+          onViewAll={onViewAllNotices}
+          currentRole={currentRole}
+          currentUser={currentUser}
+        />
 
         {/* Cryptographic Audit Hash Chain Inspector */}
         <button 

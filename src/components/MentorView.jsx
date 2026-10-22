@@ -10,8 +10,10 @@ import {
   Send, 
   FileText,
   ShieldAlert,
-  ArrowRight
+  ArrowRight,
+  Bell
 } from 'lucide-react';
+import NoticeComposer from './NoticeComposer';
 
 export default function MentorView({
   riskStudents,
@@ -19,7 +21,9 @@ export default function MentorView({
   leaveRequests,
   setLeaveRequests,
   users,
-  onAddAuditLog
+  onAddAuditLog,
+  notices = [],
+  setNotices
 }) {
   const [activeTab, setActiveTab] = useState('risk');
   const [riskFilter, setRiskFilter] = useState('ALL');
@@ -38,6 +42,12 @@ export default function MentorView({
     if (riskFilter === 'ALL') return true;
     return r.level === riskFilter;
   });
+
+  const handleNoticePublished = (newNotice) => {
+    if (setNotices) {
+      setNotices([newNotice, ...(notices || [])]);
+    }
+  };
 
   // Handle Log Action on Risk Alert
   const handleSaveRiskAction = (e) => {
@@ -146,6 +156,12 @@ export default function MentorView({
           className={`tab-btn ${activeTab === 'mentees' ? 'active' : ''}`}
         >
           <Users size={16} /> Assigned Mentees ({mentees.length})
+        </button>
+        <button 
+          onClick={() => setActiveTab('notices')} 
+          className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
+        >
+          <Bell size={16} /> Send Notice
         </button>
       </div>
 
@@ -346,6 +362,23 @@ export default function MentorView({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: SEND NOTICE */}
+      {activeTab === 'notices' && (
+        <div className="tab-pane animate-fade-in">
+          <NoticeComposer 
+            publisherRole="MENTOR"
+            publisherName="Dr. Sunita Mehta"
+            publisherId={4}
+            defaultDepartment="Computer Science"
+            onNoticePublished={handleNoticePublished}
+            onAddAuditLog={onAddAuditLog}
+            initialStudents={users?.filter(u => u.role === 'STUDENT')}
+            cardTitle="Send Notice / Mentee Advisory"
+            cardDescription="Broadcast announcements to your mentees, department classes, or specific students."
+          />
         </div>
       )}
 
