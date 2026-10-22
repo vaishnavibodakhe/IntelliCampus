@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.intellicampus.audit.service.AuditChainService;
 import com.intellicampus.user.dto.CaptureTokenResponseDto;
 import com.intellicampus.user.dto.FaceEnrollmentRequestDto;
+import com.intellicampus.user.model.Role;
 import com.intellicampus.user.model.StudentProfile;
 import com.intellicampus.user.model.User;
 import com.intellicampus.user.model.UserStatus;
@@ -512,6 +513,18 @@ public class FaceEnrollmentService {
     }
 
     public StudentProfile findStudent(Long studentId) {
+        if (studentId == null) {
+            throw new IllegalArgumentException("Student ID is required.");
+        }
+        if (userRepository != null) {
+            Optional<User> userOpt = userRepository.findById(studentId);
+            if (userOpt.isPresent() && userOpt.get().getRole() == Role.STUDENT) {
+                Optional<StudentProfile> byUser = studentProfileRepository.findByUserId(studentId);
+                if (byUser.isPresent()) {
+                    return byUser.get();
+                }
+            }
+        }
         return studentProfileRepository.findById(studentId)
                 .or(() -> studentProfileRepository.findByUserId(studentId))
                 .orElseThrow(() -> new IllegalArgumentException("Student profile not found for ID: " + studentId));

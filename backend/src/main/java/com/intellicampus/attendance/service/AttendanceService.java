@@ -340,10 +340,14 @@ public class AttendanceService {
             if (Boolean.TRUE.equals(s.getFaceEnrolled()) && s.getFaceEmbedding() != null && !s.getFaceEmbedding().isBlank()) {
                 try {
                     List<Double> emb = objectMapper.readValue(s.getFaceEmbedding(), new TypeReference<List<Double>>() {});
-                    Map<String, Object> c = new HashMap<>();
-                    c.put("studentId", s.getId());
-                    c.put("embedding", emb);
-                    candidates.add(c);
+                    if (emb != null && emb.size() == 512) {
+                        Map<String, Object> c = new HashMap<>();
+                        c.put("studentId", s.getId());
+                        c.put("embedding", emb);
+                        candidates.add(c);
+                    } else {
+                        log.warn("Skipping candidate student {} with invalid embedding dimension: {}", s.getId(), emb != null ? emb.size() : 0);
+                    }
                 } catch (Exception ex) {
                     log.warn("Could not deserialize embedding for student {}", s.getId(), ex);
                 }
@@ -356,57 +360,147 @@ public class AttendanceService {
         sessionPhoto.setFaceCount(aiResp.faceCount);
         sessionPhotoRepository.save(sessionPhoto);
 
-        // Process matches against thresholds
-        int newlyMatched = 0;
-        int newlyInReview = 0;
-        int unmatchedCount = 0;
+        // Process matches against strict matching rules
+        int photoMatched = 0;
+        int photoInReview = 0;
+        int photoUnmatched = 0;
+        List<DetectedFaceDto> detectedFaces = new ArrayList<>();
+        Set<Long> assignedStudentsInPhoto = new HashSet<>();
+        double effectiveMargin = faceMatchMargin > 0 ? faceMatchMargin : 0.02;
 
         for (AiFaceResult face : aiResp.faces) {
-            // Guard: missing similarity or similarity below REVIEW threshold (0.20)
-            // Low-confidence faces (< 0.20) must NOT falsely attribute identity or alter student attendance
+            // Guard 1: Missing candidate or similarity below REVIEW threshold (0.20)
+            // Rule: Similarity < 20%: UNMATCHED; never assign an arbitrary student
             if (face.matchedStudentId == null || face.similarity == null || face.similarity < faceReviewThreshold) {
-                unmatchedCount++;
+                photoUnmatched++;
+                detectedFaces.add(new DetectedFaceDto(
+                        face.faceId,
+                        face.bbox,
+                        face.quality,
+                        null,
+                        null,
+                        null,
+                        face.spoofScore,
+                        "UNMATCHED"
+                ));
                 continue;
             }
 
             Long studentId = face.matchedStudentId;
             double sim = face.similarity;
             double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
-            // Safeguard against ambiguous tie: identical top similarity across multiple candidates
-            boolean isAmbiguousTie = (secondSim > 0 && Math.abs(sim - secondSim) < 1e-6);
 
-            AttendanceRecord record = recordRepository.findBySessionIdAndStudentId(sessionId, studentId)
-                    .orElseGet(() -> {
-                        StudentProfile sp = studentProfileRepository.findById(studentId).orElse(null);
-                        if (sp != null && sp.getDivision() != null && sp.getDivision().getId().equals(session.getDivision().getId())) {
-                            return new AttendanceRecord(session, sp, null, null, AttendanceStatus.PENDING);
-                        }
-                        return null;
-                    });
-
-            if (record == null) {
-                unmatchedCount++;
+            // Guard 2: Strict 1-to-1 matching per photo
+            // One detected face cannot be assigned to multiple students, and one student cannot be assigned to multiple faces
+            if (assignedStudentsInPhoto.contains(studentId)) {
+                log.warn("Duplicate assignment in photo for student {}: face {} rejected as UNMATCHED", studentId, face.faceId);
+                photoUnmatched++;
+                detectedFaces.add(new DetectedFaceDto(
+                        face.faceId,
+                        face.bbox,
+                        face.quality,
+                        null,
+                        null,
+                        null,
+                        face.spoofScore,
+                        "UNMATCHED"
+                ));
                 continue;
             }
 
-            // Rule: Never downgrade a record already PRESENT or manually overridden
-            if (record.getFinalStatus() == AttendanceStatus.PRESENT) {
-                if (record.getFaceScore() == null || sim > record.getFaceScore()) {
-                    record.setFaceScore(sim);
+            // Find enrolled student profile
+            StudentProfile sp = null;
+            if (divisionStudents != null) {
+                for (StudentProfile s : divisionStudents) {
+                    if (studentId.equals(s.getId())) {
+                        sp = s;
+                        break;
+                    }
                 }
-                record.setSpoofScore(face.spoofScore);
-                recordRepository.save(record);
-            } else if (record.getStatusReason() != null && record.getStatusReason().startsWith("Faculty manual override")) {
-                if (record.getFaceScore() == null || sim > record.getFaceScore()) {
-                    record.setFaceScore(sim);
+            }
+            if (sp == null) {
+                sp = studentProfileRepository.findById(studentId).orElse(null);
+                if (sp != null && sp.getDivision() != null && !sp.getDivision().getId().equals(session.getDivision().getId())) {
+                    sp = null;
                 }
-                record.setSpoofScore(face.spoofScore);
-                recordRepository.save(record);
+            }
+
+            if (sp == null) {
+                photoUnmatched++;
+                detectedFaces.add(new DetectedFaceDto(
+                        face.faceId,
+                        face.bbox,
+                        face.quality,
+                        null,
+                        null,
+                        null,
+                        face.spoofScore,
+                        "UNMATCHED"
+                ));
+                continue;
+            }
+
+            String studentName = sp.getUser() != null ? sp.getUser().getName() : "Student #" + sp.getId();
+
+            // Safeguards:
+            // 1. Ambiguous tie: top similarity and runner-up candidate similarity are within effectiveMargin
+            boolean isAmbiguousTie = (secondSim > 0 && Math.abs(sim - secondSim) < effectiveMargin);
+            // 2. Residual conflict: a competitor candidate had a higher similarity than the assigned candidate
+            boolean isResidualConflict = (secondSim > sim);
+            // 3. Face quality check
+            boolean isQualityOk = (face.quality >= 0.40);
+
+            AttendanceRecord record = recordRepository.findBySessionIdAndStudentId(sessionId, studentId).orElse(null);
+            if (record == null) {
+                record = new AttendanceRecord(session, sp, null, null, AttendanceStatus.PENDING);
+            }
+
+            boolean isAlreadyPresent = (record.getFinalStatus() == AttendanceStatus.PRESENT);
+            boolean isManualOverride = (record.getStatusReason() != null && record.getStatusReason().startsWith("Faculty manual override"));
+
+            if (isAlreadyPresent || isManualOverride) {
+                // If student is already confirmed PRESENT (e.g. from an earlier photo):
+                // A new face in a subsequent photo is ONLY validly this student if it satisfies high confidence (>= 0.50)
+                // Low-confidence / borderline faces (< 0.50) in subsequent photos must NOT be falsely attributed to
+                // a student who is already confirmed PRESENT.
+                if (sim >= faceMatchThreshold && !isAmbiguousTie && !isResidualConflict && isQualityOk) {
+                    assignedStudentsInPhoto.add(studentId);
+                    if (record.getFaceScore() == null || sim > record.getFaceScore()) {
+                        record.setFaceScore(sim);
+                    }
+                    record.setSpoofScore(face.spoofScore);
+                    recordRepository.save(record);
+                    photoMatched++;
+                    detectedFaces.add(new DetectedFaceDto(
+                            face.faceId,
+                            face.bbox,
+                            face.quality,
+                            studentId,
+                            studentName,
+                            sim,
+                            face.spoofScore,
+                            "PRESENT"
+                    ));
+                } else {
+                    // Face does not match the already PRESENT student with required confidence; treat as UNMATCHED
+                    // to prevent false identity attribution and prevent contradiction between bounding box and roster.
+                    photoUnmatched++;
+                    detectedFaces.add(new DetectedFaceDto(
+                            face.faceId,
+                            face.bbox,
+                            face.quality,
+                            null,
+                            null,
+                            null,
+                            face.spoofScore,
+                            "UNMATCHED"
+                    ));
+                }
             } else {
-                // Similarity Decision Rules:
-                // >= 0.50: automatically mark eligible enrolled student as PRESENT
-                // Anti-spoofing dependency removed; null spoofScore does not prevent automatic PRESENT.
-                if (sim >= faceMatchThreshold && !isAmbiguousTie) {
+                // Student not already PRESENT:
+                // Rule 1: Similarity >= 50%: eligible for PRESENT only if valid and passes all safeguards
+                if (sim >= faceMatchThreshold && !isAmbiguousTie && !isResidualConflict && isQualityOk) {
+                    assignedStudentsInPhoto.add(studentId);
                     record.setFinalStatus(AttendanceStatus.PRESENT);
                     record.setConfirmed(true);
                     record.setConfirmedAt(LocalDateTime.now());
@@ -415,95 +509,47 @@ public class AttendanceService {
                     record.setStatusReason(String.format("Biometric face recognition verified (Cosine: %.2f >= %.2f)",
                             sim, faceMatchThreshold));
                     recordRepository.save(record);
-                    newlyMatched++;
+                    photoMatched++;
+                    detectedFaces.add(new DetectedFaceDto(
+                            face.faceId,
+                            face.bbox,
+                            face.quality,
+                            studentId,
+                            studentName,
+                            sim,
+                            face.spoofScore,
+                            "PRESENT"
+                    ));
                 } else {
-                    // >= 0.20 && < 0.50 (or ambiguous tie): mark result REVIEW and require faculty verification
+                    // Rule 2: Similarity >= 20% and < 50% (or failed safeguards): REVIEW, never automatically PRESENT
+                    assignedStudentsInPhoto.add(studentId);
                     record.setFinalStatus(AttendanceStatus.REVIEW);
                     record.setConfirmed(false);
                     record.setFaceScore(sim);
                     record.setSpoofScore(face.spoofScore);
-                    if (isAmbiguousTie) {
-                        record.setStatusReason(String.format("Ambiguous biometric match: identical similarity with multiple candidates (Cosine: %.2f). Requires faculty verification.",
-                                sim));
+                    if (isAmbiguousTie || isResidualConflict) {
+                        record.setStatusReason(String.format("Ambiguous biometric match: close similarity with multiple candidates (Cosine: %.2f, runner-up: %.2f). Requires faculty verification.",
+                                sim, secondSim));
+                    } else if (!isQualityOk) {
+                        record.setStatusReason(String.format("Low face detection quality (%.2f < 0.40). Requires faculty verification.", face.quality));
                     } else {
                         record.setStatusReason(String.format("Borderline biometric match (Cosine: %.2f in [%.2f, %.2f)). Requires faculty verification.",
                                 sim, faceReviewThreshold, faceMatchThreshold));
                     }
                     recordRepository.save(record);
-                    newlyInReview++;
+                    photoInReview++;
+                    detectedFaces.add(new DetectedFaceDto(
+                            face.faceId,
+                            face.bbox,
+                            face.quality,
+                            studentId,
+                            studentName,
+                            sim,
+                            face.spoofScore,
+                            "REVIEW"
+                    ));
                 }
             }
-        }
-
-        List<DetectedFaceDto> detectedFaces = new ArrayList<>();
-        int photoMatched = 0;
-        int photoInReview = 0;
-        int photoUnmatched = 0;
-
-        for (AiFaceResult face : aiResp.faces) {
-            String outcomeStatus = "UNMATCHED";
-            String studentName = null;
-            Long matchedStudentId = null;
-            StudentProfile sp = null;
-            Double similarity = face.similarity;
-
-            // Only assign student identity if similarity >= faceReviewThreshold (0.20)
-            if (face.matchedStudentId != null && similarity != null && similarity >= faceReviewThreshold) {
-                if (divisionStudents != null) {
-                    for (StudentProfile s : divisionStudents) {
-                        if (face.matchedStudentId.equals(s.getId())) {
-                            sp = s;
-                            break;
-                        }
-                    }
-                }
-                if (sp == null) {
-                    sp = studentProfileRepository.findById(face.matchedStudentId).orElse(null);
-                    if (sp != null && sp.getDivision() != null && !sp.getDivision().getId().equals(session.getDivision().getId())) {
-                        sp = null;
-                    }
-                }
-                if (sp == null) {
-                    AttendanceRecord r = recordRepository.findBySessionIdAndStudentId(sessionId, face.matchedStudentId).orElse(null);
-                    if (r != null) {
-                        sp = r.getStudent();
-                    }
-                }
-                if (sp != null) {
-                    matchedStudentId = face.matchedStudentId;
-                    if (sp.getUser() != null) {
-                        studentName = sp.getUser().getName();
-                    }
-                    double sim = similarity;
-                    double secondSim = face.secondSimilarity != null ? face.secondSimilarity : 0.0;
-                    boolean isAmbiguousTie = (secondSim > 0 && Math.abs(sim - secondSim) < 1e-6);
-
-                    if (sim >= faceMatchThreshold && !isAmbiguousTie) {
-                        outcomeStatus = "PRESENT";
-                    } else {
-                        outcomeStatus = "REVIEW";
-                    }
-                }
-            }
-
-            if ("PRESENT".equals(outcomeStatus)) {
-                photoMatched++;
-            } else if ("REVIEW".equals(outcomeStatus)) {
-                photoInReview++;
-            } else {
-                photoUnmatched++;
-            }
-
-            detectedFaces.add(new DetectedFaceDto(
-                    face.faceId,
-                    face.bbox,
-                    face.quality,
-                    matchedStudentId,
-                    studentName,
-                    similarity,
-                    face.spoofScore,
-                    outcomeStatus
-            ));
         }
 
         SessionResponseDto updatedSession = getSessionDetails(sessionId);
