@@ -131,6 +131,52 @@ public class EmailService {
     }
 
     /**
+     * Dispatches a 24-hour setup OTP to a new staff member created by an administrator.
+     * Contains only the 6-digit OTP and instructions (no passwords, no direct links with OTP).
+     * Never logs the OTP.
+     */
+    public void sendStaffAccountSetupOtp(String toEmail, String otp, com.intellicampus.user.model.Role role) {
+        if (!isMailConfigured()) {
+            logger.error("SMTP service is not configured. Cannot send staff setup OTP to {}", toEmail);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "SMTP service is not configured. Please set MAIL_USERNAME and MAIL_PASSWORD in your .env file.");
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(toEmail);
+            message.setSubject("IntelliCampus - Complete your Staff Account Setup");
+            message.setText("Welcome to IntelliCampus!\n\n"
+                    + "An institutional staff account has been created for you with the role: " + role.name() + ".\n\n"
+                    + "Your 6-digit account setup OTP is: " + otp + "\n"
+                    + "This OTP is valid for 24 hours. Do not share it with anyone.\n\n"
+                    + "Instructions to set your password:\n"
+                    + "1. Open the IntelliCampus Staff portal (/staff/login).\n"
+                    + "2. Select your role (" + role.name() + ").\n"
+                    + "3. Choose the 'Forgot Password / Set Password' tab.\n"
+                    + "4. Enter your registered email (" + toEmail + ") and this 6-digit OTP to set your password.\n\n"
+                    + "Regards,\nIntelliCampus Administration");
+            mailSender.send(message);
+            logger.info("Staff account setup OTP email successfully dispatched to {}", toEmail);
+        } catch (MailAuthenticationException e) {
+            logger.error("SMTP Authentication failed when sending setup OTP to {}: {}", toEmail, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.BAD_GATEWAY,
+                    "Email service authentication failed. Check the Gmail App Password.", e);
+        } catch (MailSendException e) {
+            logger.error("SMTP MailSendException when sending setup OTP to {}: {}", toEmail, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to deliver setup OTP email via SMTP: " + e.getMessage(), e);
+        } catch (ResponseStatusException rse) {
+            throw rse;
+        } catch (Exception e) {
+            logger.error("Failed to send SMTP email to {}: {}", toEmail, e.getMessage(), e);
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                    "Failed to deliver setup OTP email via SMTP: " + e.getMessage(), e);
+        }
+    }
+
+    /**
      * Legacy token-based reset email dispatch.
      */
     public void sendPasswordResetEmail(String toEmail, String rawToken) {

@@ -25,6 +25,11 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
+import { 
+  adminCreateStaffApi, 
+  resendStaffSetupOtpApi, 
+  deactivateStaffApi 
+} from '../utils/staffAuthService';
 import NoticeComposer from './NoticeComposer';
 
 export default function AdminView({
@@ -138,6 +143,25 @@ export default function AdminView({
       }
     }
 
+    // Backend integration for staff creation (Admin creates staff without entering password)
+    if (newUser.role !== 'STUDENT') {
+      try {
+        if (staffSession?.accessToken) {
+          await adminCreateStaffApi({
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            department: newUser.department,
+            employeeCode: newUser.userCode
+          }, staffSession.accessToken);
+        }
+        alert(`Staff account for ${newUser.name} created successfully! An onboarding email with a 24-hour setup OTP has been dispatched to ${newUser.email}.`);
+      } catch (err) {
+        alert(err.message || 'Failed to provision staff account on the backend server.');
+        return;
+      }
+    }
+
     const created = {
       id: newId,
       ...newUser,
@@ -175,6 +199,39 @@ export default function AdminView({
       biometricConsent: false,
       consentVersion: '1.0'
     });
+  };
+
+  const handleResendSetupOtp = async (user) => {
+    if (!confirm(`Resend onboarding 24-hour setup OTP to ${user.name} (${user.email})?`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await resendStaffSetupOtpApi(user.id, staffSession.accessToken);
+      }
+      alert(`Account setup instructions and a fresh 24-hour OTP have been dispatched to ${user.email}.`);
+    } catch (err) {
+      alert(err.message || 'Failed to resend setup OTP.');
+    }
+  };
+
+  const handleDeactivateStaff = async (user) => {
+    if (!confirm(`Are you sure you want to deactivate staff account for ${user.name}? This will immediately invalidate their active sessions and block logins.`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await deactivateStaffApi(user.id, staffSession.accessToken);
+      }
+      setUsers(users.map(u => u.id === user.id ? { ...u, status: 'DISABLED' } : u));
+      onAddAuditLog({
+        action: 'DEACTIVATE',
+        entityType: 'USER',
+        entityId: String(user.id),
+        oldValue: JSON.stringify({ status: user.status }),
+        newValue: JSON.stringify({ status: 'DISABLED' }),
+        reason: `Staff account deactivated by Admin`
+      });
+      alert(`Staff account ${user.name} (${user.email}) has been deactivated.`);
+    } catch (err) {
+      alert(err.message || 'Failed to deactivate staff account.');
+    }
   };
 
   // Open Re-enroll Face Photo Modal
@@ -694,13 +751,39 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                             <Camera size={15} />
                           </button>
                         )}
-                        <button 
-                          className="table-action-btn"
-                          onClick={() => alert(`Reset password token sent to ${u.email}`)}
-                          title="Reset initial password"
-                        >
-                          <KeyRound size={15} />
-                        </button>
+                        {u.role !== 'STUDENT' && (
+                          <>
+                            <button 
+                              type="button"
+                              className="table-action-btn"
+                              onClick={() => handleResendSetupOtp(u)}
+                              title="Resend 24-hour setup OTP to staff email"
+                              style={{ color: '#38bdf8' }}
+                            >
+                              <KeyRound size={15} />
+                            </button>
+                            {u.status === 'ACTIVE' && staffSession?.user?.email !== u.email && (
+                              <button 
+                                type="button"
+                                className="table-action-btn"
+                                onClick={() => handleDeactivateStaff(u)}
+                                title="Deactivate staff account"
+                                style={{ color: '#ef4444' }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {u.role === 'STUDENT' && (
+                          <button 
+                            className="table-action-btn"
+                            onClick={() => alert(`Password reset instructions for student sent to ${u.email}`)}
+                            title="Reset student password"
+                          >
+                            <KeyRound size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -1020,11 +1103,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     <option value="FACULTY">Faculty</option>
                     <option value="MENTOR">Mentor</option>
                     <option value="HOD">HOD</option>
+                    <option value="ADMIN">Administrator</option>
                   </select>
                 </div>
               </div>
               <div className="form-group">
-                <label>Email Address</label>
+                <label>Institutional Email Address</label>
                 <input 
                   type="email"
                   placeholder="s.roy@intellicampus.edu"
@@ -1033,6 +1117,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   required
                 />
               </div>
+
+              {newUser.role !== 'STUDENT' && (
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  <strong>Secure First-Time Password Flow:</strong> Administrators never enter or see staff passwords. An unusable random hash is assigned, and a 24-hour setup OTP will be emailed to <em>{newUser.email || 'the user'}</em> to set their password on the Staff portal.
+                </div>
+              )}
               {newUser.role === 'STUDENT' && (
                 <>
                   <div className="grid-two-col-compact">

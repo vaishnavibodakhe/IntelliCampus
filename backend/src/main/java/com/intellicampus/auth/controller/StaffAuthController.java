@@ -25,25 +25,58 @@ public class StaffAuthController {
         this.staffAuthService = staffAuthService;
     }
 
+    @GetMapping("/bootstrap-status")
+    public ResponseEntity<Map<String, Boolean>> getBootstrapStatus() {
+        return ResponseEntity.ok(Map.of("canBootstrap", staffAuthService.canBootstrapAdmin()));
+    }
+
     @PostMapping("/register")
     public ResponseEntity<PendingStaffApprovalDto> register(@Valid @RequestBody StaffRegisterRequestDto req, HttpServletRequest request) {
         String uri = request != null ? request.getRequestURI() : "";
-        if (req.getRole() == null) {
-            if (uri.contains("/admin")) {
-                req.setRole(com.intellicampus.user.model.Role.ADMIN);
-            } else if (uri.contains("/hod")) {
-                req.setRole(com.intellicampus.user.model.Role.HOD);
-            } else {
-                req.setRole(com.intellicampus.user.model.Role.ADMIN);
-            }
+        if (req.getRole() == null && uri.contains("/admin")) {
+            req.setRole(com.intellicampus.user.model.Role.ADMIN);
+        }
+        if (req.getRole() != com.intellicampus.user.model.Role.ADMIN) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
         }
         PendingStaffApprovalDto response = staffAuthService.registerStaff(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
+    @PostMapping("/staff")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<PendingStaffApprovalDto> createStaffByAdmin(
+            @Valid @RequestBody AdminCreateStaffRequestDto req,
+            @AuthenticationPrincipal User adminUser) {
+        PendingStaffApprovalDto response = staffAuthService.createStaffByAdmin(req, adminUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/staff/{id}/resend-setup")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> resendStaffSetupOtp(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User adminUser,
+            HttpServletRequest request) {
+        String clientIp = resolveClientIp(request);
+        staffAuthService.resendStaffSetupOtp(id, adminUser, clientIp);
+        return ResponseEntity.ok(Map.of("message", "Staff account setup instructions and OTP resent successfully"));
+    }
+
+    @PostMapping("/staff/{id}/deactivate")
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<Map<String, String>> deactivateStaff(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User adminUser) {
+        staffAuthService.deactivateStaff(id, adminUser);
+        return ResponseEntity.ok(Map.of("message", "Staff account deactivated successfully"));
+    }
+
     @PostMapping("/login")
-    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto req) {
-        AuthResponseDto response = staffAuthService.loginStaff(req);
+    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto req, HttpServletRequest request) {
+        String uri = request != null ? request.getRequestURI() : "";
+        String endpointRole = uri.contains("/admin") ? "ADMIN" : "STAFF";
+        AuthResponseDto response = staffAuthService.loginStaff(req, endpointRole);
         return ResponseEntity.ok(response);
     }
 

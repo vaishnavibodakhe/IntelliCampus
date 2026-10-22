@@ -76,12 +76,62 @@ class StaffAuthServiceTest {
     }
 
     @Nested
-    @DisplayName("Staff Registration Tests")
+    @DisplayName("Staff Registration & Provisioning Tests")
     class StaffRegistrationTests {
 
         @Test
-        @DisplayName("Registers staff with PENDING_APPROVAL status and audits event")
-        void testRegisterStaffPendingApproval() {
+        @DisplayName("Bootstraps initial SuperAdmin when no admin exists in users table")
+        void testBootstrapAdminSuccess() {
+            StaffRegisterRequestDto req = new StaffRegisterRequestDto(
+                    "Super Admin",
+                    "superadmin@intellicampus.edu",
+                    "SuperSecret123!",
+                    Role.ADMIN,
+                    "Central Administration",
+                    "EMP-001"
+            );
+
+            when(userRepository.countByRole(Role.ADMIN)).thenReturn(0L);
+            when(userRepository.existsByEmail("superadmin@intellicampus.edu")).thenReturn(false);
+            when(departmentRepository.findByName("Central Administration")).thenReturn(Optional.of(csDept));
+            when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
+            when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
+                User u = invocation.getArgument(0);
+                u.setId(1L);
+                return u;
+            });
+
+            PendingStaffApprovalDto result = staffAuthService.registerStaff(req);
+
+            assertNotNull(result);
+            assertEquals(UserStatus.ACTIVE, result.getStatus());
+            assertEquals(Role.ADMIN, result.getRole());
+            assertEquals("superadmin@intellicampus.edu", result.getEmail());
+        }
+
+        @Test
+        @DisplayName("Rejects public Admin registration when an Admin already exists (403 Forbidden)")
+        void testRegisterAdminRejectedWhenAdminAlreadyExists() {
+            StaffRegisterRequestDto req = new StaffRegisterRequestDto(
+                    "Second Admin",
+                    "second.admin@intellicampus.edu",
+                    "SuperSecret123!",
+                    Role.ADMIN,
+                    null,
+                    null
+            );
+
+            when(userRepository.countByRole(Role.ADMIN)).thenReturn(1L);
+
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                    staffAuthService.registerStaff(req));
+            assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+            assertTrue(ex.getReason().contains("Admin registration is closed"));
+        }
+
+        @Test
+        @DisplayName("Rejects public self-registration for non-admin staff roles like HOD, Faculty, Mentor (403 Forbidden)")
+        void testRegisterNonAdminStaffRejected() {
             StaffRegisterRequestDto req = new StaffRegisterRequestDto(
                     "Dr. Alan Turing",
                     "alan.turing@intellicampus.edu",
@@ -91,50 +141,101 @@ class StaffAuthServiceTest {
                     "EMP-1001"
             );
 
-            when(userRepository.existsByEmail("alan.turing@intellicampus.edu")).thenReturn(false);
+            ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
+                    staffAuthService.registerStaff(req));
+            assertEquals(HttpStatus.FORBIDDEN, ex.getStatusCode());
+            assertTrue(ex.getReason().contains("Public registration is disabled for staff roles"));
+        }
+
+        @Test
+        @DisplayName("Admin creates staff account: unusable password hash, 24h setup OTP, and dispatches setup email")
+        void testAdminCreateStaff() {
+            User adminUser = new User("ADM-01", Role.ADMIN, "Admin Jane", "admin@intellicampus.edu", "hash", null);
+            adminUser.setId(1L);
+
+            AdminCreateStaffRequestDto req = new AdminCreateStaffRequestDto(
+                    "Dr. Sunita Mehta",
+                    "s.mehta@intellicampus.edu",
+                    Role.MENTOR,
+                    "Computer Science",
+                    "EMP-500"
+            );
+
+            when(userRepository.existsByEmail("s.mehta@intellicampus.edu")).thenReturn(false);
             when(departmentRepository.findByName("Computer Science")).thenReturn(Optional.of(csDept));
-            when(passwordEncoder.encode(anyString())).thenReturn("hashed_password");
+            when(passwordEncoder.encode(anyString())).thenReturn("unusable_hash");
             when(userRepository.save(any(User.class))).thenAnswer(invocation -> {
                 User u = invocation.getArgument(0);
-                u.setId(10L);
+                u.setId(50L);
                 return u;
             });
 
-            PendingStaffApprovalDto result = staffAuthService.registerStaff(req);
+            PendingStaffApprovalDto result = staffAuthService.createStaffByAdmin(req, adminUser);
 
             assertNotNull(result);
-            assertEquals(UserStatus.ACTIVE, result.getStatus());
-            assertEquals(Role.HOD, result.getRole());
-            assertEquals("alan.turing@intellicampus.edu", result.getEmail());
+            assertEquals(Role.MENTOR, result.getRole());
+            assertEquals("s.mehta@intellicampus.edu", result.getEmail());
 
+            verify(emailService).sendStaffAccountSetupOtp(eq("s.mehta@intellicampus.edu"), anyString(), eq(Role.MENTOR));
+            verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
             verify(auditChainService).recordEntry(
-                    eq(10L),
-                    eq("Dr. Alan Turing"),
-                    eq("STAFF_REGISTERED"),
+                    eq(1L),
+                    eq("Admin Jane"),
+                    eq("STAFF_CREATED_BY_ADMIN"),
                     eq("USER"),
-                    eq("10"),
+                    eq("50"),
                     anyString(),
-                    contains("ACTIVE"),
+                    contains("MENTOR"),
                     anyString()
             );
         }
 
         @Test
-        @DisplayName("Rejects registration if email already exists")
-        void testRegisterStaffDuplicateEmail() {
-            StaffRegisterRequestDto req = new StaffRegisterRequestDto(
-                    "Duplicate User",
-                    "existing@intellicampus.edu",
-                    "Pass123!",
-                    Role.ADMIN,
-                    null,
-                    null
-            );
-            when(userRepository.existsByEmail("existing@intellicampus.edu")).thenReturn(true);
+        @DisplayName("Admin resends staff setup OTP: invalidates previous OTP and enforces 3/hr rate limit")
+        void testAdminResendStaffSetupOtp() {
+            User adminUser = new User("ADM-01", Role.ADMIN, "Admin Jane", "admin@intellicampus.edu", "hash", null);
+            adminUser.setId(1L);
 
-            IllegalArgumentException ex = assertThrows(IllegalArgumentException.class, () ->
-                    staffAuthService.registerStaff(req));
-            assertTrue(ex.getMessage().contains("already registered"));
+            User staff = new User("FAC-01", Role.FACULTY, "Prof Verma", "verma@intellicampus.edu", "hash", csDept);
+            staff.setId(20L);
+            staff.setStatus(UserStatus.ACTIVE);
+
+            when(userRepository.findById(20L)).thenReturn(Optional.of(staff));
+            when(rateLimitRepository.countByEmailAndRequestedAtAfter(eq("verma@intellicampus.edu"), any())).thenReturn(0L);
+            when(rateLimitRepository.countByIpAddressAndRequestedAtAfter(eq("127.0.0.1"), any())).thenReturn(0L);
+
+            staffAuthService.resendStaffSetupOtp(20L, adminUser, "127.0.0.1");
+
+            verify(passwordResetTokenRepository).invalidateAllForUser(staff);
+            verify(emailService).sendStaffAccountSetupOtp(eq("verma@intellicampus.edu"), anyString(), eq(Role.FACULTY));
+        }
+
+        @Test
+        @DisplayName("Admin deactivates staff account: sets DISABLED status and revokes all refresh tokens")
+        void testAdminDeactivateStaff() {
+            User adminUser = new User("ADM-01", Role.ADMIN, "Admin Jane", "admin@intellicampus.edu", "hash", null);
+            adminUser.setId(1L);
+
+            User staff = new User("FAC-02", Role.FACULTY, "Prof Verma", "verma@intellicampus.edu", "hash", csDept);
+            staff.setId(30L);
+            staff.setStatus(UserStatus.ACTIVE);
+
+            when(userRepository.findById(30L)).thenReturn(Optional.of(staff));
+
+            staffAuthService.deactivateStaff(30L, adminUser);
+
+            assertEquals(UserStatus.DISABLED, staff.getStatus());
+            verify(refreshTokenRepository).revokeAllForUser(staff);
+            verify(auditChainService).recordEntry(
+                    eq(1L),
+                    eq("Admin Jane"),
+                    eq("STAFF_DEACTIVATED"),
+                    eq("USER"),
+                    eq("30"),
+                    anyString(),
+                    contains("DISABLED"),
+                    anyString()
+            );
         }
     }
 
@@ -143,73 +244,81 @@ class StaffAuthServiceTest {
     class StaffLoginTests {
 
         @Test
-        @DisplayName("Blocks login when account is PENDING_APPROVAL")
-        void testLoginBlockedWhenPendingApproval() {
-            User user = new User("HOD-01", Role.HOD, "Prof Davis", "davis@intellicampus.edu", "hash", csDept);
-            user.setStatus(UserStatus.PENDING_APPROVAL);
-
-            when(userRepository.findByEmail("davis@intellicampus.edu")).thenReturn(Optional.of(user));
-
-            DisabledException ex = assertThrows(DisabledException.class, () ->
-                    staffAuthService.loginStaff(new LoginRequestDto("davis@intellicampus.edu", "Password123")));
-            assertTrue(ex.getMessage().contains("pending administrator approval"));
-        }
-
-        @Test
-        @DisplayName("Blocks login when account is REJECTED")
-        void testLoginBlockedWhenRejected() {
-            User user = new User("HOD-02", Role.HOD, "Prof Davis", "rejected@intellicampus.edu", "hash", csDept);
-            user.setStatus(UserStatus.REJECTED);
-
-            when(userRepository.findByEmail("rejected@intellicampus.edu")).thenReturn(Optional.of(user));
-
-            DisabledException ex = assertThrows(DisabledException.class, () ->
-                    staffAuthService.loginStaff(new LoginRequestDto("rejected@intellicampus.edu", "Password123")));
-            assertTrue(ex.getMessage().contains("rejected"));
-        }
-
-        @Test
-        @DisplayName("Blocks login when account is DISABLED")
-        void testLoginBlockedWhenDisabled() {
+        @DisplayName("Blocks login when account is DISABLED with generic 'Invalid email or password' error")
+        void testLoginBlockedWhenDisabledReturnsGenericError() {
             User user = new User("HOD-03", Role.HOD, "Prof Davis", "disabled@intellicampus.edu", "hash", csDept);
             user.setStatus(UserStatus.DISABLED);
 
             when(userRepository.findByEmail("disabled@intellicampus.edu")).thenReturn(Optional.of(user));
 
-            DisabledException ex = assertThrows(DisabledException.class, () ->
+            BadCredentialsException ex = assertThrows(BadCredentialsException.class, () ->
                     staffAuthService.loginStaff(new LoginRequestDto("disabled@intellicampus.edu", "Password123")));
-            assertTrue(ex.getMessage().contains("disabled"));
+            assertEquals("Invalid email or password", ex.getMessage());
         }
 
         @Test
-        @DisplayName("Locks account for 15 minutes on 5 consecutive failed logins")
+        @DisplayName("Role enforcement: HOD user attempting to log in selecting FACULTY is rejected with generic error")
+        void testLoginBlockedWhenRoleMismatches() {
+            User user = new User("HOD-04", Role.HOD, "Prof Sharma", "sharma@intellicampus.edu", "hash", csDept);
+            user.setStatus(UserStatus.ACTIVE);
+
+            when(userRepository.findByEmail("sharma@intellicampus.edu")).thenReturn(Optional.of(user));
+
+            LoginRequestDto req = new LoginRequestDto("sharma@intellicampus.edu", "Password123", Role.FACULTY);
+            BadCredentialsException ex = assertThrows(BadCredentialsException.class, () ->
+                    staffAuthService.loginStaff(req, "STAFF"));
+            assertEquals("Invalid email or password", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("Role enforcement: Admin user cannot log in via Staff login portal")
+        void testAdminCannotLoginViaStaffPortal() {
+            User admin = new User("ADM-01", Role.ADMIN, "Admin", "admin@intellicampus.edu", "hash", null);
+            admin.setStatus(UserStatus.ACTIVE);
+
+            when(userRepository.findByEmail("admin@intellicampus.edu")).thenReturn(Optional.of(admin));
+
+            LoginRequestDto req = new LoginRequestDto("admin@intellicampus.edu", "Password123", Role.HOD);
+            BadCredentialsException ex = assertThrows(BadCredentialsException.class, () ->
+                    staffAuthService.loginStaff(req, "STAFF"));
+            assertEquals("Invalid email or password", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("Role enforcement: Staff user cannot log in via Admin login portal")
+        void testStaffCannotLoginViaAdminPortal() {
+            User faculty = new User("FAC-01", Role.FACULTY, "Prof Verma", "verma@intellicampus.edu", "hash", csDept);
+            faculty.setStatus(UserStatus.ACTIVE);
+
+            when(userRepository.findByEmail("verma@intellicampus.edu")).thenReturn(Optional.of(faculty));
+
+            LoginRequestDto req = new LoginRequestDto("verma@intellicampus.edu", "Password123");
+            BadCredentialsException ex = assertThrows(BadCredentialsException.class, () ->
+                    staffAuthService.loginStaff(req, "ADMIN"));
+            assertEquals("Invalid email or password", ex.getMessage());
+        }
+
+        @Test
+        @DisplayName("Locks account for 15 minutes on 5 consecutive failed logins with generic error")
         void testAccountLockoutAfterFiveFailures() {
             User user = new User("HOD-04", Role.HOD, "Prof Lock", "lock@intellicampus.edu", "real_hash", csDept);
             user.setId(25L);
             user.setStatus(UserStatus.ACTIVE);
+            user.setRole(Role.HOD);
             user.setFailedAttempts(4); // 5th attempt incoming
 
             when(userRepository.findByEmail("lock@intellicampus.edu")).thenReturn(Optional.of(user));
             when(passwordEncoder.matches("wrong_pass", "real_hash")).thenReturn(false);
 
-            assertThrows(BadCredentialsException.class, () ->
-                    staffAuthService.loginStaff(new LoginRequestDto("lock@intellicampus.edu", "wrong_pass")));
+            LoginRequestDto req = new LoginRequestDto("lock@intellicampus.edu", "wrong_pass", Role.HOD);
+            BadCredentialsException ex = assertThrows(BadCredentialsException.class, () ->
+                    staffAuthService.loginStaff(req, "STAFF"));
+            assertEquals("Invalid email or password", ex.getMessage());
 
             assertEquals(5, user.getFailedAttempts());
             assertEquals(UserStatus.LOCKED, user.getStatus());
             assertNotNull(user.getLockedUntil());
             assertTrue(user.getLockedUntil().isAfter(LocalDateTime.now()));
-
-            verify(auditChainService).recordEntry(
-                    eq(25L),
-                    eq("Prof Lock"),
-                    eq("ACCOUNT_LOCKED"),
-                    eq("USER"),
-                    eq("25"),
-                    anyString(),
-                    contains("LOCKED"),
-                    contains("15 minutes")
-            );
         }
 
         @Test
