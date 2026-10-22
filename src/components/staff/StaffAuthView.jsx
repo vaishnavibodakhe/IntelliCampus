@@ -380,7 +380,7 @@ export default function StaffAuthView({
         {activeTab === 'forgot' && (
           <div className="forgot-flow">
             <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
-              <strong>First time logging in?</strong> When your account was provisioned by an Administrator, a 6-digit setup OTP was emailed to you (valid for 24 hours). Enter your email below to verify your OTP and set your password.
+              <strong>First time logging in?</strong> When your account was provisioned by the Principal, a 6-digit setup OTP was emailed to you (valid for 24 hours). Enter your email below to verify your OTP and set your password.
             </div>
 
             {forgotStep === 'email' ? (
@@ -518,7 +518,7 @@ export default function StaffAuthView({
 
         <div className="staff-auth-footer">
           <p>
-            Accounts for HOD, Faculty, and Mentors are provisioned directly by the Campus Administrator.
+            Accounts for HOD, Faculty, and Mentors are provisioned directly by the Principal.
           </p>
         </div>
       </div>

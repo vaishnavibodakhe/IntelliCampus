@@ -165,7 +165,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
         employeeCode: registerForm.employeeCode
       });
 
-      setApiSuccess('Initial SuperAdmin account bootstrapped successfully! You can now log in.');
+      setApiSuccess('Initial Principal account bootstrapped successfully! You can now log in.');
       setCanBootstrap(false);
       setTimeout(() => {
         setActiveTab('login');
@@ -180,7 +180,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
         msg.toLowerCase().includes('closed') ||
         msg.toLowerCase().includes('already exists')
       ) {
-        setApiError('Admin registration is closed. Contact an existing Admin.');
+        setApiError('Principal registration is closed. Contact an existing Principal.');
       } else {
         setApiError(msg || 'Registration failed.');
       }
@@ -208,7 +208,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
         email: forgotEmail,
         role: 'ADMIN'
       });
-      setApiSuccess(response.message || 'If an administrator account exists, a 6-digit OTP has been sent.');
+      setApiSuccess(response.message || 'If a principal account exists, a 6-digit OTP has been sent.');
       setForgotStep('otp');
       setResendCooldown(60);
     } catch (err) {
@@ -271,9 +271,9 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
           <div className="staff-brand-badge" style={{ borderColor: '#6366f1' }}>
             <ShieldCheck size={28} color="#6366f1" />
           </div>
-          <h2>System Administrator Portal</h2>
+          <h2>Principal Portal</h2>
           <p className="staff-auth-subtitle">
-            Secure administrative console & governance authority
+            Secure institutional leadership & governance console
           </p>
         </div>
 
@@ -332,13 +332,13 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
         {activeTab === 'login' && (
           <form onSubmit={handleLoginSubmit} className="staff-form">
             <div className="form-group">
-              <label htmlFor="admin-login-email">Administrator Email</label>
+              <label htmlFor="admin-login-email">Principal Email</label>
               <div className="input-wrap">
                 <Mail size={16} className="input-icon" />
                 <input 
                   id="admin-login-email"
                   type="email"
-                  placeholder="admin@intellicampus.edu"
+                  placeholder="principal@intellicampus.edu"
                   value={loginForm.email}
                   onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                   autoComplete="email"
@@ -348,13 +348,13 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="admin-login-password">Master Password</label>
+              <label htmlFor="admin-login-password">Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
                 <input 
                   id="admin-login-password"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Enter administrator password"
+                  placeholder="Enter principal password"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                   autoComplete="current-password"
@@ -383,7 +383,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                 </>
               ) : (
                 <>
-                  <span>Sign In to Admin Console</span>
+                  <span>Sign In to Principal Console</span>
                   <ArrowRight size={16} />
                 </>
               )}
@@ -391,12 +391,12 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
           </form>
         )}
 
-        {/* Administrator Registration Form */}
+        {/* Principal Registration Form */}
         {activeTab === 'register' && (
           <form onSubmit={handleRegisterSubmit} className="staff-form">
             {canBootstrap && (
               <div style={{ background: 'rgba(99, 102, 241, 0.1)', border: '1px solid rgba(99, 102, 241, 0.3)', borderRadius: '8px', padding: '10px 14px', marginBottom: '14px', fontSize: '0.82rem', color: '#c7d2fe' }}>
-                <strong>Bootstrap Mode:</strong> No Administrator account exists yet. Create the initial SuperAdmin account to initialize the system.
+                <strong>Bootstrap Mode:</strong> No Principal account exists yet. Create the initial Principal account to initialize the system.
               </div>
             )}
 
@@ -416,13 +416,13 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="admin-reg-email">Administrator Email</label>
+              <label htmlFor="admin-reg-email">Principal Email</label>
               <div className="input-wrap">
                 <Mail size={16} className="input-icon" />
                 <input 
                   id="admin-reg-email"
                   type="email"
-                  placeholder="admin@intellicampus.edu"
+                  placeholder="principal@intellicampus.edu"
                   value={registerForm.email}
                   onChange={(e) => setRegisterForm({ ...registerForm, email: e.target.value })}
                 />
@@ -431,7 +431,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="admin-reg-password">Master Password</label>
+              <label htmlFor="admin-reg-password">Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
                 <input 
@@ -453,13 +453,13 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             </div>
 
             <div className="form-group">
-              <label htmlFor="admin-reg-confirm">Confirm Master Password</label>
+              <label htmlFor="admin-reg-confirm">Confirm Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
                 <input 
                   id="admin-reg-confirm"
                   type={showPassword ? 'text' : 'password'}
-                  placeholder="Re-enter master password"
+                  placeholder="Re-enter principal password"
                   value={registerForm.confirmPassword}
                   onChange={(e) => setRegisterForm({ ...registerForm, confirmPassword: e.target.value })}
                 />
@@ -476,11 +476,11 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               {loading ? (
                 <>
                   <RotateCw size={16} className="spin-icon" />
-                  <span>Registering Administrator...</span>
+                  <span>Registering Principal...</span>
                 </>
               ) : (
                 <>
-                  <span>{canBootstrap ? 'Initialize SuperAdmin Account' : 'Register Administrator'}</span>
+                  <span>{canBootstrap ? 'Initialize Principal Account' : 'Register Principal'}</span>
                   <ArrowRight size={16} />
                 </>
               )}
@@ -494,13 +494,13 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             {forgotStep === 'email' ? (
               <form onSubmit={handleRequestOtp} className="staff-form">
                 <div className="form-group">
-                  <label htmlFor="admin-forgot-email">Administrator Email</label>
+                  <label htmlFor="admin-forgot-email">Principal Email</label>
                   <div className="input-wrap">
                     <Mail size={16} className="input-icon" />
                     <input 
                       id="admin-forgot-email"
                       type="email"
-                      placeholder="admin@intellicampus.edu"
+                      placeholder="principal@intellicampus.edu"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
                       autoComplete="email"
@@ -547,7 +547,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="admin-new-password">New Master Password</label>
+                  <label htmlFor="admin-new-password">New Principal Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
                     <input 
@@ -569,7 +569,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="admin-confirm-password">Confirm New Password</label>
+                  <label htmlFor="admin-confirm-password">Confirm New Principal Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
                     <input 
@@ -626,7 +626,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
 
         <div className="staff-auth-footer">
           <p>
-            IntelliCampus Core Administration Portal. Restricted to authorized system operators.
+            IntelliCampus Principal Portal. Restricted to authorized institutional leadership.
           </p>
         </div>
       </div>
