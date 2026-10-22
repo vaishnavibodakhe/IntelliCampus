@@ -115,7 +115,7 @@ class NoticeServiceTest {
             when(studentProfileRepository.findByUser(studentUser)).thenReturn(Optional.of(studentProfile));
 
             // Repository query returns matched notices for Computer Science, Year 3, TE-CS-A
-            when(noticeRepository.findTargetedNotices("Computer Science", "Year 3", "TE-CS-A"))
+            when(noticeRepository.findTargetedNoticesForUser(200L, "Computer Science", "Year 3", "TE-CS-A"))
                     .thenReturn(List.of(campusWideNotice, csYear3Notice));
             when(noticeReadReceiptRepository.countByNotice(any(Notice.class))).thenReturn(5L);
 
@@ -126,7 +126,7 @@ class NoticeServiceTest {
             assertTrue(feed.stream().anyMatch(n -> n.getTitle().contains("Campus Independence Day")));
             assertTrue(feed.stream().anyMatch(n -> n.getTitle().contains("TE Computer Science")));
 
-            verify(noticeRepository).findTargetedNotices("Computer Science", "Year 3", "TE-CS-A");
+            verify(noticeRepository).findTargetedNoticesForUser(200L, "Computer Science", "Year 3", "TE-CS-A");
         }
 
         @Test

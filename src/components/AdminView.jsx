@@ -25,11 +25,15 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
+<<<<<<< HEAD
 import { 
   adminCreateStaffApi, 
   resendStaffSetupOtpApi, 
   deactivateStaffApi 
 } from '../utils/staffAuthService';
+=======
+import NoticeComposer from './NoticeComposer';
+>>>>>>> origin/main
 
 export default function AdminView({
   users,
@@ -100,16 +104,6 @@ export default function AdminView({
     longitude: 73.85674,
     radiusM: 50,
     capacity: 60
-  });
-
-  // Notice state
-  const [newNotice, setNewNotice] = useState({
-    title: '',
-    body: '',
-    targetDepartment: 'All Departments',
-    targetYear: 'All Years',
-    targetDivision: 'All Divisions',
-    deadline: ''
   });
 
   // Document state
@@ -466,43 +460,6 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     }
 
     setRoomModal({ ...roomModal, open: false });
-  };
-
-  // Handle Publish Notice
-  const handlePublishNotice = (e) => {
-    e.preventDefault();
-    if (!newNotice.title || !newNotice.body) return;
-
-    const noticeItem = {
-      id: Date.now(),
-      ...newNotice,
-      publisherRole: 'Administrator',
-      publisherName: 'Rajesh Patel',
-      publishedAt: new Date().toISOString(),
-      readsCount: 0,
-      totalTargeted: 65,
-      hasAttachment: false
-    };
-
-    setNotices([noticeItem, ...notices]);
-    onAddAuditLog({
-      action: 'PUBLISH',
-      entityType: 'NOTICE',
-      entityId: String(noticeItem.id),
-      oldValue: '{}',
-      newValue: JSON.stringify({ title: noticeItem.title, target: noticeItem.targetDepartment }),
-      reason: `Administrative official broadcast published for ${noticeItem.targetDepartment}`
-    });
-
-    setNewNotice({
-      title: '',
-      body: '',
-      targetDepartment: 'All Departments',
-      targetYear: 'All Years',
-      targetDivision: 'All Divisions',
-      deadline: ''
-    });
-    alert('Notice published and targeted students notified.');
   };
 
   // Handle Issue Verifiable Document
@@ -909,75 +866,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col">
-            <div className="glass-card">
-              <h3>Publish Official Circular</h3>
-              <p className="card-desc">Broadcast circulars filtered by department, academic year, and division (`NTC-01`).</p>
-              
-              <form onSubmit={handlePublishNotice} className="form-stack">
-                <div className="form-group">
-                  <label>Circular Title</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Schedule for Mid-Term Make-Up Submissions"
-                    value={newNotice.title}
-                    onChange={e => setNewNotice({...newNotice, title: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Audience Targeting (Scope Filter: Dept, Year, Div)</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                    <select 
-                      value={newNotice.targetDepartment}
-                      onChange={e => setNewNotice({...newNotice, targetDepartment: e.target.value})}
-                    >
-                      <option value="All Departments">All Departments</option>
-                      <option value="Computer Science">Computer Science</option>
-                      <option value="Information Technology">Information Technology</option>
-                    </select>
-                    <select 
-                      value={newNotice.targetYear}
-                      onChange={e => setNewNotice({...newNotice, targetYear: e.target.value})}
-                    >
-                      <option value="All Years">All Years</option>
-                      <option value="Year 1">Year 1</option>
-                      <option value="Year 2">Year 2</option>
-                      <option value="Year 3">Year 3</option>
-                      <option value="Year 4">Year 4</option>
-                    </select>
-                    <select 
-                      value={newNotice.targetDivision}
-                      onChange={e => setNewNotice({...newNotice, targetDivision: e.target.value})}
-                    >
-                      <option value="All Divisions">All Divisions</option>
-                      <option value="Div A">Div A Only</option>
-                      <option value="Div B">Div B Only</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Deadline (Optional)</label>
-                  <input 
-                    type="date"
-                    value={newNotice.deadline}
-                    onChange={e => setNewNotice({...newNotice, deadline: e.target.value})}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Notice Content</label>
-                  <textarea 
-                    rows={4}
-                    placeholder="Provide full text of the circular..."
-                    value={newNotice.body}
-                    onChange={e => setNewNotice({...newNotice, body: e.target.value})}
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn-primary w-full">
-                  <Bell size={15} /> Publish &amp; Push Notification
-                </button>
-              </form>
-            </div>
+            <NoticeComposer 
+              publisherRole="ADMIN"
+              publisherName={staffSession?.user?.name || "Rajesh Patel"}
+              publisherId={staffSession?.user?.id || 1}
+              defaultDepartment="All Departments"
+              onNoticePublished={(newNoticeItem) => {
+                if (setNotices) {
+                  setNotices([newNoticeItem, ...(notices || [])]);
+                }
+              }}
+              onAddAuditLog={onAddAuditLog}
+              initialStudents={users?.filter(u => u.role === 'STUDENT')}
+              cardTitle="Publish Official Circular"
+              cardDescription="Broadcast circulars filtered by department, academic year, and division (`NTC-01`)."
+            />
 
             <div className="glass-card">
               <h3>Active Circulars &amp; Read Analytics</h3>
@@ -996,10 +899,10 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                         )}
                       </div>
                     </div>
-                    <p className="notice-item-body">{n.body}</p>
+                    <p className="notice-item-body">{n.body || n.message}</p>
                     <div className="notice-item-footer">
                       <span className="notice-reads">
-                        Read by {n.readsCount} / {n.totalTargeted} targeted students
+                        Read by {n.readsCount || 0} / {n.totalTargeted || 65} targeted students
                       </span>
                       {n.deadline && (
                         <span className="badge-pill warning">Deadline: {n.deadline}</span>

@@ -11,9 +11,11 @@ import {
   Clock,
   ShieldCheck,
   LogOut,
-  KeyRound
+  KeyRound,
+  Bell
 } from 'lucide-react';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
+import NoticeComposer from './NoticeComposer';
 
 export default function HodView({
   leaveRequests,
@@ -26,13 +28,21 @@ export default function HodView({
   onAddAuditLog,
   staffSession,
   onLogout,
-  onChangePassword
+  onChangePassword,
+  notices = [],
+  setNotices
 }) {
   const [activeTab, setActiveTab] = useState('leaves');
   const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
   const [selectedReportType, setSelectedReportType] = useState('defaulters');
   const [rejectReasonModal, setRejectReasonModal] = useState({ open: false, type: '', id: null });
   const [rejectReasonText, setRejectReasonText] = useState('');
+
+  const handleNoticePublished = (newNotice) => {
+    if (setNotices) {
+      setNotices([newNotice, ...(notices || [])]);
+    }
+  };
 
   // HOD Approve Leave
   const handleApproveLeave = (id) => {
@@ -246,6 +256,12 @@ export default function HodView({
           className={`tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
         >
           <FileSpreadsheet size={16} /> Department Analytics & Defaulters
+        </button>
+        <button 
+          onClick={() => setActiveTab('notices')} 
+          className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
+        >
+          <Bell size={16} /> Send Notice
         </button>
       </div>
 
@@ -478,6 +494,23 @@ export default function HodView({
               </tbody>
             </table>
           </div>
+        </div>
+      )}
+
+      {/* TAB 4: SEND NOTICE */}
+      {activeTab === 'notices' && (
+        <div className="tab-pane animate-fade-in">
+          <NoticeComposer 
+            publisherRole="HOD"
+            publisherName={staffSession?.user?.name || "Dr. Ananya Sharma"}
+            publisherId={staffSession?.user?.id || 2}
+            defaultDepartment={staffSession?.user?.department || "Computer Science"}
+            onNoticePublished={handleNoticePublished}
+            onAddAuditLog={onAddAuditLog}
+            initialStudents={users?.filter(u => u.role === 'STUDENT')}
+            cardTitle="Send Notice / Department Circular"
+            cardDescription="Broadcast official department orders, alerts, or directives to students and faculty."
+          />
         </div>
       )}
 
