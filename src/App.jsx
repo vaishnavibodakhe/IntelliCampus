@@ -354,10 +354,7 @@ export default function App() {
         onOpenAudit={() => setIsAuditModalOpen(true)}
         onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
-<<<<<<< HEAD
-        notificationCount={notices.length}
         staffSession={staffSession}
-=======
         notificationCount={unreadNoticeCount}
         unreadCount={unreadNoticeCount}
         notices={currentRole === 'STUDENT' ? studentNotices : notices}
@@ -371,7 +368,6 @@ export default function App() {
           }
         }}
         currentUser={currentStudent || authenticatedUser}
->>>>>>> origin/main
       />
 
       {/* Global Auth Status Notification Toast */}
@@ -587,7 +583,6 @@ export default function App() {
             )}
 
             {currentRole === 'FACULTY' && (
-<<<<<<< HEAD
               staffSession?.user?.role === 'FACULTY' ? (
                 <FacultyView 
                   sessions={sessions}
@@ -600,6 +595,8 @@ export default function App() {
                   markCorrections={markCorrections}
                   setMarkCorrections={setMarkCorrections}
                   onAddAuditLog={handleAddAuditLog}
+                  notices={notices}
+                  setNotices={setNotices}
                   onLogout={handleStaffLogout}
                 />
               ) : (
@@ -623,6 +620,8 @@ export default function App() {
                   setLeaveRequests={setLeaveRequests}
                   users={users}
                   onAddAuditLog={handleAddAuditLog}
+                  notices={notices}
+                  setNotices={setNotices}
                   onLogout={handleStaffLogout}
                 />
               ) : (
@@ -635,35 +634,6 @@ export default function App() {
                   noticeMessage={staffSession ? "Mentor access required" : ""}
                 />
               )
-=======
-              <FacultyView 
-                sessions={sessions}
-                setSessions={setSessions}
-                subjects={subjects}
-                rooms={rooms}
-                users={users}
-                marks={marks}
-                setMarks={setMarks}
-                markCorrections={markCorrections}
-                setMarkCorrections={setMarkCorrections}
-                onAddAuditLog={handleAddAuditLog}
-                notices={notices}
-                setNotices={setNotices}
-              />
-            )}
-
-            {currentRole === 'MENTOR' && (
-              <MentorView 
-                riskStudents={riskStudents}
-                setRiskStudents={setRiskStudents}
-                leaveRequests={leaveRequests}
-                setLeaveRequests={setLeaveRequests}
-                users={users}
-                onAddAuditLog={handleAddAuditLog}
-                notices={notices}
-                setNotices={setNotices}
-              />
->>>>>>> origin/main
             )}
 
             {currentRole === 'STUDENT' && (

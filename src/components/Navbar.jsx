@@ -22,11 +22,8 @@ export default function Navbar({
   onOpenAudit, 
   onOpenChat,
   activeSession,
-<<<<<<< HEAD
-  notificationCount = 2,
-  staffSession
-=======
   notificationCount = 0,
+  staffSession,
   notices = [],
   unreadCount,
   isLoadingNotices = false,
@@ -35,7 +32,6 @@ export default function Navbar({
   onRefreshNotices,
   onViewAllNotices,
   currentUser = null
->>>>>>> origin/main
 }) {
   const roles = [
     { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },

@@ -25,15 +25,12 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
-<<<<<<< HEAD
 import { 
   adminCreateStaffApi, 
   resendStaffSetupOtpApi, 
   deactivateStaffApi 
 } from '../utils/staffAuthService';
-=======
 import NoticeComposer from './NoticeComposer';
->>>>>>> origin/main
 
 export default function AdminView({
   users,
