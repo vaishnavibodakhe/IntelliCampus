@@ -54,15 +54,6 @@
   line-height: 1.2;
 }
 
-.brand-pill {
-  font-size: 0.65rem;
-  font-weight: 700;
-  padding: 2px 7px;
-  background: rgba(99, 102, 241, 0.2);
-  color: var(--primary);
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border-accent);
-}
 
 .brand-subtitle {
   font-size: 0.75rem;

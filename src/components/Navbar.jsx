@@ -58,10 +58,7 @@ export default function Navbar({
           </svg>
         </div>
         <div className="brand-text">
-          <div className="brand-title">
-            IntelliCampus
-            <span className="brand-pill">v1.0</span>
-          </div>
+          <div className="brand-title">IntelliCampus</div>
           <div className="brand-subtitle">Intelligent College Platform</div>
         </div>
       </div>
