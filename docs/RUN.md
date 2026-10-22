@@ -18,14 +18,37 @@ Make sure the following tools are installed:
 | **Frontend Dev Server** | `5173` | `vite.config.js` | React application with `/api` proxy |
 | **Backend API** | `8080` | `application.yml` | Spring Boot REST service |
 | **MySQL Database** | `3307` | `docker-compose.yml` (`DB_PORT_EXTERNAL`) | Container port 3306 published to host port 3307 |
-| **Redis Cache** | `6379` | `docker-compose.yml` | Session store and token blacklist |
+| **Redis Cache** | `6379` | `docker-compose.yml` | Container running; starter in `pom.xml`, currently unused by backend application code |
 | **AI Biometric Service** | `8000` | `docker-compose.yml` | Face recognition and anti-spoofing microservice |
 
 ---
 
 ## Quick Start Steps
 
-### Step 1: Start Infrastructure in Docker
+### Step 1: Create and Configure Root `.env` (REQUIRED)
+
+A root `.env` file **IS REQUIRED** before launching services:
+
+1. Copy `.env.example` to create your local `.env`:
+   ```bash
+   # Windows (PowerShell):
+   copy .env.example .env
+
+   # Linux / macOS:
+   cp .env.example .env
+   ```
+2. Open `.env` and configure your credentials:
+   - Set `DB_PASSWORD` and `MYSQL_ROOT_PASSWORD` (use any passwords of your choice for a fresh local setup).
+   - Verify `DB_PORT=3307` and `DB_HOST=localhost` (required when connecting to MySQL via Docker Compose).
+   - **CRITICAL**: Create and configure `.env` **BEFORE** running `docker compose up -d db redis ai`, as MySQL initializes the database user and volume credentials on first boot.
+
+> [!WARNING]
+> **Stale Docker Volume Warning**: Changing `DB_PASSWORD` in `.env` later will **NOT** change the password of an existing Docker volume. If credentials get out of sync, either continue using the original password in `.env`, or reset the volume with `docker compose down -v` (which **DELETES ALL LOCAL DATA**).
+
+> [!NOTE]
+> **Gmail SMTP / Password Reset OTP**: To configure the Admin / HOD forgot-password flow, see [docs/SETUP.md](file:///c:/Users/HP/Videos/IntelliCampus/docs/SETUP.md) for instructions on creating a 16-character Gmail App Password. Note that `SETUP.md` references a standalone MySQL server installed on host port `3306`, whereas this guide uses the containerized MySQL running on port `3307`.
+
+### Step 2: Start Infrastructure in Docker
 Start MySQL, Redis, and the AI microservice in background mode:
 
 ```bash
@@ -37,7 +60,7 @@ Verify that all three containers are healthy and running:
 docker compose ps
 ```
 
-### Step 2: Start the Backend (Host)
+### Step 3: Start the Backend (Host)
 Run the Spring Boot application on your host machine. Flyway applies all database migrations automatically on startup:
 
 **Linux / macOS:**
@@ -52,9 +75,7 @@ cd backend
 .\mvnw.cmd spring-boot:run
 ```
 
-> **Note on `.env` file:** A root `.env` file is **OPTIONAL** when running the backend on your host machine. The backend automatically defaults to `localhost`, port `3307` for MySQL, port `6379` for Redis, and port `8000` for the AI service.
-
-### Step 3: Start the Frontend (Host)
+### Step 4: Start the Frontend (Host)
 In a new terminal window at the project root, install dependencies and start the Vite dev server:
 
 ```bash
