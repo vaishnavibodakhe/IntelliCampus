@@ -6,7 +6,10 @@ Thumbs.db
 
 # Environment variables & secrets
 .env
+.env.*
 .env.local
+.env.bak
+backups/
 *.pem
 *.key
 
@@ -64,3 +67,8 @@ yarn-error.log*
 
 # MySQL local data
 mysql_data/
+*.sql
+!backend/src/main/resources/db/migration/*.sql
+!backend/sql/*.sql
+!database/*.sql
+!docker/mysql/init.sql
