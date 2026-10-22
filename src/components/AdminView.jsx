@@ -562,21 +562,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     <div className="admin-container animate-fade-in">
       <div className="section-header">
         <div>
-          <h1 className="page-title">Admin Operations Console</h1>
+          <h1 className="page-title">Principal Operations Console</h1>
           <p className="page-desc">
-            Centralized governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
+            Centralized institutional governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as System Administrator'}
+            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as Principal'}
           </div>
           <button
             type="button"
             onClick={() => setShowChangePasswordModal(true)}
             className="action-icon-btn"
             style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}
-            title="Change Admin Password"
+            title="Change Principal Password"
           >
             <KeyRound size={15} />
             <span>Change Password</span>
@@ -587,7 +587,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               onClick={onLogout}
               className="action-icon-btn"
               style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '5px' }}
-              title="Sign Out of Admin Console"
+              title="Sign Out of Principal Console"
             >
               <LogOut size={15} />
               <span>Logout</span>
@@ -661,7 +661,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <option value="FACULTY">Faculty</option>
                 <option value="HOD">HOD</option>
                 <option value="MENTOR">Mentor</option>
-                <option value="ADMIN">Admin</option>
+                <option value="ADMIN">Principal</option>
               </select>
 
               <select 
@@ -1103,7 +1103,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     <option value="FACULTY">Faculty</option>
                     <option value="MENTOR">Mentor</option>
                     <option value="HOD">HOD</option>
-                    <option value="ADMIN">Administrator</option>
+                    <option value="ADMIN">Principal</option>
                   </select>
                 </div>
               </div>
@@ -1120,7 +1120,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               {newUser.role !== 'STUDENT' && (
                 <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
-                  <strong>Secure First-Time Password Flow:</strong> Administrators never enter or see staff passwords. An unusable random hash is assigned, and a 24-hour setup OTP will be emailed to <em>{newUser.email || 'the user'}</em> to set their password on the Staff portal.
+                  <strong>Secure First-Time Password Flow:</strong> Principals never enter or see staff passwords. An unusable random hash is assigned, and a 24-hour setup OTP will be emailed to <em>{newUser.email || 'the user'}</em> to set their password on the Staff portal.
                 </div>
               )}
               {newUser.role === 'STUDENT' && (
