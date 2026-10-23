@@ -1,41 +1,41 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  BookOpen, 
-  Lock, 
-  Mail, 
-  User, 
-  Building2, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  AlertCircle, 
+import {
+  ShieldCheck,
+  BookOpen,
+  Lock,
+  Mail,
+  User,
+  Building2,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
   AlertTriangle,
-  CheckCircle2, 
+  CheckCircle2,
   Clock,
   KeyRound,
   UserPlus,
   LogIn,
   RotateCw
 } from 'lucide-react';
-import { 
-  loginStaffApi, 
-  registerStaffApi, 
-  forgotPasswordApi, 
+import {
+  loginStaffApi,
+  registerStaffApi,
+  forgotPasswordApi,
   resetPasswordApi,
-  saveStaffSession, 
-  validateStaffLoginForm, 
-  validateStaffRegisterForm, 
+  saveStaffSession,
+  validateStaffLoginForm,
+  validateStaffRegisterForm,
   validateForgotPasswordForm,
-  validateOtpResetPasswordForm 
+  validateOtpResetPasswordForm
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
-export default function RoleAuthView({ 
-  role = 'ADMIN', 
-  onAuthSuccess, 
+export default function RoleAuthView({
+  role = 'ADMIN',
+  onAuthSuccess,
   noticeMessage = '',
-  onSwitchRole 
+  onSwitchRole
 }) {
   const isAdmin = role === 'ADMIN';
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register' | 'forgot'
@@ -124,12 +124,12 @@ export default function RoleAuthView({
     setLoading(true);
     try {
       const data = await loginStaffApi({ ...loginForm, role });
-      
+
       // Strict role check: Do not save or overwrite session on mismatch
       if (data.user?.role !== role) {
         setApiError(
-          isAdmin 
-            ? 'This account is not an Admin account' 
+          isAdmin
+            ? 'This account is not an Admin account'
             : 'This account is not an HOD account'
         );
         return;
@@ -283,7 +283,7 @@ export default function RoleAuthView({
       <div className="staff-auth-card" style={{ borderColor: `${accentColor}33` }}>
         {/* Header */}
         <div className="staff-auth-header">
-          <div 
+          <div
             className="staff-auth-icon-wrap"
             style={{
               background: `linear-gradient(135deg, ${accentColor}25, ${accentColor}10)`,
@@ -295,17 +295,17 @@ export default function RoleAuthView({
           </div>
           <h2 className="staff-auth-title">{roleName} Portal</h2>
           <p className="staff-auth-subtitle">
-            {isAdmin 
-              ? 'Centralized system administration & operations governance' 
+            {isAdmin
+              ? 'Centralized system administration & operations governance'
               : 'Head of Department academic & faculty management'}
           </p>
         </div>
 
         {/* Notice Message Banner (e.g. "Admin access required") */}
         {noticeMessage && (
-          <div 
-            className="staff-alert staff-alert-warning" 
-            style={{ 
+          <div
+            className="staff-alert staff-alert-warning"
+            style={{
               marginBottom: '1.25rem',
               display: 'flex',
               alignItems: 'center',
@@ -339,8 +339,8 @@ export default function RoleAuthView({
         )}
 
         {/* Tab Selection (NO role dropdown anywhere) */}
-        <div 
-          className="staff-auth-tabs" 
+        <div
+          className="staff-auth-tabs"
           style={{
             display: 'flex',
             borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
@@ -431,7 +431,7 @@ export default function RoleAuthView({
               <label className="staff-field-label">Work Email</label>
               <div className="staff-input-wrapper">
                 <Mail className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type="email"
                   value={loginForm.email}
                   onChange={(e) => {
@@ -460,7 +460,7 @@ export default function RoleAuthView({
               </div>
               <div className="staff-input-wrapper">
                 <Lock className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type={showPassword ? 'text' : 'password'}
                   value={loginForm.password}
                   onChange={(e) => {
@@ -471,8 +471,8 @@ export default function RoleAuthView({
                   className={`staff-input ${errors.password ? 'has-error' : ''}`}
                   autoComplete="current-password"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="staff-eye-btn"
                   onClick={() => setShowPassword(!showPassword)}
                   tabIndex="-1"
@@ -483,8 +483,8 @@ export default function RoleAuthView({
               {errors.password && <span className="staff-error-text">{errors.password}</span>}
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="staff-submit-btn"
               disabled={loading}
               style={{ background: accentColor }}
@@ -499,8 +499,8 @@ export default function RoleAuthView({
         {activeTab === 'register' && (
           registerSuccess ? (
             <div style={{ textAlign: 'center', padding: '1rem 0' }}>
-              <div 
-                className="staff-auth-icon-wrap" 
+              <div
+                className="staff-auth-icon-wrap"
                 style={{ background: 'rgba(245, 158, 11, 0.15)', borderColor: 'rgba(245, 158, 11, 0.3)', color: '#fbbf24', margin: '0 auto 1.25rem auto' }}
               >
                 <Clock size={32} />
@@ -526,7 +526,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Full Name</label>
                 <div className="staff-input-wrapper">
                   <User className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type="text"
                     value={registerForm.name}
                     onChange={(e) => {
@@ -544,7 +544,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Institutional Email</label>
                 <div className="staff-input-wrapper">
                   <Mail className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type="email"
                     value={registerForm.email}
                     onChange={(e) => {
@@ -564,7 +564,7 @@ export default function RoleAuthView({
                   <label className="staff-field-label">Department *</label>
                   <div className="staff-input-wrapper">
                     <Building2 className="staff-input-icon" size={18} />
-                    <select 
+                    <select
                       value={registerForm.department}
                       onChange={(e) => {
                         setRegisterForm(prev => ({ ...prev, department: e.target.value }));
@@ -585,7 +585,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Password (8+ chars: Upper, Lower, Number, Special)</label>
                 <div className="staff-input-wrapper">
                   <Lock className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type={showPassword ? 'text' : 'password'}
                     value={registerForm.password}
                     onChange={(e) => {
@@ -596,8 +596,8 @@ export default function RoleAuthView({
                     className={`staff-input ${errors.password ? 'has-error' : ''}`}
                     autoComplete="new-password"
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="staff-eye-btn"
                     onClick={() => setShowPassword(!showPassword)}
                     tabIndex="-1"
@@ -612,7 +612,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Confirm Password</label>
                 <div className="staff-input-wrapper">
                   <Lock className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type={showPassword ? 'text' : 'password'}
                     value={registerForm.confirmPassword}
                     onChange={(e) => {
@@ -627,8 +627,8 @@ export default function RoleAuthView({
                 {errors.confirmPassword && <span className="staff-error-text">{errors.confirmPassword}</span>}
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="staff-submit-btn"
                 disabled={loading}
                 style={{ background: accentColor }}
@@ -653,7 +653,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Account Email</label>
                 <div className="staff-input-wrapper">
                   <Mail className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type="email"
                     value={forgotEmail}
                     onChange={(e) => {
@@ -669,8 +669,8 @@ export default function RoleAuthView({
                 {errors.email && <span className="staff-error-text">{errors.email}</span>}
               </div>
 
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 className="staff-submit-btn"
                 disabled={loading}
                 style={{ background: accentColor }}
@@ -682,9 +682,9 @@ export default function RoleAuthView({
           ) : (
             /* STEP 2: Enter 6-digit OTP and new password */
             <form onSubmit={handleResetPasswordSubmit} className="staff-auth-form">
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
                 justifyContent: 'space-between',
                 padding: '0.75rem 1rem',
                 background: 'rgba(255, 255, 255, 0.04)',
@@ -716,7 +716,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">6-Digit Verification OTP</label>
                 <div className="staff-input-wrapper">
                   <KeyRound className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type="text"
                     maxLength={6}
                     value={otp}
@@ -740,7 +740,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">New Password</label>
                 <div className="staff-input-wrapper">
                   <Lock className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type={showOtpPassword ? 'text' : 'password'}
                     value={otpNewPassword}
                     onChange={(e) => {
@@ -752,8 +752,8 @@ export default function RoleAuthView({
                     disabled={loading}
                     autoComplete="new-password"
                   />
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     className="staff-eye-btn"
                     onClick={() => setShowOtpPassword(!showOtpPassword)}
                     tabIndex="-1"
@@ -769,7 +769,7 @@ export default function RoleAuthView({
                 <label className="staff-field-label">Confirm New Password</label>
                 <div className="staff-input-wrapper">
                   <Lock className="staff-input-icon" size={18} />
-                  <input 
+                  <input
                     type={showOtpPassword ? 'text' : 'password'}
                     value={otpConfirmPassword}
                     onChange={(e) => {
@@ -787,8 +787,8 @@ export default function RoleAuthView({
 
               {/* Action buttons */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.5rem' }}>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="staff-submit-btn"
                   disabled={loading}
                   style={{ background: accentColor }}
@@ -814,8 +814,8 @@ export default function RoleAuthView({
         {/* Role switch helper link if provided */}
         {onSwitchRole && (
           <div className="staff-links" style={{ justifyContent: 'center' }}>
-            <button 
-              type="button" 
+            <button
+              type="button"
               className="staff-link"
               onClick={() => onSwitchRole(isAdmin ? 'HOD' : 'ADMIN')}
             >

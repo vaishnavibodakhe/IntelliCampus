@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  Send, 
-  X, 
-  ThumbsUp, 
-  ThumbsDown, 
-  FileText, 
-  AlertCircle, 
-  Bot, 
-  User, 
+import {
+  Sparkles,
+  Send,
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  FileText,
+  AlertCircle,
+  Bot,
+  User,
   HelpCircle,
   ExternalLink,
   Languages
@@ -121,8 +121,8 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
         <div className="chatbot-header-actions">
           {/* Language Selector (BOT-05) */}
-          <select 
-            value={language} 
+          <select
+            value={language}
             onChange={e => setLanguage(e.target.value)}
             className="lang-select"
           >
@@ -165,14 +165,14 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
               {msg.sender === 'bot' && msg.id !== 1 && (
                 <div className="rating-row">
                   <span className="text-xs text-muted">Was this helpful?</span>
-                  <button 
-                    onClick={() => handleRate(msg.id, true)} 
+                  <button
+                    onClick={() => handleRate(msg.id, true)}
                     className={`rate-btn ${msg.rated === true ? 'active-good' : ''}`}
                   >
                     <ThumbsUp size={12} />
                   </button>
-                  <button 
-                    onClick={() => handleRate(msg.id, false)} 
+                  <button
+                    onClick={() => handleRate(msg.id, false)}
                     className={`rate-btn ${msg.rated === false ? 'active-bad' : ''}`}
                   >
                     <ThumbsDown size={12} />
@@ -198,7 +198,7 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
       <div className="chat-suggestions-bar">
         {knowledgeDocs && knowledgeDocs.length > 0 ? (
           knowledgeDocs.slice(0, 2).map((kd, idx) => (
-            <button 
+            <button
               key={idx}
               onClick={() => setInputQuestion(`Tell me about ${kd.title || kd.name}`)}
               className="suggest-chip"
@@ -207,14 +207,14 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
             </button>
           ))
         ) : (
-          <button 
+          <button
             onClick={() => setInputQuestion("What is the attendance detention policy?")}
             className="suggest-chip"
           >
             Attendance policy?
           </button>
         )}
-        <button 
+        <button
           onClick={() => setInputQuestion("What movies are playing on campus?")}
           className="suggest-chip"
         >
@@ -224,8 +224,8 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
       {/* Input Form */}
       <form onSubmit={handleSendMessage} className="chat-input-form">
-        <input 
-          type="text" 
+        <input
+          type="text"
           placeholder="Ask a question from college regulations..."
           value={inputQuestion}
           onChange={e => setInputQuestion(e.target.value)}

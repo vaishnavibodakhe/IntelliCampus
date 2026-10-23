@@ -77,7 +77,7 @@ STU-003,Rohan Kulkarni,rohan@intellicampus.edu,Computer Science,2024-CS-003
     ];
 
     const student = { department: 'Computer Science', year: 'Year 3' };
-    const feed = notices.filter(n => 
+    const feed = notices.filter(n =>
       (n.targetDepartment === 'All Departments' || n.targetDepartment === student.department) &&
       (n.targetYear === 'All Years' || n.targetYear === student.year)
     );

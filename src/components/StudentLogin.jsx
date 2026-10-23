@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  Mail, 
-  KeyRound, 
-  Lock, 
-  AlertCircle, 
-  CheckCircle2, 
-  ArrowRight, 
-  Eye, 
-  EyeOff, 
+import {
+  Mail,
+  KeyRound,
+  Lock,
+  AlertCircle,
+  CheckCircle2,
+  ArrowRight,
+  Eye,
+  EyeOff,
   GraduationCap,
   ShieldCheck
 } from 'lucide-react';

@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { 
-  calculateHaversineDistance, 
+import {
+  calculateHaversineDistance,
   validateGeofence,
-  validateSpoofConfidence 
+  validateSpoofConfidence
 } from '../../utils/cryptoAndGeo.js';
 
 /**

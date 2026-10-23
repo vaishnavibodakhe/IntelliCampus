@@ -1,14 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Bell, 
-  Send, 
-  Users, 
-  UserCheck, 
-  Search, 
-  X, 
-  Calendar, 
-  CheckCircle2, 
-  AlertCircle, 
+import {
+  Bell,
+  Send,
+  Users,
+  UserCheck,
+  Search,
+  X,
+  Calendar,
+  CheckCircle2,
+  AlertCircle,
   Loader2,
   Sparkles
 } from 'lucide-react';
@@ -55,7 +55,7 @@ export default function NoticeComposer({
   const [targetDepartment, setTargetDepartment] = useState(defaultDepartment || 'All Departments');
   const [targetYear, setTargetYear] = useState('All Years');
   const [targetDivision, setTargetDivision] = useState('All Divisions');
-  
+
   // Specific student targeting state
   const [selectedStudents, setSelectedStudents] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -63,7 +63,7 @@ export default function NoticeComposer({
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
   const [searchError, setSearchError] = useState(null);
-  
+
   const [deadline, setDeadline] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedback, setFeedback] = useState(null); // { type: 'success' | 'error', text: string }
@@ -270,12 +270,12 @@ export default function NoticeComposer({
       </div>
 
       {feedback && (
-        <div 
+        <div
           className={`notice-feedback-banner ${feedback.type === 'success' ? 'badge-pill success' : 'badge-pill danger'}`}
-          style={{ 
-            width: '100%', 
-            padding: '10px 14px', 
-            borderRadius: '8px', 
+          style={{
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: '8px',
             marginBottom: '16px',
             display: 'flex',
             alignItems: 'center',
@@ -285,9 +285,9 @@ export default function NoticeComposer({
         >
           {feedback.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
           <span>{feedback.text}</span>
-          <button 
-            type="button" 
-            onClick={() => setFeedback(null)} 
+          <button
+            type="button"
+            onClick={() => setFeedback(null)}
             style={{ marginLeft: 'auto', background: 'none', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0 }}
           >
             <X size={14} />
@@ -313,11 +313,11 @@ export default function NoticeComposer({
         {/* Recipients Mode Selection */}
         <div className="form-group">
           <label style={{ fontWeight: 600 }}>Target Recipients *</label>
-          <div 
-            className="recipient-mode-selector" 
-            style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(2, 1fr)', 
+          <div
+            className="recipient-mode-selector"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(2, 1fr)',
               gap: '10px',
               marginTop: '4px'
             }}
@@ -371,9 +371,9 @@ export default function NoticeComposer({
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '10px', marginTop: '4px' }}>
               <div>
                 <label style={{ fontSize: '0.75rem', marginBottom: '2px', display: 'block' }}>Department</label>
-                <select 
+                <select
                   id="target-department-select"
-                  value={targetDepartment} 
+                  value={targetDepartment}
                   onChange={(e) => setTargetDepartment(e.target.value)}
                   style={{ width: '100%' }}
                   disabled={isSubmitting}
@@ -386,9 +386,9 @@ export default function NoticeComposer({
 
               <div>
                 <label style={{ fontSize: '0.75rem', marginBottom: '2px', display: 'block' }}>Academic Year</label>
-                <select 
+                <select
                   id="target-year-select"
-                  value={targetYear} 
+                  value={targetYear}
                   onChange={(e) => setTargetYear(e.target.value)}
                   style={{ width: '100%' }}
                   disabled={isSubmitting}
@@ -401,9 +401,9 @@ export default function NoticeComposer({
 
               <div>
                 <label style={{ fontSize: '0.75rem', marginBottom: '2px', display: 'block' }}>Division</label>
-                <select 
+                <select
                   id="target-division-select"
-                  value={targetDivision} 
+                  value={targetDivision}
                   onChange={(e) => setTargetDivision(e.target.value)}
                   style={{ width: '100%' }}
                   disabled={isSubmitting}
@@ -423,7 +423,7 @@ export default function NoticeComposer({
             <label htmlFor="student-search-input" style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
               Search Students by Name or Roll Number:
             </label>
-            
+
             <div style={{ position: 'relative', marginTop: '4px' }}>
               <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
                 <Search size={16} style={{ position: 'absolute', left: '12px', color: 'var(--text-muted)', pointerEvents: 'none' }} />
@@ -444,7 +444,7 @@ export default function NoticeComposer({
 
               {/* Autocomplete Results Dropdown */}
               {isSearchFocused && searchResults.length > 0 && (
-                <div 
+                <div
                   className="search-results-dropdown glass-card"
                   style={{
                     position: 'absolute',
@@ -492,7 +492,7 @@ export default function NoticeComposer({
               )}
 
               {isSearchFocused && searchQuery.trim() && !isSearching && searchResults.length === 0 && (
-                <div 
+                <div
                   style={{
                     position: 'absolute',
                     top: '100%',
@@ -538,13 +538,13 @@ export default function NoticeComposer({
               ) : (
                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
                   {selectedStudents.map(student => (
-                    <span 
-                      key={student.id} 
+                    <span
+                      key={student.id}
                       className="badge-pill accent"
-                      style={{ 
-                        padding: '5px 10px', 
-                        display: 'inline-flex', 
-                        alignItems: 'center', 
+                      style={{
+                        padding: '5px 10px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
                         gap: '6px',
                         fontSize: '0.8rem'
                       }}

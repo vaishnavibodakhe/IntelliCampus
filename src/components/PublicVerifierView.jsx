@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  ShieldCheck, 
-  Search, 
-  CheckCircle, 
-  XCircle, 
-  AlertOctagon, 
-  QrCode, 
-  Copy, 
+import {
+  ShieldCheck,
+  Search,
+  CheckCircle,
+  XCircle,
+  AlertOctagon,
+  QrCode,
+  Copy,
   ExternalLink,
   Lock
 } from 'lucide-react';
@@ -24,7 +24,7 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
     if (!searchCode.trim()) return;
 
     const trimmed = searchCode.trim();
-    let found = (issuedDocuments || []).find(d => 
+    let found = (issuedDocuments || []).find(d =>
       d.code?.toUpperCase() === trimmed.toUpperCase() ||
       d.fileHash?.toLowerCase() === trimmed.toLowerCase() ||
       d.fileHash?.replace(/^sha256_/, '').toLowerCase() === trimmed.toLowerCase() ||
@@ -78,10 +78,10 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           </button>
           <button
             type="button"
-            onClick={() => { 
-              setSearchMode('HASH'); 
+            onClick={() => {
+              setSearchMode('HASH');
               const validDoc = issuedDocuments[0];
-              setSearchCode(validDoc ? validDoc.fileHash : ''); 
+              setSearchCode(validDoc ? validDoc.fileHash : '');
             }}
             className={`btn-sm ${searchMode === 'HASH' ? 'btn-primary' : 'btn-secondary'}`}
           >
@@ -131,8 +131,8 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           <form onSubmit={handleVerify} className="verifier-search-bar">
             <div className="search-input-wrapper">
               <Search size={18} className="search-icon-left text-muted" />
-              <input 
-                type="text" 
+              <input
+                type="text"
                 placeholder={searchMode === 'HASH' ? "Paste SHA-256 file checksum (e.g. 9f83a1b2...)" : "Enter document verification code (e.g. DOC-2026-CS-8921)"}
                 value={searchCode}
                 onChange={e => setSearchCode(e.target.value)}
@@ -150,13 +150,13 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           <div className="verifier-sample-codes">
             <span className="text-xs text-muted">Available issued credentials:</span>
             {issuedDocuments.slice(0, 3).map((d) => (
-              <button 
+              <button
                 key={d.code}
-                type="button" 
-                onClick={() => { 
-                  setSearchMode('CODE'); 
-                  setSearchCode(d.code); 
-                  setSearchedDoc(d); 
+                type="button"
+                onClick={() => {
+                  setSearchMode('CODE');
+                  setSearchCode(d.code);
+                  setSearchedDoc(d);
                   setHasSearched(true);
                 }}
                 className="sample-chip"
@@ -249,8 +249,8 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
               <p className="text-secondary max-w-md mx-auto mb-4">
                 No issued record matches the code <code>{searchCode}</code> in the official college ledger. The document may be counterfeit or the tracking number was incorrectly entered.
               </p>
-              <button 
-                onClick={() => setSearchCode('')} 
+              <button
+                onClick={() => setSearchCode('')}
                 className="btn-secondary"
               >
                 Clear &amp; Try Another Code

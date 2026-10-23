@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { 
-  CheckCircle, 
-  XCircle, 
-  FileSpreadsheet, 
-  FileText, 
-  AlertTriangle, 
-  Download, 
+import {
+  CheckCircle,
+  XCircle,
+  FileSpreadsheet,
+  FileText,
+  AlertTriangle,
+  Download,
   ArrowRight,
   TrendingDown,
   Clock,
@@ -216,12 +216,12 @@ export default function HodView({
       alert('No student records available to export.');
       return;
     }
-    const csvContent = "data:text/csv;charset=utf-8," + 
+    const csvContent = "data:text/csv;charset=utf-8," +
       "Roll No,Student Name,Department,Division,Attendance Rate,Defaulter Status,Fees Due\n" +
-      users.filter(u => u.role === 'STUDENT').map(s => 
+      users.filter(u => u.role === 'STUDENT').map(s =>
         `${s.rollNo || ''},"${s.name || ''}",${s.department || ''},${s.division || ''},${s.attendanceRate || 0}%,${(s.attendanceRate || 0) < 75 ? 'DEFAULTER' : 'COMPLIANT'},${s.feeStatus || ''}`
       ).join("\n");
-    
+
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -233,7 +233,7 @@ export default function HodView({
 
   const students = users.filter(u => u.role === 'STUDENT');
   const defaulterStudents = students.filter(s => (s.attendanceRate || 0) < 75);
-  const pendingLeaves = leaveRequests.filter(l => 
+  const pendingLeaves = leaveRequests.filter(l =>
     (l.hodStatus === 'PENDING' || l.finalStatus === 'SUBMITTED' || l.finalStatus === 'RECOMMENDED') &&
     l.finalStatus !== 'APPROVED' &&
     l.finalStatus !== 'REJECTED'
@@ -280,26 +280,26 @@ export default function HodView({
 
       {/* Tabs */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('leaves')} 
+        <button
+          onClick={() => setActiveTab('leaves')}
           className={`tab-btn ${activeTab === 'leaves' ? 'active' : ''}`}
         >
           <Clock size={16} /> Pending Leave Approvals ({pendingLeaves.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('corrections')} 
+        <button
+          onClick={() => setActiveTab('corrections')}
           className={`tab-btn ${activeTab === 'corrections' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Published Mark Corrections ({pendingCorrections.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('reports')} 
+        <button
+          onClick={() => setActiveTab('reports')}
           className={`tab-btn ${activeTab === 'reports' ? 'active' : ''}`}
         >
           <FileSpreadsheet size={16} /> Department Analytics & Defaulters
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Send Notice
@@ -358,13 +358,13 @@ export default function HodView({
                     )}
 
                     <div className="approval-card-actions">
-                      <button 
+                      <button
                         onClick={() => openRejectModal('leave', req.id)}
                         className="btn-danger-outline"
                       >
                         <XCircle size={15} /> Reject with Reason
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleApproveLeave(req.id)}
                         className="btn-success"
                       >
@@ -427,13 +427,13 @@ export default function HodView({
                     </div>
 
                     <div className="approval-card-actions">
-                      <button 
+                      <button
                         onClick={() => openRejectModal('mark', cor.id)}
                         className="btn-danger-outline"
                       >
                         <XCircle size={15} /> Reject Proposal
                       </button>
-                      <button 
+                      <button
                         onClick={() => handleApproveMarkCorrection(cor)}
                         className="btn-success"
                       >
@@ -454,7 +454,7 @@ export default function HodView({
           <div className="pane-toolbar">
             <div className="filter-group">
               <label>Select Report Scope:</label>
-              <select 
+              <select
                 value={selectedReportType}
                 onChange={e => setSelectedReportType(e.target.value)}
               >
@@ -551,7 +551,7 @@ export default function HodView({
       {/* TAB 4: SEND NOTICE */}
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
-          <NoticeComposer 
+          <NoticeComposer
             publisherRole="HOD"
             publisherName={staffSession?.user?.name || "HOD"}
             publisherId={staffSession?.user?.id || 1}
@@ -579,7 +579,7 @@ export default function HodView({
               </p>
               <div className="form-group">
                 <label>Written Reason</label>
-                <textarea 
+                <textarea
                   rows={4}
                   placeholder="e.g. Medical certificate lacks official hospital stamp and dates overlap with unauthorized leave..."
                   value={rejectReasonText}

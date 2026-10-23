@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  Users, 
-  Layers, 
-  Bell, 
-  CreditCard, 
-  FileCheck2, 
-  BrainCircuit, 
-  Plus, 
-  Upload, 
-  Search, 
-  CheckCircle2, 
+import {
+  Users,
+  Layers,
+  Bell,
+  CreditCard,
+  FileCheck2,
+  BrainCircuit,
+  Plus,
+  Upload,
+  Search,
+  CheckCircle2,
   AlertCircle,
   Building2,
   Trash2,
@@ -25,6 +25,11 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
+import {
+  adminCreateStaffApi,
+  resendStaffSetupOtpApi,
+  deactivateStaffApi
+} from '../utils/staffAuthService';
 import NoticeComposer from './NoticeComposer';
 
 export default function AdminView({
@@ -138,6 +143,25 @@ export default function AdminView({
       }
     }
 
+    // Backend integration for staff creation (Admin creates staff without entering password)
+    if (newUser.role !== 'STUDENT') {
+      try {
+        if (staffSession?.accessToken) {
+          await adminCreateStaffApi({
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            department: newUser.department,
+            employeeCode: newUser.userCode
+          }, staffSession.accessToken);
+        }
+        alert(`Staff account for ${newUser.name} created successfully! An onboarding email with a 24-hour setup OTP has been dispatched to ${newUser.email}.`);
+      } catch (err) {
+        alert(err.message || 'Failed to provision staff account on the backend server.');
+        return;
+      }
+    }
+
     const created = {
       id: newId,
       ...newUser,
@@ -175,6 +199,39 @@ export default function AdminView({
       biometricConsent: false,
       consentVersion: '1.0'
     });
+  };
+
+  const handleResendSetupOtp = async (user) => {
+    if (!confirm(`Resend onboarding 24-hour setup OTP to ${user.name} (${user.email})?`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await resendStaffSetupOtpApi(user.id, staffSession.accessToken);
+      }
+      alert(`Account setup instructions and a fresh 24-hour OTP have been dispatched to ${user.email}.`);
+    } catch (err) {
+      alert(err.message || 'Failed to resend setup OTP.');
+    }
+  };
+
+  const handleDeactivateStaff = async (user) => {
+    if (!confirm(`Are you sure you want to deactivate staff account for ${user.name}? This will immediately invalidate their active sessions and block logins.`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await deactivateStaffApi(user.id, staffSession.accessToken);
+      }
+      setUsers(users.map(u => u.id === user.id ? { ...u, status: 'DISABLED' } : u));
+      onAddAuditLog({
+        action: 'DEACTIVATE',
+        entityType: 'USER',
+        entityId: String(user.id),
+        oldValue: JSON.stringify({ status: user.status }),
+        newValue: JSON.stringify({ status: 'DISABLED' }),
+        reason: `Staff account deactivated by Admin`
+      });
+      alert(`Staff account ${user.name} (${user.email}) has been deactivated.`);
+    } catch (err) {
+      alert(err.message || 'Failed to deactivate staff account.');
+    }
   };
 
   // Open Re-enroll Face Photo Modal
@@ -259,7 +316,7 @@ export default function AdminView({
       const line = lines[i].trim();
       if (!line) continue;
       const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-      
+
       const userCode = cols[0] || `student.${cols[1]?.toLowerCase().replace(/\s+/g, '') || i}`;
       const name = cols[1] || '';
       const email = cols[2] || `${userCode}@intellicampus.edu`;
@@ -540,7 +597,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
   const filteredUsers = users.filter(u => {
     const query = userSearch.toLowerCase();
-    const matchSearch = !userSearch || 
+    const matchSearch = !userSearch ||
       u.name.toLowerCase().includes(query) ||
       u.userCode.toLowerCase().includes(query) ||
       (u.rollNo && u.rollNo.toLowerCase().includes(query));
@@ -553,21 +610,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     <div className="admin-container animate-fade-in">
       <div className="section-header">
         <div>
-          <h1 className="page-title">Admin Operations Console</h1>
+          <h1 className="page-title">Principal Operations Console</h1>
           <p className="page-desc">
-            Centralized governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
+            Centralized institutional governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as System Administrator'}
+            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as Principal'}
           </div>
           <button
             type="button"
             onClick={() => setShowChangePasswordModal(true)}
             className="action-icon-btn"
             style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}
-            title="Change Admin Password"
+            title="Change Principal Password"
           >
             <KeyRound size={15} />
             <span>Change Password</span>
@@ -578,7 +635,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               onClick={onLogout}
               className="action-icon-btn"
               style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '5px' }}
-              title="Sign Out of Admin Console"
+              title="Sign Out of Principal Console"
             >
               <LogOut size={15} />
               <span>Logout</span>
@@ -589,38 +646,38 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
       {/* Admin Tab Navigation */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('users')} 
+        <button
+          onClick={() => setActiveTab('users')}
           className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
         >
           <Users size={16} /> User Management ({users.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('academic')} 
+        <button
+          onClick={() => setActiveTab('academic')}
           className={`tab-btn ${activeTab === 'academic' ? 'active' : ''}`}
         >
           <Layers size={16} /> Academic Setup & Rooms
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Targeted Notices ({notices.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('documents')} 
+        <button
+          onClick={() => setActiveTab('documents')}
           className={`tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
         >
           <FileCheck2 size={16} /> Verifiable Documents ({issuedDocuments.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('knowledge')} 
+        <button
+          onClick={() => setActiveTab('knowledge')}
           className={`tab-btn ${activeTab === 'knowledge' ? 'active' : ''}`}
         >
           <BrainCircuit size={16} /> Chatbot Knowledge Base ({knowledgeDocs.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('approvals')} 
+        <button
+          onClick={() => setActiveTab('approvals')}
           className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Staff Approvals
@@ -633,17 +690,17 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
           <div className="pane-toolbar" style={{ flexWrap: 'wrap', gap: '12px' }}>
             <div className="search-box">
               <Search size={16} />
-              <input 
-                type="text" 
-                placeholder="Search by name, roll no, or code..." 
+              <input
+                type="text"
+                placeholder="Search by name, roll no, or code..."
                 value={userSearch}
                 onChange={e => setUserSearch(e.target.value)}
               />
             </div>
-            
+
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <select 
-                value={roleFilter} 
+              <select
+                value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
                 style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'inherit' }}
               >
@@ -652,11 +709,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <option value="FACULTY">Faculty</option>
                 <option value="HOD">HOD</option>
                 <option value="MENTOR">Mentor</option>
-                <option value="ADMIN">Admin</option>
+                <option value="ADMIN">Principal</option>
               </select>
 
-              <select 
-                value={deptFilter} 
+              <select
+                value={deptFilter}
                 onChange={e => setDeptFilter(e.target.value)}
                 style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'inherit' }}
               >
@@ -740,7 +797,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                       <td>
                         <div style={{ display: 'flex', gap: '6px' }}>
                           {u.role === 'STUDENT' && (
-                            <button 
+                            <button
                               className="table-action-btn"
                               onClick={() => handleOpenEnrollModal(u)}
                               title={u.faceEnrolled ? "Re-enroll Face Photo" : "Enroll Face Photo"}
@@ -749,13 +806,39 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                               <Camera size={15} />
                             </button>
                           )}
-                          <button 
-                            className="table-action-btn"
-                            onClick={() => alert(`Reset password token sent to ${u.email}`)}
-                            title="Reset initial password"
-                          >
-                            <KeyRound size={15} />
-                          </button>
+                          {u.role !== 'STUDENT' && (
+                            <>
+                              <button
+                                type="button"
+                                className="table-action-btn"
+                                onClick={() => handleResendSetupOtp(u)}
+                                title="Resend 24-hour setup OTP to staff email"
+                                style={{ color: '#38bdf8' }}
+                              >
+                                <KeyRound size={15} />
+                              </button>
+                              {u.status === 'ACTIVE' && staffSession?.user?.email !== u.email && (
+                                <button
+                                  type="button"
+                                  className="table-action-btn"
+                                  onClick={() => handleDeactivateStaff(u)}
+                                  title="Deactivate staff account"
+                                  style={{ color: '#ef4444' }}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {u.role === 'STUDENT' && (
+                            <button
+                              className="table-action-btn"
+                              onClick={() => alert(`Password reset instructions for student sent to ${u.email}`)}
+                              title="Reset student password"
+                            >
+                              <KeyRound size={15} />
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>
@@ -802,9 +885,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                       <div className="room-badge-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                         <span className="badge-pill success">Radius: {room.radiusM}m</span>
                         <span className="badge-pill muted">{room.capacity} seats</span>
-                        <button 
-                          type="button" 
-                          onClick={() => handleOpenEditRoom(room)} 
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditRoom(room)}
                           className="btn-secondary btn-xs"
                           title="Configure room coordinates & geofence perimeter"
                         >
@@ -848,7 +931,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col">
-            <NoticeComposer 
+            <NoticeComposer
               publisherRole="ADMIN"
               publisherName={staffSession?.user?.name || "Admin Office"}
               publisherId={staffSession?.user?.id || 1}
@@ -913,11 +996,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <p className="card-desc">
                 Generate cryptographic credentials with unique tracking codes and QR links (`DOC-01`).
               </p>
-              
+
               <form onSubmit={handleIssueDocument} className="form-stack">
                 <div className="form-group">
                   <label>Document Classification</label>
-                  <select 
+                  <select
                     value={newDoc.type}
                     onChange={e => setNewDoc({...newDoc, type: e.target.value})}
                   >
@@ -928,12 +1011,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Recipient Student</label>
-                  <select 
+                  <select
                     value={newDoc.studentName}
                     onChange={e => {
                       const sel = users.find(u => u.name === e.target.value);
                       setNewDoc({
-                        ...newDoc, 
+                        ...newDoc,
                         studentName: e.target.value,
                         rollNo: sel?.rollNo || 'CS-104'
                       });
@@ -946,8 +1029,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>GPA / Academic Standing</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newDoc.gpa}
                     onChange={e => setNewDoc({...newDoc, gpa: e.target.value})}
                   />
@@ -978,7 +1061,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                           {doc.status}
                         </span>
                         {doc.status === 'VALID' ? (
-                          <button 
+                          <button
                             onClick={() => handleRevokeDocument(doc.code)}
                             className="btn-danger-outline btn-xs"
                             title="Revoke certificate"
@@ -1007,12 +1090,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <p className="card-desc">
                 Upload official circulars, syllabi, or exam ordinances. Document is split into 500-token chunks and vectorized for semantic search (`BOT-01`).
               </p>
-              
+
               <form onSubmit={handleAddKnowledgeDoc} className="form-stack">
                 <div className="form-group">
                   <label>Document Subject / Title</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Supplementary & Re-evaluation Ordinance 2026"
                     value={newKnowledgeTitle}
                     onChange={e => setNewKnowledgeTitle(e.target.value)}
@@ -1077,7 +1160,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <form onSubmit={handleCreateUser} className="form-stack">
               <div className="form-group">
                 <label>Full Name</label>
-                <input 
+                <input
                   type="text"
                   placeholder="e.g. Sneha Roy"
                   value={newUser.name}
@@ -1088,7 +1171,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>User Login Code</label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="e.g. student.sneha"
                     value={newUser.userCode}
@@ -1098,7 +1181,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Role</label>
-                  <select 
+                  <select
                     value={newUser.role}
                     onChange={e => setNewUser({...newUser, role: e.target.value})}
                   >
@@ -1106,12 +1189,13 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     <option value="FACULTY">Faculty</option>
                     <option value="MENTOR">Mentor</option>
                     <option value="HOD">HOD</option>
+                    <option value="ADMIN">Principal</option>
                   </select>
                 </div>
               </div>
               <div className="form-group">
-                <label>Email Address</label>
-                <input 
+                <label>Institutional Email Address</label>
+                <input
                   type="email"
                   placeholder="s.roy@intellicampus.edu"
                   value={newUser.email}
@@ -1119,12 +1203,18 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   required
                 />
               </div>
+
+              {newUser.role !== 'STUDENT' && (
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  <strong>Secure First-Time Password Flow:</strong> Principals never enter or see staff passwords. An unusable random hash is assigned, and a 24-hour setup OTP will be emailed to <em>{newUser.email || 'the user'}</em> to set their password on the Staff portal.
+                </div>
+              )}
               {newUser.role === 'STUDENT' && (
                 <>
                   <div className="grid-two-col-compact">
                     <div className="form-group">
                       <label>Roll Number</label>
-                      <input 
+                      <input
                         type="text"
                         placeholder="e.g. CS-111"
                         value={newUser.rollNo}
@@ -1133,7 +1223,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     </div>
                     <div className="form-group">
                       <label>Division</label>
-                      <select 
+                      <select
                         value={newUser.division}
                         onChange={e => setNewUser({...newUser, division: e.target.value})}
                       >
@@ -1146,8 +1236,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   <div className="form-group">
                     <label>Face Photo Enrollment (Required for Attendance)</label>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         accept="image/jpeg,image/png"
                         onChange={e => {
                           const file = e.target.files?.[0];
@@ -1161,9 +1251,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                         }}
                       />
                       {newUser.photoPreview && (
-                        <img 
-                          src={newUser.photoPreview} 
-                          alt="Face Preview" 
+                        <img
+                          src={newUser.photoPreview}
+                          alt="Face Preview"
                           style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #38bdf8' }}
                         />
                       )}
@@ -1175,7 +1265,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
                   <div className="form-group" style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', color: '#e2e8f0' }}>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={newUser.biometricConsent}
                         onChange={e => setNewUser({ ...newUser, biometricConsent: e.target.checked })}
@@ -1211,9 +1301,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <Camera size={20} className="text-primary" />
                 <h3>Biometric Face Enrollment: {enrollModal.student?.name}</h3>
               </div>
-              <button 
-                type="button" 
-                onClick={() => setEnrollModal({ ...enrollModal, open: false })} 
+              <button
+                type="button"
+                onClick={() => setEnrollModal({ ...enrollModal, open: false })}
                 className="modal-close"
               >
                 &times;
@@ -1226,7 +1316,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               <div className="form-group">
                 <label>Select Face Photo (JPEG/PNG, max 15MB)</label>
-                <input 
+                <input
                   type="file"
                   accept="image/jpeg,image/png"
                   onChange={e => {
@@ -1245,9 +1335,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               {enrollModal.photoPreview && (
                 <div style={{ textAlign: 'center', margin: '12px 0' }}>
-                  <img 
-                    src={enrollModal.photoPreview} 
-                    alt="Student Preview" 
+                  <img
+                    src={enrollModal.photoPreview}
+                    alt="Student Preview"
                     style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #10b981', margin: '0 auto' }}
                   />
                   <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '6px' }}>Ready for ArcFace 512-d feature extraction</div>
@@ -1256,7 +1346,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               <div className="form-group" style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', color: '#e2e8f0' }}>
-                  <input 
+                  <input
                     type="checkbox"
                     checked={enrollModal.consent}
                     onChange={e => setEnrollModal({ ...enrollModal, consent: e.target.checked })}
@@ -1270,15 +1360,15 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  onClick={() => setEnrollModal({ ...enrollModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setEnrollModal({ ...enrollModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={enrollModal.isSubmitting}
                   className="btn-primary"
                 >
@@ -1299,15 +1389,15 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <FileSpreadsheet size={20} className="text-primary" />
                 <h3>Bulk Student Ingestion &amp; CSV Preview (ADM-01)</h3>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={() => setCsvModal({ ...csvModal, open: false })} 
+                onClick={() => setCsvModal({ ...csvModal, open: false })}
                 className="modal-close"
               >
                 &times;
               </button>
             </div>
-            
+
             <div className="modal-body form-stack">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <div>
@@ -1378,16 +1468,16 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer" style={{ marginTop: '16px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setCsvModal({ ...csvModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setCsvModal({ ...csvModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  onClick={handleConfirmCsvImport} 
+                <button
+                  type="button"
+                  onClick={handleConfirmCsvImport}
                   className="btn-primary"
                   disabled={csvModal.parsedRows.length === 0}
                 >
@@ -1408,19 +1498,19 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <MapPin size={20} className="text-primary" />
                 <h3>{roomModal.isEditing ? 'Configure Geofence Coordinates' : 'Register New Geofenced Room'}</h3>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={() => setRoomModal({ ...roomModal, open: false })} 
+                onClick={() => setRoomModal({ ...roomModal, open: false })}
                 className="modal-close"
               >
                 &times;
               </button>
             </div>
-            
+
             <form onSubmit={handleSaveRoom} className="form-stack">
               <div className="form-group">
                 <label>Room / Hall Name</label>
-                <input 
+                <input
                   type="text"
                   placeholder="e.g. CS Lab 201"
                   value={roomModal.name}
@@ -1432,7 +1522,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>Latitude (Center Point)</label>
-                  <input 
+                  <input
                     type="number"
                     step="0.000001"
                     placeholder="18.52043"
@@ -1443,7 +1533,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Longitude (Center Point)</label>
-                  <input 
+                  <input
                     type="number"
                     step="0.000001"
                     placeholder="73.85674"
@@ -1457,7 +1547,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>Geofence Radius (meters)</label>
-                  <input 
+                  <input
                     type="number"
                     min="5"
                     max="500"
@@ -1472,7 +1562,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Seating Capacity</label>
-                  <input 
+                  <input
                     type="number"
                     min="1"
                     placeholder="60"
@@ -1491,9 +1581,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  onClick={() => setRoomModal({ ...roomModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setRoomModal({ ...roomModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel

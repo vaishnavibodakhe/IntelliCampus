@@ -1,13 +1,13 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Camera, 
-  CheckCircle2, 
-  AlertTriangle, 
-  Clock, 
-  Lock, 
-  RefreshCw, 
-  UserCheck, 
-  ShieldAlert, 
+import {
+  Camera,
+  CheckCircle2,
+  AlertTriangle,
+  Clock,
+  Lock,
+  RefreshCw,
+  UserCheck,
+  ShieldAlert,
   FileCheck,
   Send,
   Eye,
@@ -529,20 +529,20 @@ export default function FacultyView({
 
       {/* Tabs */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('attendance')} 
+        <button
+          onClick={() => setActiveTab('attendance')}
           className={`tab-btn ${activeTab === 'attendance' ? 'active' : ''}`}
         >
           <Camera size={16} /> Live Attendance Engine
         </button>
-        <button 
-          onClick={() => setActiveTab('marks')} 
+        <button
+          onClick={() => setActiveTab('marks')}
           className={`tab-btn ${activeTab === 'marks' ? 'active' : ''}`}
         >
           <Edit3 size={16} /> Enter &amp; Publish Marks
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Send Notice
@@ -621,15 +621,15 @@ export default function FacultyView({
               </div>
 
               <div className="camera-controls">
-                <button 
-                  onClick={handleToggleCamera} 
+                <button
+                  onClick={handleToggleCamera}
                   className={`btn-secondary ${isCameraActive ? 'active' : ''}`}
                 >
                   <Camera size={16} /> {isCameraActive ? 'Turn Off Camera' : 'Open Live Camera'}
                 </button>
                 {isCameraActive && (
-                  <button 
-                    onClick={handleCapturePhoto} 
+                  <button
+                    onClick={handleCapturePhoto}
                     disabled={isAnalyzingFaces}
                     className="btn-primary animate-pulse-glow"
                   >
@@ -765,7 +765,7 @@ export default function FacultyView({
                         <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
                           {rec.finalStatus === 'REVIEW' && (
                             <>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleApproveBorderline(rec.studentId)}
                                 className="btn-success btn-xs"
@@ -774,7 +774,7 @@ export default function FacultyView({
                               >
                                 <Check size={12} /> Approve
                               </button>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleRejectBorderline(rec.studentId)}
                                 className="btn-danger btn-xs"
@@ -785,7 +785,7 @@ export default function FacultyView({
                               </button>
                             </>
                           )}
-                          <button 
+                          <button
                             type="button"
                             onClick={() => setOverrideModal({ open: true, studentId: rec.studentId, currentStatus: rec.finalStatus })}
                             className="btn-secondary btn-xs"
@@ -859,18 +859,18 @@ export default function FacultyView({
                           </span>
                         ) : (
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <input 
-                              type="number" 
-                              min="0" 
-                              max={m.maxMarks} 
-                              value={m.marks} 
+                            <input
+                              type="number"
+                              min="0"
+                              max={m.maxMarks}
+                              value={m.marks}
                               onChange={e => handleUpdateMarkValue(m.id, e.target.value)}
                               className="font-mono text-primary font-bold"
-                              style={{ 
-                                width: '72px', 
-                                padding: '4px 8px', 
-                                borderRadius: '6px', 
-                                background: 'rgba(255,255,255,0.08)', 
+                              style={{
+                                width: '72px',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(255,255,255,0.08)',
                                 border: '1px solid rgba(56, 189, 248, 0.4)',
                                 textAlign: 'center'
                               }}
@@ -888,7 +888,7 @@ export default function FacultyView({
                       <td>
                         {m.status === 'PUBLISHED' ? (
                           <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                            <button 
+                            <button
                               type="button"
                               onClick={() => {
                                 setCorrectionModal({ open: true, markId: m.id, currentVal: m.marks });
@@ -899,7 +899,7 @@ export default function FacultyView({
                             >
                               <Edit3 size={12} /> Request Correction
                             </button>
-                            <button 
+                            <button
                               type="button"
                               onClick={() => handleToggleMarkStatus(m.id)}
                               className="btn-secondary btn-xs"
@@ -909,7 +909,7 @@ export default function FacultyView({
                             </button>
                           </div>
                         ) : (
-                          <button 
+                          <button
                             type="button"
                             onClick={() => handleToggleMarkStatus(m.id)}
                             className="btn-primary btn-xs"
@@ -932,7 +932,7 @@ export default function FacultyView({
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col" style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1.2fr) minmax(300px, 1fr)', gap: '20px' }}>
-            <NoticeComposer 
+            <NoticeComposer
               publisherRole="FACULTY"
               publisherName={staffSession?.user?.name || "Faculty Member"}
               publisherId={staffSession?.user?.id || 3}
@@ -949,7 +949,7 @@ export default function FacultyView({
                 <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Recent Faculty Circulars</h3>
                 <span className="badge-pill info">{facultyNotices.length} Notices</span>
               </div>
-              
+
               {facultyNotices.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
                   <Bell size={36} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
@@ -958,14 +958,14 @@ export default function FacultyView({
               ) : (
                 <div className="notices-stream" style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto' }}>
                   {facultyNotices.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className="notice-item-card" 
-                      style={{ 
-                        padding: '14px', 
-                        background: 'var(--bg-surface)', 
-                        borderRadius: '10px', 
-                        border: '1px solid var(--border-subtle)' 
+                    <div
+                      key={n.id}
+                      className="notice-item-card"
+                      style={{
+                        padding: '14px',
+                        background: 'var(--bg-surface)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-subtle)'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
@@ -1022,7 +1022,7 @@ export default function FacultyView({
               </div>
               <div className="form-group">
                 <label>Justification Reason</label>
-                <textarea 
+                <textarea
                   rows={3}
                   placeholder="e.g. Student present in seat row 3; camera glare prevented face embedding match..."
                   value={overrideReason}
@@ -1058,16 +1058,16 @@ export default function FacultyView({
               </div>
               <div className="form-group">
                 <label>Proposed New Marks</label>
-                <input 
-                  type="number" 
-                  value={correctionNewMarks} 
-                  onChange={e => setCorrectionNewMarks(e.target.value)} 
-                  required 
+                <input
+                  type="number"
+                  value={correctionNewMarks}
+                  onChange={e => setCorrectionNewMarks(e.target.value)}
+                  required
                 />
               </div>
               <div className="form-group">
                 <label>Evaluation Correction Justification</label>
-                <textarea 
+                <textarea
                   rows={4}
                   placeholder="e.g. Re-evaluation of question 3 totaling reveals 7 marks omitted during sheet entry..."
                   value={correctionReason}

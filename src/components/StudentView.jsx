@@ -1,19 +1,19 @@
 import React, { useState } from 'react';
-import { 
-  CheckCircle2, 
-  Clock, 
-  MapPin, 
-  FileText, 
-  MessageSquare, 
-  AlertTriangle, 
-  Calendar, 
-  Send, 
-  Download, 
-  ShieldCheck, 
-  Sparkles, 
-  ExternalLink, 
-  ChevronRight, 
-  RefreshCw, 
+import {
+  CheckCircle2,
+  Clock,
+  MapPin,
+  FileText,
+  MessageSquare,
+  AlertTriangle,
+  Calendar,
+  Send,
+  Download,
+  ShieldCheck,
+  Sparkles,
+  ExternalLink,
+  ChevronRight,
+  RefreshCw,
   Bell,
   LogOut,
   Check
@@ -253,32 +253,32 @@ export default function StudentView({
 
       {/* Tabs */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('dashboard')} 
+        <button
+          onClick={() => setActiveTab('dashboard')}
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
         >
           <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate !== undefined ? currentUser.attendanceRate : 0}%)
         </button>
-        <button 
-          onClick={() => setActiveTab('marks')} 
+        <button
+          onClick={() => setActiveTab('marks')}
           className={`tab-btn ${activeTab === 'marks' ? 'active' : ''}`}
         >
           <FileText size={16} /> Internal Marks &amp; Transcripts
         </button>
-        <button 
-          onClick={() => setActiveTab('leave')} 
+        <button
+          onClick={() => setActiveTab('leave')}
           className={`tab-btn ${activeTab === 'leave' ? 'active' : ''}`}
         >
           <Calendar size={16} /> Leave Applications ({myLeaves.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('documents')} 
+        <button
+          onClick={() => setActiveTab('documents')}
           className={`tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Issued Documents ({myDocuments.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Notices &amp; Circulars ({unreadTargetedCount > 0 ? `${unreadTargetedCount} unread` : targetedNotices.length})
@@ -291,7 +291,7 @@ export default function StudentView({
           <div className="alert-banner-left">
             <span className="live-pulsing-badge">● LIVE CLASS IN PROGRESS</span>
             <h3 style={{ marginTop: '4px' }}>{activeSession.subjectName} — {activeSession.roomName}</h3>
-            
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '6px' }}>
               <span className="text-secondary text-sm">
                 <MapPin size={14} className="inline mr-1" />
@@ -314,9 +314,9 @@ export default function StudentView({
             )}
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation()} 
+              <button
+                type="button"
+                onClick={() => requestDeviceLocation()}
                 className="btn-secondary btn-xs flex items-center gap-1"
                 disabled={isLocating}
               >
@@ -391,7 +391,7 @@ export default function StudentView({
                 <h3>Subject-Wise Attendance</h3>
                 <span className="badge-pill info">{currentUser.semester || 'Current Semester'}</span>
               </div>
-              
+
               <div className="subject-progress-list">
                 {subjectEntries.length === 0 ? (
                   <div className="empty-state-box" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
@@ -503,8 +503,8 @@ export default function StudentView({
                 <div className="grid-two-col-compact">
                   <div className="form-group">
                     <label>From Date</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={leaveForm.fromDate}
                       onChange={e => setLeaveForm({...leaveForm, fromDate: e.target.value})}
                       required
@@ -512,8 +512,8 @@ export default function StudentView({
                   </div>
                   <div className="form-group">
                     <label>To Date</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={leaveForm.toDate}
                       onChange={e => setLeaveForm({...leaveForm, toDate: e.target.value})}
                       required
@@ -523,7 +523,7 @@ export default function StudentView({
 
                 <div className="form-group">
                   <label>Reason for Leave</label>
-                  <textarea 
+                  <textarea
                     rows={4}
                     placeholder="Specify detailed reason (e.g. Medical emergency, University Hackathon delegation)..."
                     value={leaveForm.reason}
@@ -535,8 +535,8 @@ export default function StudentView({
                 <div className="form-group">
                   <label>Document Evidence Attachment (Doctor Certificate / Official Letter)</label>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       id="leave-attachment-upload"
                       accept=".pdf,.png,.jpg,.jpeg"
                       style={{ display: 'none' }}
@@ -546,8 +546,8 @@ export default function StudentView({
                         }
                       }}
                     />
-                    <label 
-                      htmlFor="leave-attachment-upload" 
+                    <label
+                      htmlFor="leave-attachment-upload"
                       className="btn-secondary btn-sm"
                       style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}
                     >
@@ -648,8 +648,8 @@ export default function StudentView({
 
                     <div className="cert-footer">
                       <span className="text-xs text-muted">Issued: {doc.issueDate}</span>
-                      <a 
-                        href={`#`} 
+                      <a
+                        href={`#`}
                         onClick={(e) => {
                           e.preventDefault();
                           alert(`Public verification link: /verify/${doc.code}`);

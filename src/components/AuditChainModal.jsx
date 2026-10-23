@@ -1,21 +1,21 @@
 import React, { useState } from 'react';
-import { 
-  Link2, 
-  ShieldCheck, 
-  AlertOctagon, 
-  CheckCircle2, 
-  X, 
-  RefreshCw, 
-  Cpu, 
-  Lock, 
+import {
+  Link2,
+  ShieldCheck,
+  AlertOctagon,
+  CheckCircle2,
+  X,
+  RefreshCw,
+  Cpu,
+  Lock,
   Bug
 } from 'lucide-react';
 import { verifyAuditChainIntegrity } from '../utils/cryptoAndGeo';
 
-export default function AuditChainModal({ 
-  auditLogs, 
-  setAuditLogs, 
-  onClose 
+export default function AuditChainModal({
+  auditLogs,
+  setAuditLogs,
+  onClose
 }) {
   const [verificationResult, setVerificationResult] = useState(null);
   const [isVerifying, setIsVerifying] = useState(false);
@@ -109,23 +109,23 @@ export default function AuditChainModal({
           </div>
 
           <div className="audit-buttons-col">
-            <button 
-              onClick={handleRunIntegrityCheck} 
+            <button
+              onClick={handleRunIntegrityCheck}
               disabled={isVerifying}
               className="btn-primary btn-sm"
             >
               <Cpu size={14} /> {isVerifying ? 'Verifying Hashes...' : 'Run Integrity Check'}
             </button>
-            <button 
-              onClick={handleSimulateTamper} 
+            <button
+              onClick={handleSimulateTamper}
               className="btn-danger-outline btn-sm"
               title="Deliberately modify an old record directly in DB"
             >
               <Bug size={14} /> Simulate DB Tamper (TC-11)
             </button>
             {verificationResult?.status === 'BROKEN' && (
-              <button 
-                onClick={handleRestoreChain} 
+              <button
+                onClick={handleRestoreChain}
                 className="btn-secondary btn-sm"
               >
                 <RefreshCw size={14} /> Restore Clean Chain
@@ -140,8 +140,8 @@ export default function AuditChainModal({
             const isBroken = verificationResult?.status === 'BROKEN' && verificationResult?.brokenEntryId === block.id;
 
             return (
-              <div 
-                key={block.id} 
+              <div
+                key={block.id}
                 className={`audit-block-card glass-card ${isBroken ? 'block-tampered' : ''}`}
               >
                 <div className="audit-block-header">

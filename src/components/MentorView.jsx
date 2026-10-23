@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { 
-  Users, 
-  AlertTriangle, 
-  Clock, 
-  TrendingDown, 
-  CheckCircle, 
-  XCircle, 
-  MessageSquare, 
-  Send, 
+import {
+  Users,
+  AlertTriangle,
+  Clock,
+  TrendingDown,
+  CheckCircle,
+  XCircle,
+  MessageSquare,
+  Send,
   FileText,
   ShieldAlert,
   ArrowRight,
@@ -31,7 +31,7 @@ export default function MentorView({
   const [riskFilter, setRiskFilter] = useState('ALL');
   const [selectedStudentForAction, setSelectedStudentForAction] = useState(null);
   const [mentorActionNote, setMentorActionNote] = useState('');
-  
+
   // Mentor recommend or reject leave
   const [recommendModal, setRecommendModal] = useState({ open: false, reqId: null, isRecommend: true });
   const [mentorCommentText, setMentorCommentText] = useState('');
@@ -152,26 +152,26 @@ export default function MentorView({
 
       {/* Tabs */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('risk')} 
+        <button
+          onClick={() => setActiveTab('risk')}
           className={`tab-btn ${activeTab === 'risk' ? 'active' : ''}`}
         >
           <ShieldAlert size={16} /> Risk Alerts ({highRiskStudents.length} Critical)
         </button>
-        <button 
-          onClick={() => setActiveTab('leaves')} 
+        <button
+          onClick={() => setActiveTab('leaves')}
           className={`tab-btn ${activeTab === 'leaves' ? 'active' : ''}`}
         >
           <Clock size={16} /> Leave Verification ({pendingLeavesForMentor.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('mentees')} 
+        <button
+          onClick={() => setActiveTab('mentees')}
           className={`tab-btn ${activeTab === 'mentees' ? 'active' : ''}`}
         >
           <Users size={16} /> Assigned Mentees ({mentees.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Send Notice
@@ -214,8 +214,8 @@ export default function MentorView({
               </div>
             ) : (
               filteredRiskStudents.map(student => (
-                <div 
-                  key={student.studentId} 
+                <div
+                  key={student.studentId}
                   className={`glass-card risk-item-card ${student.level === 'HIGH' ? 'border-danger' : ''}`}
                 >
                   <div className="risk-card-top">
@@ -265,7 +265,7 @@ export default function MentorView({
                   </div>
 
                   <div className="risk-card-actions">
-                    <button 
+                    <button
                       onClick={() => setSelectedStudentForAction(student)}
                       className="btn-primary w-full"
                     >
@@ -321,13 +321,13 @@ export default function MentorView({
                     )}
 
                     <div className="approval-card-actions">
-                      <button 
+                      <button
                         onClick={() => setRecommendModal({ open: true, reqId: req.id, isRecommend: false })}
                         className="btn-danger-outline"
                       >
                         <XCircle size={15} /> Reject
                       </button>
-                      <button 
+                      <button
                         onClick={() => setRecommendModal({ open: true, reqId: req.id, isRecommend: true })}
                         className="btn-success"
                       >
@@ -397,7 +397,7 @@ export default function MentorView({
       {/* TAB 4: SEND NOTICE */}
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
-          <NoticeComposer 
+          <NoticeComposer
             publisherRole="MENTOR"
             publisherName={staffSession?.user?.name || "Faculty Mentor"}
             publisherId={staffSession?.user?.id || 1}
@@ -425,7 +425,7 @@ export default function MentorView({
               </p>
               <div className="form-group">
                 <label>Intervention / Meeting Notes</label>
-                <textarea 
+                <textarea
                   rows={4}
                   placeholder="e.g. Conducted 1-on-1 counseling session regarding consecutive absences; parent informed; assigned peer tutor for Machine Learning..."
                   value={mentorActionNote}
@@ -457,7 +457,7 @@ export default function MentorView({
             <form onSubmit={handleLeaveDecision} className="form-stack">
               <div className="form-group">
                 <label>Mentor Notes &amp; Observations for HOD</label>
-                <textarea 
+                <textarea
                   rows={3}
                   placeholder="e.g. Student has provided verified medical documents. Recommending approval."
                   value={mentorCommentText}

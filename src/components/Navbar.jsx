@@ -1,28 +1,25 @@
-import { 
-  ShieldCheck, 
-  UserCheck, 
-  GraduationCap, 
-  Users, 
-  FileText, 
-  QrCode, 
-  Bell, 
-  Link2, 
-  Sun, 
-  Moon, 
-  Sparkles,
-  BookOpen
+import React from 'react';
+import {
+  ShieldCheck,
+  UserCheck,
+  GraduationCap,
+  QrCode,
+  Sun,
+  Moon,
+  LogOut,
+  LayoutGrid
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
-export default function Navbar({ 
-  currentRole, 
-  setCurrentRole, 
-  theme, 
-  setTheme, 
-  onOpenAudit, 
-  onOpenChat,
+export default function Navbar({
+  currentPath = '/',
+  currentRole,
+  onNavigateHome,
+  theme,
+  setTheme,
   activeSession,
   notificationCount = 0,
+  staffSession,
   notices = [],
   unreadCount,
   isLoadingNotices = false,
@@ -30,20 +27,29 @@ export default function Navbar({
   onMarkNoticeRead,
   onRefreshNotices,
   onViewAllNotices,
-  currentUser = null
+  currentUser = null,
+  onLogout
 }) {
-  const roles = [
-    { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
-    { id: 'HOD', label: 'HOD', icon: BookOpen, color: '#8b5cf6' },
-    { id: 'FACULTY', label: 'Faculty', icon: UserCheck, color: '#06b6d4' },
-    { id: 'MENTOR', label: 'Mentor', icon: Users, color: '#10b981' },
-    { id: 'STUDENT', label: 'Student', icon: GraduationCap, color: '#f59e0b' },
-    { id: 'PUBLIC', label: 'Public Verifier', icon: QrCode, color: '#ec4899' }
-  ];
+  // Determine active portal mode
+  const isLanding = currentPath === '/' && (!currentRole || currentRole === 'LANDING');
+  const isPrincipalPortal = currentPath === '/admin/login' || currentRole === 'ADMIN';
+  const isStaffPortal = currentPath === '/staff/login' || ['STAFF', 'HOD', 'FACULTY', 'MENTOR'].includes(currentRole);
+  const isStudentPortal = currentPath === '/student/login' || currentRole === 'STUDENT';
+  const isPublicPortal = currentPath === '/verify' || currentRole === 'PUBLIC';
+
+  const staffRole = staffSession?.user?.role;
+  const staffName = staffSession?.user?.name;
+  const studentName = currentUser?.name;
 
   return (
     <header className="navbar-container">
-      <div className="navbar-brand">
+      {/* Brand logo & return to portal landing */}
+      <div
+        className="navbar-brand"
+        onClick={onNavigateHome}
+        style={{ cursor: 'pointer' }}
+        title="Return to IntelliCampus Portal Selection"
+      >
         <div className="brand-logo-wrap">
           <svg className="brand-logo" viewBox="0 0 100 100">
             <defs>
@@ -63,76 +69,117 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Role Workflow Switcher */}
-      <div className="role-switcher-container">
-        <span className="role-switcher-label">Select Active Workflow:</span>
-        <div className="role-pill-group">
-          {roles.map(r => {
-            const Icon = r.icon;
-            const isActive = currentRole === r.id;
-            return (
-              <button
-                key={r.id}
-                onClick={() => setCurrentRole(r.id)}
-                className={`role-pill-btn ${isActive ? 'active' : ''}`}
-                style={{
-                  '--accent': r.color
-                }}
-              >
-                <Icon size={15} />
-                <span>{r.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Role-Specific Portal Indicator without mixing options */}
+      <div className="navbar-portal-center">
+        {isLanding ? (
+          <div className="portal-indicator-badge landing">
+            <LayoutGrid size={15} style={{ color: '#818cf8' }} />
+            <span>Role Selection Portal</span>
+          </div>
+        ) : isPrincipalPortal ? (
+          <div className="portal-indicator-badge principal">
+            <ShieldCheck size={16} />
+            <span>Principal Portal</span>
+          </div>
+        ) : isStaffPortal ? (
+          <div className="portal-indicator-badge staff">
+            <UserCheck size={16} />
+            <span>Staff Portal</span>
+            {staffRole && <span className="staff-subrole-badge">{staffRole}</span>}
+          </div>
+        ) : isStudentPortal ? (
+          <div className="portal-indicator-badge student">
+            <GraduationCap size={16} />
+            <span>Student Portal</span>
+          </div>
+        ) : isPublicPortal ? (
+          <div className="portal-indicator-badge public">
+            <QrCode size={16} />
+            <span>Public Document Verifier</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Action shortcuts */}
       <div className="navbar-actions">
-        {/* Active Class Live Indicator */}
-        {activeSession && activeSession.status === 'OPEN' && (
+        {/* Active Class Live Indicator (only for Staff and Students) */}
+        {(isStaffPortal || isStudentPortal) && activeSession && activeSession.status === 'OPEN' && (
           <div className="live-session-badge animate-pulse-glow" title="Active attendance session ongoing">
             <span className="live-dot" />
             <span>Live: {activeSession.challengeCode}</span>
           </div>
         )}
 
-        {/* Notice Broadcast Alerts Indicator & Dropdown */}
-        <NotificationBell 
-          notices={notices}
-          unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
-          isLoading={isLoadingNotices}
-          error={noticeError}
-          onMarkNoticeRead={onMarkNoticeRead}
-          onRefresh={onRefreshNotices}
-          onViewAll={onViewAllNotices}
-          currentRole={currentRole}
-          currentUser={currentUser}
-        />
+        {/* Notice Broadcast Alerts Indicator & Dropdown (only for Staff and Students) */}
+        {(isStaffPortal || isStudentPortal) && (
+          <NotificationBell
+            notices={notices}
+            unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
+            isLoading={isLoadingNotices}
+            error={noticeError}
+            onMarkNoticeRead={onMarkNoticeRead}
+            onRefresh={onRefreshNotices}
+            onViewAll={onViewAllNotices}
+            currentRole={currentRole}
+            currentUser={currentUser}
+          />
+        )}
 
-        {/* Cryptographic Audit Hash Chain Inspector */}
-        <button 
-          onClick={onOpenAudit}
-          className="action-icon-btn audit-btn"
-          title="Cryptographic SHA-256 Audit Chain Inspector"
-        >
-          <Link2 size={17} />
-          <span className="btn-label">Audit Chain</span>
-        </button>
+        {/* Switch Portal / Return to Home button when inside a specific portal */}
+        {!isLanding && (
+          <button
+            type="button"
+            onClick={onNavigateHome}
+            className="action-icon-btn home-nav-btn"
+            title="Switch to another Role Portal"
+          >
+            <LayoutGrid size={16} />
+            <span className="btn-label">Portals</span>
+          </button>
+        )}
 
-        {/* RAG Chatbot Button */}
-        <button 
-          onClick={onOpenChat}
-          className="action-icon-btn chat-btn"
-          title="Ask IntelliCampus Document AI Chatbot"
-        >
-          <Sparkles size={17} />
-          <span className="btn-label">Ask AI</span>
-        </button>
+        {/* User Identity Chip when logged in */}
+        {isPrincipalPortal && staffSession?.user?.role === 'ADMIN' && (
+          <div className="navbar-user-chip" title="Connected as Principal">
+            <span className="dot" />
+            <span>{staffName || 'Principal'}</span>
+          </div>
+        )}
 
+        {isStaffPortal && staffSession?.user && (
+          <div className="navbar-user-chip" title={`Connected as ${staffRole}`}>
+            <span className="dot" />
+            <span>{staffName}</span>
+          </div>
+        )}
+
+        {isStudentPortal && currentUser && (
+          <div className="navbar-user-chip" title="Connected as Student">
+            <span className="dot" />
+            <span>{studentName}</span>
+          </div>
+        )}
+
+        {/* Logout button in navbar when logged into any portal */}
+        {onLogout && (
+          (isPrincipalPortal && staffSession?.user?.role === 'ADMIN') ||
+          (isStaffPortal && staffSession?.user) ||
+          (isStudentPortal && currentUser)
+        ) && (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="action-icon-btn"
+            style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+            title="Sign Out of Session"
+          >
+            <LogOut size={16} />
+            <span className="btn-label">Sign Out</span>
+          </button>
+        )}
 
         {/* Theme Toggle */}
-        <button 
+        <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className="action-icon-btn"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}

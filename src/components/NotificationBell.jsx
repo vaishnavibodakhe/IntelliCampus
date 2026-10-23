@@ -1,21 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { 
-  Bell, 
-  Check, 
-  CheckCircle2, 
-  Clock, 
-  AlertCircle, 
-  RefreshCw, 
-  X, 
-  Loader2, 
-  ChevronDown, 
+import {
+  Bell,
+  Check,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  X,
+  Loader2,
+  ChevronDown,
   ChevronUp,
   ExternalLink
 } from 'lucide-react';
 
 /**
  * NotificationBell Component
- * 
+ *
  * Provides an interactive notification bell indicator and dropdown panel
  * for students to browse targeted announcements, view read/unread states,
  * and mark circulars as read with backend persistence.
@@ -164,7 +164,7 @@ export default function NotificationBell({
       >
         <Bell size={17} />
         {unreadCount > 0 && (
-          <span 
+          <span
             className="badge-notification-count"
             id="notice-bell-badge"
             style={{
@@ -192,7 +192,7 @@ export default function NotificationBell({
 
       {/* Dropdown panel */}
       {isOpen && (
-        <div 
+        <div
           className="notice-dropdown-panel glass-card animate-fade-in"
           id="notice-dropdown-panel"
           style={{
@@ -212,7 +212,7 @@ export default function NotificationBell({
           }}
         >
           {/* Panel Header */}
-          <div 
+          <div
             className="notice-dropdown-header"
             style={{
               display: 'flex',
@@ -312,8 +312,8 @@ export default function NotificationBell({
             }}>
               <AlertCircle size={14} style={{ flexShrink: 0 }} />
               <span style={{ flex: 1 }}>{actionError}</span>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={() => setActionError(null)}
                 style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer' }}
               >
@@ -323,7 +323,7 @@ export default function NotificationBell({
           )}
 
           {/* Panel Body: States & List */}
-          <div 
+          <div
             className="notice-dropdown-body"
             style={{
               overflowY: 'auto',
@@ -345,8 +345,8 @@ export default function NotificationBell({
                 <AlertCircle size={28} style={{ margin: '0 auto 8px', display: 'block' }} />
                 <p style={{ margin: '0 0 10px', fontSize: '0.85rem' }}>{error}</p>
                 {onRefresh && (
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={onRefresh}
                     className="btn-secondary"
                     style={{ fontSize: '0.78rem', padding: '4px 12px' }}
@@ -359,7 +359,7 @@ export default function NotificationBell({
 
             {/* Empty state */}
             {!isLoading && !error && notices.length === 0 && (
-              <div 
+              <div
                 className="notice-empty-state"
                 id="notice-empty-state"
                 style={{ padding: '40px 20px', textAlign: 'center', color: 'var(--text-muted)' }}
@@ -390,11 +390,11 @@ export default function NotificationBell({
                       style={{
                         padding: '12px 16px',
                         borderBottom: '1px solid var(--border-subtle, rgba(255,255,255,0.06))',
-                        background: isUnread 
-                          ? 'rgba(99, 102, 241, 0.08)' 
+                        background: isUnread
+                          ? 'rgba(99, 102, 241, 0.08)'
                           : 'transparent',
-                        borderLeft: isUnread 
-                          ? '3px solid #6366f1' 
+                        borderLeft: isUnread
+                          ? '3px solid #6366f1'
                           : '3px solid transparent',
                         cursor: 'pointer',
                         transition: 'background 0.15s ease'
@@ -404,8 +404,8 @@ export default function NotificationBell({
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '8px', marginBottom: '4px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flex: 1 }}>
                           {isUnread && (
-                            <span 
-                              className="notice-unread-dot" 
+                            <span
+                              className="notice-unread-dot"
                               title="Unread circular"
                               style={{
                                 width: '7px',
@@ -413,12 +413,12 @@ export default function NotificationBell({
                                 borderRadius: '50%',
                                 background: '#6366f1',
                                 flexShrink: 0
-                              }} 
+                              }}
                             />
                           )}
-                          <h4 style={{ 
-                            margin: 0, 
-                            fontSize: '0.88rem', 
+                          <h4 style={{
+                            margin: 0,
+                            fontSize: '0.88rem',
                             fontWeight: isUnread ? 700 : 600,
                             color: isUnread ? 'var(--text-primary, #ffffff)' : 'var(--text-secondary, #cbd5e1)',
                             lineHeight: 1.3
@@ -428,7 +428,7 @@ export default function NotificationBell({
                         </div>
 
                         {/* Read/Unread Pill */}
-                        <span 
+                        <span
                           className={`badge-pill ${isUnread ? 'accent' : 'success'}`}
                           style={{ fontSize: '0.65rem', padding: '1px 6px', flexShrink: 0 }}
                         >
@@ -512,7 +512,7 @@ export default function NotificationBell({
 
           {/* Panel Footer */}
           {notices.length > 0 && (
-            <div 
+            <div
               className="notice-dropdown-footer"
               style={{
                 display: 'flex',
