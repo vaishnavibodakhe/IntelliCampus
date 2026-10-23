@@ -1,13 +1,13 @@
 import React from 'react';
-import { 
-  Shield, 
-  UserCheck, 
-  GraduationCap, 
+import {
+  Shield,
+  UserCheck,
+  GraduationCap,
   ArrowRight
 } from 'lucide-react';
 import './RolePortalLanding.css';
 
-export default function RolePortalLanding({ 
+export default function RolePortalLanding({
   onSelectRole,
   staffSession,
   currentStudent
@@ -35,7 +35,7 @@ export default function RolePortalLanding({
             <Shield size={38} />
           </div>
           <h2 className="landing-card-title">Principal</h2>
-          
+
           {isPrincipalLoggedIn && (
             <div className="landing-active-session-pill">
               <span className="landing-active-dot" />
@@ -43,7 +43,7 @@ export default function RolePortalLanding({
             </div>
           )}
 
-          <button 
+          <button
             type="button"
             onClick={() => onSelectRole('ADMIN')}
             className="landing-card-btn"
@@ -60,7 +60,7 @@ export default function RolePortalLanding({
             <UserCheck size={38} />
           </div>
           <h2 className="landing-card-title">Staff</h2>
-          
+
           {isStaffLoggedIn && (
             <div className="landing-active-session-pill">
               <span className="landing-active-dot" />
@@ -68,7 +68,7 @@ export default function RolePortalLanding({
             </div>
           )}
 
-          <button 
+          <button
             type="button"
             onClick={() => onSelectRole('STAFF')}
             className="landing-card-btn"
@@ -85,7 +85,7 @@ export default function RolePortalLanding({
             <GraduationCap size={38} />
           </div>
           <h2 className="landing-card-title">Student</h2>
-          
+
           {isStudentLoggedIn && (
             <div className="landing-active-session-pill">
               <span className="landing-active-dot" />
@@ -93,7 +93,7 @@ export default function RolePortalLanding({
             </div>
           )}
 
-          <button 
+          <button
             type="button"
             onClick={() => onSelectRole('STUDENT')}
             className="landing-card-btn"

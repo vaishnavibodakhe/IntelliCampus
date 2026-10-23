@@ -5,7 +5,7 @@ import path from 'node:path';
 import { 
   calculateHaversineDistance, 
   validateGeofence,
-  validateSpoofConfidence 
+  validateSpoofConfidence
 } from '../../utils/cryptoAndGeo.js';
 
 /**

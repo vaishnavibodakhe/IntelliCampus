@@ -227,7 +227,7 @@ export const api = {
   },
 
   async enrollStudentFace(studentId, payload, consentVersion = '1.0') {
-    // If payload is an object with token & frames (new 3-frame camera flow)
+    // If payload is an object with token & frames (3-frame camera flow)
     if (payload && typeof payload === 'object' && payload.token && payload.frames) {
       const res = await fetch(`/api/students/${studentId}/face-enroll`, {
         method: 'POST',
@@ -243,13 +243,7 @@ export const api = {
       return handleResponse(res);
     }
 
-    // Graceful fallback for mock/admin simulation if payload is not new format
-    return {
-      status: 'SUCCESS',
-      studentId,
-      faceEnrolled: true,
-      message: 'Face enrolled successfully.'
-    };
+    throw new Error('Biometric face enrollment requires valid camera frames and a one-time capture token.');
   },
 
   async getStudent(studentId) {
@@ -292,6 +286,212 @@ export const api = {
       params.append('search', query.trim());
     }
     const res = await fetch(`/api/users?${params.toString()}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // Academic Setup (Rooms & Subjects)
+  async getRooms() {
+    const res = await fetch('/api/academic/rooms', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async createRoom(roomData) {
+    const res = await fetch('/api/academic/rooms', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(roomData),
+    });
+    return handleResponse(res);
+  },
+
+  async getSubjects() {
+    const res = await fetch('/api/academic/subjects', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async createSubject(subjectData) {
+    const res = await fetch('/api/academic/subjects', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(subjectData),
+    });
+    return handleResponse(res);
+  },
+
+  // Academic Marks & Corrections
+  async saveMark(markData) {
+    const res = await fetch('/api/marks', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(markData),
+    });
+    return handleResponse(res);
+  },
+
+  async getStudentMarks(studentId, onlyPublished = true) {
+    const res = await fetch(`/api/marks/student/${studentId}?onlyPublished=${onlyPublished}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getSubjectMarks(subjectId) {
+    const res = await fetch(`/api/marks/subject/${subjectId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async requestCorrection(correctionData) {
+    const res = await fetch('/api/marks/corrections', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(correctionData),
+    });
+    return handleResponse(res);
+  },
+
+  async getPendingCorrections() {
+    const res = await fetch('/api/marks/corrections/pending', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async decideCorrection(correctionId, decisionData) {
+    const res = await fetch(`/api/marks/corrections/${correctionId}/decision`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(decisionData),
+    });
+    return handleResponse(res);
+  },
+
+  // Leaves & Permissions
+  async submitLeave(leaveData) {
+    const res = await fetch('/api/leaves', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(leaveData),
+    });
+    return handleResponse(res);
+  },
+
+  async getAllLeaves() {
+    const res = await fetch('/api/leaves', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getStudentLeaves(studentId) {
+    const res = await fetch(`/api/leaves/student/${studentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getPendingMentorLeaves(mentorId) {
+    const res = await fetch(`/api/leaves/mentor/${mentorId}/pending`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getPendingHodLeaves() {
+    const res = await fetch('/api/leaves/hod/pending', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async mentorReviewLeave(leaveId, decision) {
+    const res = await fetch(`/api/leaves/${leaveId}/mentor`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(decision),
+    });
+    return handleResponse(res);
+  },
+
+  async hodReviewLeave(leaveId, decision) {
+    const res = await fetch(`/api/leaves/${leaveId}/hod`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(decision),
+    });
+    return handleResponse(res);
+  },
+
+  // Verifiable Credentials
+  async getAllDocuments() {
+    const res = await fetch('/api/credentials', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getStudentDocuments(studentId) {
+    const res = await fetch(`/api/credentials/student/${studentId}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async issueDocument(docData) {
+    const res = await fetch('/api/credentials/issue', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(docData),
+    });
+    return handleResponse(res);
+  },
+
+  async revokeDocument(code, revokeData) {
+    const res = await fetch(`/api/credentials/${encodeURIComponent(code)}/revoke`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(revokeData),
+    });
+    return handleResponse(res);
+  },
+
+  async verifyDocument(code) {
+    const res = await fetch(`/api/public/verify/${encodeURIComponent(code)}`);
+    return handleResponse(res);
+  },
+
+  // Cryptographic Audit Chain
+  async getAuditChain() {
+    const res = await fetch('/api/audit/chain', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async verifyAuditChain() {
+    const res = await fetch('/api/audit/verify', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // AI & Risk Assessment
+  async getHighRiskStudents() {
+    const res = await fetch('/api/ai/risk/high', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async getLatestStudentRisk(studentId) {
+    const res = await fetch(`/api/ai/risk/student/${studentId}/latest`, {
       headers: getAuthHeaders(),
     });
     return handleResponse(res);

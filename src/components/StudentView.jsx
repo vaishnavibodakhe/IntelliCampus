@@ -31,7 +31,7 @@ export default function StudentView({
   leaveRequests,
   setLeaveRequests,
   notices = [],
-  issuedDocuments,
+  issuedDocuments = [],
   onOpenChat,
   onAddAuditLog,
   onLogout,
@@ -45,7 +45,7 @@ export default function StudentView({
     fromDate: '',
     toDate: '',
     reason: '',
-    attachmentName: 'medical_certificate.pdf'
+    attachmentName: ''
   });
 
   // Dispute attendance modal state
@@ -181,12 +181,8 @@ export default function StudentView({
     }
   };
 
-  // Handle Confirm Attendance (ATT-07) with Present / Matched / Geo-out-of-range statuses
-  // Student attendance is automated via faculty classroom photo recognition (ATT-03).
-  // StudentView remains read-only for session verification.
-
   // Submit Leave Request (LVE-01)
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
     if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason) return;
 
@@ -198,6 +194,19 @@ export default function StudentView({
     }
 
     const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    try {
+      await api.submitLeave({
+        studentId: currentUser.id,
+        startDate: leaveForm.fromDate,
+        endDate: leaveForm.toDate,
+        reason: leaveForm.reason,
+        attachmentName: leaveForm.attachmentName || null,
+        daysCount: diffDays
+      });
+    } catch (err) {
+      console.warn('Backend submitLeave API call failed, updating local state:', err);
+    }
 
     const newReq = {
       id: Date.now(),
@@ -226,8 +235,8 @@ export default function StudentView({
       reason: `Student ${currentUser.name} submitted official leave application for ${diffDays} days (LVE-01)`
     });
 
-    setLeaveForm({ fromDate: '', toDate: '', reason: '', attachmentName: 'medical_certificate.pdf' });
-    alert('Leave application submitted to your mentor Dr. Sunita Mehta for review.');
+    setLeaveForm({ fromDate: '', toDate: '', reason: '', attachmentName: '' });
+    alert('Leave application submitted to your faculty mentor for review.');
   };
 
   // Dispute attendance
@@ -249,12 +258,29 @@ export default function StudentView({
 
     setDisputeModal({ open: false, sessionId: null });
     setDisputeComment('');
-    alert('Dispute logged and forwarded to course faculty Prof. Vikram Verma.');
+    alert('Dispute logged and forwarded to course faculty.');
   };
 
   const studentMarks = marks.filter(m => m.rollNo === currentUser.rollNo);
   const myLeaves = leaveRequests.filter(l => l.studentId === currentUser.id);
-  const myDocuments = issuedDocuments.filter(d => d.rollNo === currentUser.rollNo);
+  const myDocuments = (issuedDocuments || []).filter(d => d.rollNo === currentUser.rollNo);
+
+  const studentSubjectStats = {};
+  (sessions || []).forEach(sess => {
+    const rec = sess.attendanceRecords?.find(r => r.studentId === currentUser.id || r.rollNo === currentUser.rollNo);
+    if (rec) {
+      const sub = sess.subjectName || sess.subjectCode || 'General Class';
+      if (!studentSubjectStats[sub]) {
+        studentSubjectStats[sub] = { attended: 0, total: 0 };
+      }
+      studentSubjectStats[sub].total += 1;
+      if (rec.finalStatus === 'PRESENT') {
+        studentSubjectStats[sub].attended += 1;
+      }
+    }
+  });
+  const subjectEntries = Object.entries(studentSubjectStats);
+
   const targetedNotices = (notices || []).filter(n => {
     if (n.targetStudentIds && n.targetStudentIds.length > 0) {
       return n.targetStudentIds.includes(currentUser.id) || n.targetStudentIds.includes(Number(currentUser.id));
@@ -296,32 +322,32 @@ export default function StudentView({
 
       {/* Tabs */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('dashboard')} 
+        <button
+          onClick={() => setActiveTab('dashboard')}
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
         >
           <CheckCircle2 size={16} /> Overview &amp; Attendance ({overallPercentage}%)
         </button>
-        <button 
-          onClick={() => setActiveTab('marks')} 
+        <button
+          onClick={() => setActiveTab('marks')}
           className={`tab-btn ${activeTab === 'marks' ? 'active' : ''}`}
         >
           <FileText size={16} /> Internal Marks &amp; Transcripts
         </button>
-        <button 
-          onClick={() => setActiveTab('leave')} 
+        <button
+          onClick={() => setActiveTab('leave')}
           className={`tab-btn ${activeTab === 'leave' ? 'active' : ''}`}
         >
           <Calendar size={16} /> Leave Applications ({myLeaves.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('documents')} 
+        <button
+          onClick={() => setActiveTab('documents')}
           className={`tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Issued Documents ({myDocuments.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Notices &amp; Circulars ({unreadTargetedCount > 0 ? `${unreadTargetedCount} unread` : targetedNotices.length})
@@ -334,7 +360,7 @@ export default function StudentView({
           <div className="alert-banner-left">
             <span className="live-pulsing-badge">● LIVE CLASS IN PROGRESS</span>
             <h3 style={{ marginTop: '4px' }}>{activeSession.subjectName} — {activeSession.roomName}</h3>
-            
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap', marginTop: '6px' }}>
               <span className="text-secondary text-sm">
                 <MapPin size={14} className="inline mr-1" />
@@ -357,27 +383,13 @@ export default function StudentView({
             )}
 
             <div style={{ display: 'flex', gap: '8px', marginTop: '8px' }}>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation()} 
+              <button
+                type="button"
+                onClick={() => requestDeviceLocation()}
                 className="btn-secondary btn-xs flex items-center gap-1"
                 disabled={isLocating}
               >
                 <RefreshCw size={11} className={isLocating ? 'animate-spin' : ''} /> {isLocating ? 'Acquiring GPS...' : 'Acquire Live GPS'}
-              </button>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation(12)} 
-                className="btn-secondary btn-xs"
-              >
-                Test 12m (Inside)
-              </button>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation(85)} 
-                className="btn-secondary btn-xs"
-              >
-                Test 85m (Outside)
               </button>
             </div>
           </div>
@@ -427,10 +439,10 @@ export default function StudentView({
                   <RefreshCw size={13} className={isLoadingAttendance ? 'animate-spin' : ''} />
                 </button>
               </div>
-              <span className="kpi-val">{overallPercentage}%</span>
+              <span className="kpi-val">{totalEligible > 0 ? `${overallPercentage}%` : (currentUser.attendanceRate != null ? `${currentUser.attendanceRate}%` : '0%')}</span>
               <span className="kpi-sub">
                 {totalEligible === 0 
-                  ? 'No recorded sessions yet'
+                  ? (currentUser.attendanceRate != null ? `Based on enrolled record (${currentUser.attendanceRate}%)` : 'No recorded sessions yet')
                   : Number(overallPercentage) < 75 
                     ? `⚠️ Defaulter risk - Below 75% minimum (${attendedSessions}/${totalEligible} sessions)` 
                     : `✓ Compliant with university norms (${attendedSessions}/${totalEligible} sessions)`}
@@ -447,11 +459,11 @@ export default function StudentView({
               <span className="kpi-label">Tuition Fee Clearance</span>
               <span className="kpi-val text-sm">
                 <span className={`badge-pill ${currentUser.feeStatus === 'PAID' ? 'success' : 'warning'}`}>
-                  {currentUser.feeStatus || 'PAID'}
+                  {currentUser.feeStatus || 'PENDING'}
                 </span>
               </span>
               <span className="kpi-sub">
-                {currentUser.feeStatus === 'PAID' ? 'Zero outstanding dues' : `Due: $ ${currentUser.dueAmount || 0}`}
+                {currentUser.feeStatus === 'PAID' ? 'Zero outstanding dues' : (currentUser.dueAmount ? `Due: $ ${currentUser.dueAmount}` : 'Tuition clearance pending')}
               </span>
             </div>
           </div>
@@ -461,7 +473,7 @@ export default function StudentView({
             <div className="glass-card">
               <div className="card-header-flex">
                 <h3>Subject-Wise Attendance</h3>
-                <span className="badge-pill info">Semester 5</span>
+                <span className="badge-pill info">{currentUser.semester || 'Current Semester'}</span>
               </div>
               
               {isLoadingAttendance ? (
@@ -619,20 +631,28 @@ export default function StudentView({
                 </tr>
               </thead>
               <tbody>
-                {studentMarks.map(m => (
-                  <tr key={m.id}>
-                    <td><strong>{m.subjectCode}</strong></td>
-                    <td>{m.exam}</td>
-                    <td className="font-mono font-bold text-primary">{m.marks}</td>
-                    <td className="font-mono">{m.maxMarks}</td>
-                    <td className="font-mono">{((m.marks / m.maxMarks) * 100).toFixed(1)}%</td>
-                    <td>
-                      <span className="badge-pill success">
-                        🔒 Verified &amp; Published
-                      </span>
+                {studentMarks.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted, #94a3b8)' }}>
+                      No published examination marks available for your account.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  studentMarks.map(m => (
+                    <tr key={m.id}>
+                      <td><strong>{m.subjectCode}</strong></td>
+                      <td>{m.exam}</td>
+                      <td className="font-mono font-bold text-primary">{m.marks}</td>
+                      <td className="font-mono">{m.maxMarks}</td>
+                      <td className="font-mono">{m.maxMarks > 0 ? ((m.marks / m.maxMarks) * 100).toFixed(1) : 0}%</td>
+                      <td>
+                        <span className="badge-pill success">
+                          🔒 Verified &amp; Published
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -653,8 +673,8 @@ export default function StudentView({
                 <div className="grid-two-col-compact">
                   <div className="form-group">
                     <label>From Date</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={leaveForm.fromDate}
                       onChange={e => setLeaveForm({...leaveForm, fromDate: e.target.value})}
                       required
@@ -662,8 +682,8 @@ export default function StudentView({
                   </div>
                   <div className="form-group">
                     <label>To Date</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={leaveForm.toDate}
                       onChange={e => setLeaveForm({...leaveForm, toDate: e.target.value})}
                       required
@@ -673,7 +693,7 @@ export default function StudentView({
 
                 <div className="form-group">
                   <label>Reason for Leave</label>
-                  <textarea 
+                  <textarea
                     rows={4}
                     placeholder="Specify detailed reason (e.g. Medical emergency, University Hackathon delegation)..."
                     value={leaveForm.reason}
@@ -685,8 +705,8 @@ export default function StudentView({
                 <div className="form-group">
                   <label>Document Evidence Attachment (Doctor Certificate / Official Letter)</label>
                   <div style={{ display: 'flex', gap: '10px', alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input 
-                      type="file" 
+                    <input
+                      type="file"
                       id="leave-attachment-upload"
                       accept=".pdf,.png,.jpg,.jpeg"
                       style={{ display: 'none' }}
@@ -696,16 +716,20 @@ export default function StudentView({
                         }
                       }}
                     />
-                    <label 
-                      htmlFor="leave-attachment-upload" 
+                    <label
+                      htmlFor="leave-attachment-upload"
                       className="btn-secondary btn-sm"
                       style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '6px', margin: 0 }}
                     >
                       <FileText size={14} /> Select Proof File...
                     </label>
-                    <div className="attachment-chip font-mono text-xs">
-                      <FileText size={14} /> <span>{leaveForm.attachmentName}</span>
-                    </div>
+                    {leaveForm.attachmentName ? (
+                      <div className="attachment-chip font-mono text-xs">
+                        <FileText size={14} /> <span>{leaveForm.attachmentName}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">No proof document selected</span>
+                    )}
                   </div>
                 </div>
 
@@ -718,34 +742,40 @@ export default function StudentView({
             <div className="glass-card">
               <h3>My Leave Applications &amp; Tracking</h3>
               <div className="leave-status-list">
-                {myLeaves.map(leave => (
-                  <div key={leave.id} className="leave-item-card">
-                    <div className="leave-item-header">
-                      <div>
-                        <strong>{leave.fromDate} &rarr; {leave.toDate}</strong>
-                        <span className="days-badge">({leave.daysCount} Days)</span>
-                      </div>
-                      <span className={`badge-pill ${
-                        leave.finalStatus === 'APPROVED' ? 'success' :
-                        leave.finalStatus === 'REJECTED' ? 'danger' : 'warning'
-                      }`}>
-                        {leave.finalStatus}
-                      </span>
-                    </div>
-
-                    <p className="leave-reason-text">"{leave.reason}"</p>
-
-                    <div className="workflow-stepper">
-                      <div className={`step-dot ${leave.mentorStatus !== 'PENDING' ? 'done' : 'active'}`}>
-                        1. Mentor Review
-                      </div>
-                      <ChevronRight size={14} className="text-muted" />
-                      <div className={`step-dot ${leave.hodStatus === 'APPROVED' ? 'done' : leave.hodStatus === 'REJECTED' ? 'rejected' : 'active'}`}>
-                        2. HOD Final Decision
-                      </div>
-                    </div>
+                {myLeaves.length === 0 ? (
+                  <div className="empty-state-box" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
+                    <p style={{ margin: 0 }}>No leave applications submitted yet.</p>
                   </div>
-                ))}
+                ) : (
+                  myLeaves.map(leave => (
+                    <div key={leave.id} className="leave-item-card">
+                      <div className="leave-item-header">
+                        <div>
+                          <strong>{leave.fromDate} &rarr; {leave.toDate}</strong>
+                          <span className="days-badge">({leave.daysCount} Days)</span>
+                        </div>
+                        <span className={`badge-pill ${
+                          leave.finalStatus === 'APPROVED' ? 'success' :
+                          leave.finalStatus === 'REJECTED' ? 'danger' : 'warning'
+                        }`}>
+                          {leave.finalStatus}
+                        </span>
+                      </div>
+
+                      <p className="leave-reason-text">"{leave.reason}"</p>
+
+                      <div className="workflow-stepper">
+                        <div className={`step-dot ${leave.mentorStatus !== 'PENDING' ? 'done' : 'active'}`}>
+                          1. Mentor Review
+                        </div>
+                        <ChevronRight size={14} className="text-muted" />
+                        <div className={`step-dot ${leave.hodStatus === 'APPROVED' ? 'done' : leave.hodStatus === 'REJECTED' ? 'rejected' : 'active'}`}>
+                          2. HOD Final Decision
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -762,38 +792,46 @@ export default function StudentView({
             </p>
 
             <div className="doc-cards-grid mt-4">
-              {myDocuments.map(doc => (
-                <div key={doc.code} className="credential-certificate-card">
-                  <div className="cert-top">
-                    <div className="cert-seal">🎓</div>
-                    <div>
-                      <h4 className="cert-title">{doc.type}</h4>
-                      <span className="cert-code font-mono">{doc.code}</span>
+              {myDocuments.length === 0 ? (
+                <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center', gridColumn: '1 / -1', color: 'var(--text-muted, #94a3b8)' }}>
+                  <ShieldCheck size={38} className="text-muted" style={{ margin: '0 auto 0.75rem auto', opacity: 0.5 }} />
+                  <h4 style={{ color: 'var(--text-main, #f8fafc)', marginBottom: '0.25rem' }}>No Documents Issued</h4>
+                  <p style={{ fontSize: '0.88rem' }}>No official certificates or credentials have been issued for your roll number.</p>
+                </div>
+              ) : (
+                myDocuments.map(doc => (
+                  <div key={doc.code} className="credential-certificate-card">
+                    <div className="cert-top">
+                      <div className="cert-seal">🎓</div>
+                      <div>
+                        <h4 className="cert-title">{doc.type}</h4>
+                        <span className="cert-code font-mono">{doc.code}</span>
+                      </div>
+                    </div>
+
+                    <div className="cert-body">
+                      <p>Issued to: <strong>{doc.studentName}</strong> ({doc.rollNo})</p>
+                      <p>Department: {doc.department}</p>
+                      <p>Status: <span className="text-success font-bold">● {doc.status}</span></p>
+                      <p className="text-xs text-muted font-mono truncate">Hash: {doc.fileHash}</p>
+                    </div>
+
+                    <div className="cert-footer">
+                      <span className="text-xs text-muted">Issued: {doc.issueDate}</span>
+                      <a
+                        href={`#`}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          alert(`Public verification link: /verify/${doc.code}`);
+                        }}
+                        className="btn-secondary btn-xs"
+                      >
+                        <ExternalLink size={12} /> Public Verification Link
+                      </a>
                     </div>
                   </div>
-
-                  <div className="cert-body">
-                    <p>Issued to: <strong>{doc.studentName}</strong> ({doc.rollNo})</p>
-                    <p>Department: {doc.department}</p>
-                    <p>Status: <span className="text-success font-bold">● {doc.status}</span></p>
-                    <p className="text-xs text-muted font-mono truncate">Hash: {doc.fileHash}</p>
-                  </div>
-
-                  <div className="cert-footer">
-                    <span className="text-xs text-muted">Issued: {doc.issueDate}</span>
-                    <a 
-                      href={`#`} 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        alert(`Public verification link: /verify/${doc.code}`);
-                      }}
-                      className="btn-secondary btn-xs"
-                    >
-                      <ExternalLink size={12} /> Public Verification Link
-                    </a>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

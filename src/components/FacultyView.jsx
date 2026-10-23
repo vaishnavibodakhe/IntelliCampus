@@ -60,13 +60,31 @@ export default function FacultyView({
   setNotices
 }) {
   const [activeTab, setActiveTab] = useState('attendance');
-  const [selectedSubjectId, setSelectedSubjectId] = useState(12);
-  const [selectedRoomId, setSelectedRoomId] = useState(7);
+  const [selectedSubjectId, setSelectedSubjectId] = useState(subjects?.[0]?.id || 12);
+  const [selectedRoomId, setSelectedRoomId] = useState(rooms?.[0]?.id || 7);
   const [activeSession, setActiveSession] = useState(() => {
     const openSess = (sessions || []).find(s => s.status === 'OPEN' && s.id !== 51);
-    return openSess ? normalizeSession(openSess) : null;
+    return openSess ? normalizeSession(openSess) : (sessions?.[0] ? normalizeSession(sessions[0]) : null);
   });
   const [facultyNotices, setFacultyNotices] = useState(notices || []);
+
+  useEffect(() => {
+    if (!selectedSubjectId && subjects && subjects.length > 0) {
+      setSelectedSubjectId(subjects[0].id);
+    }
+  }, [subjects, selectedSubjectId]);
+
+  useEffect(() => {
+    if (!selectedRoomId && rooms && rooms.length > 0) {
+      setSelectedRoomId(rooms[0].id);
+    }
+  }, [rooms, selectedRoomId]);
+
+  useEffect(() => {
+    if (!activeSession && sessions && sessions.length > 0) {
+      setActiveSession(sessions[0]);
+    }
+  }, [sessions, activeSession]);
 
   useEffect(() => {
     if (notices && notices.length > 0) {
@@ -94,6 +112,7 @@ export default function FacultyView({
   const [capturedImageDims, setCapturedImageDims] = useState({ width: 0, height: 0 });
   const videoRef = useRef(null);
   const streamRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   // Recognition statistics derived strictly from the current photo's recognition response
   const photoFacesDetected = photoStats ? (photoStats.facesDetected ?? (photoStats.detectedFaces?.length || 0)) : 0;
@@ -367,6 +386,14 @@ export default function FacultyView({
     }
   };
 
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      handleProcessClassroomPhotoBlob(file);
+      e.target.value = '';
+    }
+  };
+
   const handleCapturePhoto = () => {
     setCameraError(null);
     setApiError(null);
@@ -432,7 +459,7 @@ export default function FacultyView({
       const newSess = {
         ...normalized,
         subjectName: sess.subjectName || subject?.name || 'Class',
-        roomName: sess.roomName || room?.name || 'Room',
+        roomName: sess.roomName || room?.name || 'Room'
       };
 
       setActiveSession(newSess);
@@ -450,8 +477,13 @@ export default function FacultyView({
         entityType: 'ATTENDANCE_SESSION',
         entityId: String(newSess.id),
         oldValue: '{}',
-        newValue: JSON.stringify({ code }),
-        reason: `Faculty initiated attendance session with challenge code ${code} (ATT-02)`
+        newValue: JSON.stringify({
+          subject: newSess.subjectName,
+          room: newSess.roomName,
+          code: newSess.challengeCode,
+          studentsExpected: (newSess.attendanceRecords || []).length
+        }),
+        reason: `Faculty started session for ${newSess.subjectName} in ${newSess.roomName} (Challenge: ${newSess.challengeCode})`
       });
     } catch (e) {
       console.error('API startSession failed:', e);
@@ -668,7 +700,7 @@ export default function FacultyView({
   };
 
   // Request Mark Correction to HOD
-  const handleSubmitCorrectionRequest = (e) => {
+  const handleSubmitCorrectionRequest = async (e) => {
     e.preventDefault();
     if (!correctionReason || correctionReason.trim().length < 15) {
       alert('Correction justification reason must be at least 15 characters (MRK-05).');
@@ -676,16 +708,30 @@ export default function FacultyView({
     }
 
     const targetMark = marks.find(m => m.id === correctionModal.markId);
+    const facultyName = staffSession?.user?.name || 'Faculty Member';
+    const facultyId = staffSession?.user?.id || 3;
+
+    try {
+      await api.requestCorrection({
+        markId: correctionModal.markId,
+        newMarks: Number(correctionNewMarks),
+        reason: correctionReason,
+        facultyId: facultyId
+      });
+    } catch (err) {
+      console.warn('Backend mark correction request API failed, updating local state:', err);
+    }
+
     const newCorrection = {
       id: Date.now(),
       markId: correctionModal.markId,
       studentName: targetMark?.studentName || 'Student',
-      rollNo: targetMark?.rollNo || 'CS-104',
-      subjectCode: targetMark?.subjectCode || 'CS-302',
+      rollNo: targetMark?.rollNo || 'N/A',
+      subjectCode: targetMark?.subjectCode || (subjects.find(s => s.id === selectedSubjectId)?.code || 'N/A'),
       exam: targetMark?.exam || selectedExam,
       oldMarks: targetMark?.marks || 0,
       newMarks: Number(correctionNewMarks),
-      facultyName: 'Prof. Vikram Verma',
+      facultyName: facultyName,
       reason: correctionReason,
       status: 'PENDING_HOD',
       requestedAt: new Date().toISOString(),
@@ -703,7 +749,7 @@ export default function FacultyView({
     });
 
     setCorrectionModal({ open: false, markId: null, currentVal: 0 });
-    alert('Correction request dispatched to HOD Dr. Sharma for approval.');
+    alert('Correction request dispatched to HOD for approval.');
   };
 
   return (
@@ -716,7 +762,7 @@ export default function FacultyView({
           </p>
         </div>
         <div className="header-meta-badge">
-          <span className="dot online" /> Prof. Vikram Verma (Dept of Computer Science)
+          <span className="dot online" /> {staffSession?.user ? `${staffSession.user.name} (${staffSession.user.department || 'Faculty'})` : 'Faculty Academic Portal'}
         </div>
       </div>
 
@@ -734,8 +780,8 @@ export default function FacultyView({
         >
           <Edit3 size={16} /> Enter &amp; Publish Marks
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Send Notice
@@ -749,12 +795,12 @@ export default function FacultyView({
           <div className="session-status-banner glass-card">
             <div className="session-header-col">
               <div className="session-title-wrap">
-                <span className="badge-pill info">CS-302 Div A</span>
+                <span className="badge-pill info">{activeSession?.subjectCode || (subjects || []).find(s => s.id === selectedSubjectId)?.code || 'Session'}</span>
                 {activeSession?.status === 'OPEN' ? (
                   <>
                     <h2>{activeSession.subjectName}</h2>
                     <div className="session-meta">
-                      <span><MapPin size={14} /> {activeSession.roomName || 'Room 204'} (Lat: 18.5204, Lng: 73.8567)</span>
+                      <span><MapPin size={14} /> {activeSession.roomName || 'Classroom'} (Lat: {activeSession.geofenceCenterLat || 18.5204}, Lng: {activeSession.geofenceCenterLng || 73.8567})</span>
                       <span><Clock size={14} /> 10-Min Photo Window</span>
                     </div>
                   </>
@@ -824,7 +870,7 @@ export default function FacultyView({
               <div className="card-header-flex">
                 <h3>Live Classroom Camera</h3>
                 <span className="badge-pill success">
-                  <CheckCircle2 size={12} /> Geofence: Inside {activeSession?.roomName || (rooms || []).find(r => r.id === selectedRoomId)?.name || 'Room 204'} (12m &lt; 50m)
+                  <CheckCircle2 size={12} /> Geofence: Inside {activeSession?.roomName || (rooms || []).find(r => r.id === selectedRoomId)?.name || 'Classroom'} (12m &lt; 50m)
                 </span>
               </div>
               <p className="card-desc">
@@ -1031,10 +1077,22 @@ export default function FacultyView({
               </div>
 
               <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '16px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '10px 14px', borderRadius: '8px', background: 'rgba(56, 189, 248, 0.08)', border: '1px solid rgba(56, 189, 248, 0.2)', fontSize: '0.82rem', color: '#93c5fd' }}>
-                  <CheckCircle2 size={16} style={{ flexShrink: 0, color: '#38bdf8' }} />
-                  <span>Live camera feed capture required. Manual file uploads and synthetic fallbacks are strictly prohibited (`ATT-03`).</span>
-                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png"
+                  style={{ display: 'none' }}
+                  onChange={handleFileUpload}
+                />
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={isAnalyzingFaces || photoCount >= 5 || activeSession?.status !== 'OPEN'}
+                  className="btn-secondary"
+                  style={{ width: '100%', justifyContent: 'center' }}
+                >
+                  <Upload size={16} /> Upload Classroom Photo File ({photoCount}/5)
+                </button>
                 <p style={{ fontSize: '0.78rem', color: '#94a3b8', margin: 0 }}>
                   Cosine threshold: <strong>&ge; 50%</strong> (PRESENT) | <strong>20% &ndash; 50%</strong> (REVIEW). Hungarian bipartite matching prevents duplicate student assignments.
                 </p>
@@ -1077,10 +1135,17 @@ export default function FacultyView({
                   </tr>
                 </thead>
                 <tbody>
-                  {activeSession?.attendanceRecords?.map(rec => (
-                    <tr key={rec.studentId}>
-                      <td className="font-mono">{rec.rollNo}</td>
-                      <td><strong>{rec.studentName}</strong></td>
+                  {(!activeSession || !activeSession.attendanceRecords || activeSession.attendanceRecords.length === 0) ? (
+                    <tr>
+                      <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted, #94a3b8)' }}>
+                        No attendance records for this session. Start a session or upload a classroom photo to begin.
+                      </td>
+                    </tr>
+                  ) : (
+                    activeSession.attendanceRecords.map(rec => (
+                      <tr key={rec.studentId}>
+                        <td className="font-mono">{rec.rollNo || 'N/A'}</td>
+                        <td><strong>{rec.studentName}</strong></td>
                       <td>
                         <span className={rec.faceScore >= 0.50 ? 'text-success font-mono font-bold' : rec.faceScore >= 0.20 ? 'text-warning font-mono font-bold' : 'text-muted font-mono'}>
                           {rec.faceScore ? `${Math.round(rec.faceScore * 100)}%` : '0%'}
@@ -1132,8 +1197,9 @@ export default function FacultyView({
                         </div>
                       </td>
                     </tr>
-                  ))}
-                </tbody>
+                  )))
+                }
+              </tbody>
               </table>
             </div>
           </div>
@@ -1175,80 +1241,88 @@ export default function FacultyView({
                 </tr>
               </thead>
               <tbody>
-                {marks.filter(m => m.exam === selectedExam).map(m => (
-                  <tr key={m.id}>
-                    <td className="font-mono">{m.rollNo}</td>
-                    <td><strong>{m.studentName}</strong></td>
-                    <td>{m.subjectCode}</td>
-                    <td>
-                      {m.status === 'PUBLISHED' ? (
-                        <span className="font-mono font-bold text-success">
-                          🔒 {m.marks}
+                {marks.filter(m => m.exam === selectedExam).length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted, #94a3b8)' }}>
+                      No marks recorded for {selectedExam}.
+                    </td>
+                  </tr>
+                ) : (
+                  marks.filter(m => m.exam === selectedExam).map(m => (
+                    <tr key={m.id}>
+                      <td className="font-mono">{m.rollNo || 'N/A'}</td>
+                      <td><strong>{m.studentName}</strong></td>
+                      <td>{m.subjectCode}</td>
+                      <td>
+                        {m.status === 'PUBLISHED' ? (
+                          <span className="font-mono font-bold text-success">
+                            🔒 {m.marks}
+                          </span>
+                        ) : (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                            <input
+                              type="number"
+                              min="0"
+                              max={m.maxMarks}
+                              value={m.marks}
+                              onChange={e => handleUpdateMarkValue(m.id, e.target.value)}
+                              className="font-mono text-primary font-bold"
+                              style={{
+                                width: '72px',
+                                padding: '4px 8px',
+                                borderRadius: '6px',
+                                background: 'rgba(255,255,255,0.08)',
+                                border: '1px solid rgba(56, 189, 248, 0.4)',
+                                textAlign: 'center'
+                              }}
+                            />
+                            <span className="text-xs text-muted">/ {m.maxMarks}</span>
+                          </div>
+                        )}
+                      </td>
+                      <td className="font-mono">{m.maxMarks}</td>
+                      <td>
+                        <span className={`badge-pill ${m.status === 'PUBLISHED' ? 'success' : 'warning'}`}>
+                          {m.status === 'PUBLISHED' ? '🔒 LOCKED (PUBLISHED)' : '📝 DRAFT'}
                         </span>
-                      ) : (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <input
-                            type="number"
-                            min="0"
-                            max={m.maxMarks}
-                            value={m.marks}
-                            onChange={e => handleUpdateMarkValue(m.id, e.target.value)}
-                            className="font-mono text-primary font-bold"
-                            style={{
-                              width: '72px',
-                              padding: '4px 8px',
-                              borderRadius: '6px',
-                              background: 'rgba(255,255,255,0.08)',
-                              border: '1px solid rgba(56, 189, 248, 0.4)',
-                              textAlign: 'center'
-                            }}
-                          />
-                          <span className="text-xs text-muted">/ {m.maxMarks}</span>
-                        </div>
-                      )}
-                    </td>
-                    <td className="font-mono">{m.maxMarks}</td>
-                    <td>
-                      <span className={`badge-pill ${m.status === 'PUBLISHED' ? 'success' : 'warning'}`}>
-                        {m.status === 'PUBLISHED' ? '🔒 LOCKED (PUBLISHED)' : '📝 DRAFT'}
-                      </span>
-                    </td>
-                    <td>
-                      {m.status === 'PUBLISHED' ? (
-                        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setCorrectionModal({ open: true, markId: m.id, currentVal: m.marks });
-                              setCorrectionNewMarks(m.marks);
-                            }}
-                            className="btn-secondary btn-xs"
-                            title="Propose score correction to HOD"
-                          >
-                            <Edit3 size={12} /> Request Correction
-                          </button>
+                      </td>
+                      <td>
+                        {m.status === 'PUBLISHED' ? (
+                          <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setCorrectionModal({ open: true, markId: m.id, currentVal: m.marks });
+                                setCorrectionNewMarks(m.marks);
+                              }}
+                              className="btn-secondary btn-xs"
+                              title="Propose score correction to HOD"
+                            >
+                              <Edit3 size={12} /> Request Correction
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleToggleMarkStatus(m.id)}
+                              className="btn-secondary btn-xs"
+                              title="Revert individual score to editable draft"
+                            >
+                              To Draft
+                            </button>
+                          </div>
+                        ) : (
                           <button
                             type="button"
                             onClick={() => handleToggleMarkStatus(m.id)}
-                            className="btn-secondary btn-xs"
-                            title="Revert individual score to editable draft"
+                            className="btn-primary btn-xs"
+                            title="Publish and lock this student's grade"
                           >
-                            To Draft
+                            <Lock size={12} /> Publish
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => handleToggleMarkStatus(m.id)}
-                          className="btn-primary btn-xs"
-                          title="Publish and lock this student's grade"
-                        >
-                          <Lock size={12} /> Publish
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -1259,11 +1333,11 @@ export default function FacultyView({
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col" style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1.2fr) minmax(300px, 1fr)', gap: '20px' }}>
-            <NoticeComposer 
+            <NoticeComposer
               publisherRole="FACULTY"
-              publisherName="Prof. Vikram Verma"
-              publisherId={3}
-              defaultDepartment="Computer Science"
+              publisherName={staffSession?.user?.name || "Faculty Member"}
+              publisherId={staffSession?.user?.id || 3}
+              defaultDepartment={staffSession?.user?.department || "Academic Affairs"}
               onNoticePublished={handleNoticePublished}
               onAddAuditLog={onAddAuditLog}
               initialStudents={users?.filter(u => u.role === 'STUDENT')}
@@ -1276,7 +1350,7 @@ export default function FacultyView({
                 <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Recent Faculty Circulars</h3>
                 <span className="badge-pill info">{facultyNotices.length} Notices</span>
               </div>
-              
+
               {facultyNotices.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
                   <Bell size={36} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
@@ -1285,14 +1359,14 @@ export default function FacultyView({
               ) : (
                 <div className="notices-stream" style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto' }}>
                   {facultyNotices.map((n) => (
-                    <div 
-                      key={n.id} 
-                      className="notice-item-card" 
-                      style={{ 
-                        padding: '14px', 
-                        background: 'var(--bg-surface)', 
-                        borderRadius: '10px', 
-                        border: '1px solid var(--border-subtle)' 
+                    <div
+                      key={n.id}
+                      className="notice-item-card"
+                      style={{
+                        padding: '14px',
+                        background: 'var(--bg-surface)',
+                        borderRadius: '10px',
+                        border: '1px solid var(--border-subtle)'
                       }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
@@ -1407,7 +1481,7 @@ export default function FacultyView({
                   Cancel
                 </button>
                 <button type="submit" className="btn-primary">
-                  Submit to HOD Dr. Sharma
+                  Submit to HOD for Approval
                 </button>
               </div>
             </form>

@@ -102,6 +102,91 @@ export default function App() {
   const [knowledgeDocs, setKnowledgeDocs] = useState(INITIAL_KNOWLEDGE_DOCS);
   const [riskStudents, setRiskStudents] = useState(INITIAL_RISK_STUDENTS);
 
+  // Load real records from backend database on initial mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBackendData() {
+      // 1. Users
+      try {
+        const userList = await api.getUsers();
+        if (isMounted && Array.isArray(userList)) setUsers(userList);
+      } catch (err) {
+        console.warn('API getUsers unavailable:', err.message);
+      }
+
+      // 2. Academic Rooms
+      try {
+        const roomList = await api.getRooms();
+        if (isMounted && Array.isArray(roomList)) setRooms(roomList);
+      } catch (err) {
+        console.warn('API getRooms unavailable:', err.message);
+      }
+
+      // 3. Academic Subjects
+      try {
+        const subjectList = await api.getSubjects();
+        if (isMounted && Array.isArray(subjectList)) setSubjects(subjectList);
+      } catch (err) {
+        console.warn('API getSubjects unavailable:', err.message);
+      }
+
+      // 4. Circulars & Notices
+      try {
+        const noticeList = await api.listNotices();
+        if (isMounted && Array.isArray(noticeList)) setNotices(noticeList);
+      } catch (err) {
+        console.warn('API listNotices unavailable:', err.message);
+      }
+
+      // 5. Verifiable Documents
+      try {
+        const docList = await api.getAllDocuments();
+        if (isMounted && Array.isArray(docList)) setIssuedDocuments(docList);
+      } catch (err) {
+        console.warn('API getAllDocuments unavailable:', err.message);
+      }
+
+      // 6. Cryptographic Audit Chain
+      try {
+        const chain = await api.getAuditChain();
+        if (isMounted && Array.isArray(chain)) setAuditLogs(chain);
+      } catch (err) {
+        console.warn('API getAuditChain unavailable:', err.message);
+      }
+
+      // 7. Leaves & Permissions
+      try {
+        const leaveList = await api.getAllLeaves();
+        if (isMounted && Array.isArray(leaveList)) setLeaveRequests(leaveList);
+      } catch (err) {
+        console.warn('API getAllLeaves unavailable:', err.message);
+      }
+
+      // 8. High Risk Students
+      try {
+        const riskList = await api.getHighRiskStudents();
+        if (isMounted && Array.isArray(riskList)) setRiskStudents(riskList);
+      } catch (err) {
+        console.warn('API getHighRiskStudents unavailable:', err.message);
+      }
+
+      // 9. Mark Corrections
+      try {
+        const correctionList = await api.getPendingCorrections();
+        if (isMounted && Array.isArray(correctionList)) setMarkCorrections(correctionList);
+      } catch (err) {
+        console.warn('API getPendingCorrections unavailable:', err.message);
+      }
+    }
+
+    loadBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Modals & Drawers
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
@@ -284,10 +369,10 @@ export default function App() {
   const handleMarkNoticeRead = async (noticeId) => {
     const studentId = currentStudent?.id || (authenticatedUser?.role === 'STUDENT' ? authenticatedUser?.id : null);
     await api.markNoticeRead(noticeId, studentId);
-    setStudentNotices(prev => prev.map(n => 
+    setStudentNotices(prev => prev.map(n =>
       n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
     ));
-    setNotices(prev => prev.map(n => 
+    setNotices(prev => prev.map(n =>
       n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
     ));
   };
@@ -303,8 +388,8 @@ export default function App() {
     const createdAt = new Date().toISOString();
     const newId = (lastEntry ? lastEntry.id : 0) + 1;
 
-    const actorName = staffSession?.user?.name || 'Prof. Vikram Verma';
-    const actorId = staffSession?.user?.id || 3;
+    const actorName = staffSession?.user?.name || authenticatedUser?.name || 'Authorized Staff';
+    const actorId = staffSession?.user?.id || authenticatedUser?.id || 1;
 
     const partialEntry = {
       id: newId,
@@ -405,7 +490,7 @@ export default function App() {
   return (
     <div className="app-wrapper">
       {/* Global Navigation Header */}
-      <Navbar 
+      <Navbar
         currentPath={currentPath}
         currentRole={currentRole}
         onNavigateHome={handleNavigateHome}
@@ -455,7 +540,7 @@ export default function App() {
           gap: '10px'
         }}>
           <span>{authNotification.message}</span>
-          <button 
+          <button
             onClick={() => setAuthNotification(null)}
             style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}
           >
@@ -468,7 +553,7 @@ export default function App() {
       <main className="main-viewport">
         {/* URL-driven Reset Password View (?view=reset-password&token=...) */}
         {activeUrlView === 'reset-password' && (
-          <StaffResetPasswordView 
+          <StaffResetPasswordView
             initialToken={activeUrlToken}
             onNavigate={(targetRole) => {
               if (targetRole === 'ADMIN') {
@@ -483,7 +568,7 @@ export default function App() {
 
         {/* Route /: Role Portal Landing Page */}
         {currentPath === '/' && activeUrlView !== 'reset-password' && (
-          <RolePortalLanding 
+          <RolePortalLanding
             onSelectRole={handleSelectPortalRole}
             staffSession={staffSession}
             currentStudent={currentStudent}
@@ -493,7 +578,7 @@ export default function App() {
         {/* Dedicated Route: /admin/login (Principal Portal) */}
         {currentPath === '/admin/login' && activeUrlView !== 'reset-password' && (
           staffSession?.user?.role === 'ADMIN' ? (
-            <AdminView 
+            <AdminView
               users={users}
               setUsers={setUsers}
               rooms={rooms}
@@ -511,7 +596,7 @@ export default function App() {
               onLogout={handleStaffLogout}
             />
           ) : (
-            <AdminAuthView 
+            <AdminAuthView
               onAuthSuccess={(session) => {
                 setStaffSession(session);
                 setCurrentRole('ADMIN');
@@ -528,7 +613,7 @@ export default function App() {
             const role = staffSession?.user?.role;
             if (role === 'HOD') {
               return (
-                <HodView 
+                <HodView
                   leaveRequests={leaveRequests}
                   setLeaveRequests={setLeaveRequests}
                   markCorrections={markCorrections}
@@ -546,7 +631,7 @@ export default function App() {
             }
             if (role === 'FACULTY') {
               return (
-                <FacultyView 
+                <FacultyView
                   sessions={sessions}
                   setSessions={setSessions}
                   subjects={subjects}
@@ -560,13 +645,14 @@ export default function App() {
                   staffSession={staffSession}
                   notices={notices}
                   setNotices={setNotices}
+                  staffSession={staffSession}
                   onLogout={handleStaffLogout}
                 />
               );
             }
             if (role === 'MENTOR') {
               return (
-                <MentorView 
+                <MentorView
                   riskStudents={riskStudents}
                   setRiskStudents={setRiskStudents}
                   leaveRequests={leaveRequests}
@@ -575,12 +661,13 @@ export default function App() {
                   onAddAuditLog={handleAddAuditLog}
                   notices={notices}
                   setNotices={setNotices}
+                  staffSession={staffSession}
                   onLogout={handleStaffLogout}
                 />
               );
             }
             return (
-              <StaffAuthView 
+              <StaffAuthView
                 initialRole={new URLSearchParams(window.location.search).get('role') || 'FACULTY'}
                 onAuthSuccess={(session) => {
                   setStaffSession(session);
@@ -596,7 +683,7 @@ export default function App() {
         {/* Dedicated Route: /student/login (Student Portal) */}
         {currentPath === '/student/login' && activeUrlView !== 'reset-password' && (
           currentStudent ? (
-            <StudentView 
+            <StudentView
               currentUser={currentStudent}
               activeSession={activeSession}
               sessions={sessions}
@@ -613,7 +700,7 @@ export default function App() {
               onLogout={handleLogout}
             />
           ) : (
-            <StudentAuthView 
+            <StudentAuthView
               onLoginSuccess={(authData) => {
                 handleLoginSuccess(authData);
                 navigateToPath('/student/login');
@@ -625,19 +712,19 @@ export default function App() {
 
         {/* Dedicated Route: /verify (Public Document Verifier) */}
         {currentPath === '/verify' && activeUrlView !== 'reset-password' && (
-          <PublicVerifierView 
+          <PublicVerifierView
             issuedDocuments={issuedDocuments}
           />
         )}
 
         {/* Fallback Viewport for non-standard routes */}
-        {currentPath !== '/' && 
-         currentPath !== '/admin/login' && 
-         currentPath !== '/staff/login' && 
-         currentPath !== '/student/login' && 
-         currentPath !== '/verify' && 
+        {currentPath !== '/' &&
+         currentPath !== '/admin/login' &&
+         currentPath !== '/staff/login' &&
+         currentPath !== '/student/login' &&
+         currentPath !== '/verify' &&
          activeUrlView !== 'reset-password' && (
-          <RolePortalLanding 
+          <RolePortalLanding
             onSelectRole={handleSelectPortalRole}
             staffSession={staffSession}
             currentStudent={currentStudent}
@@ -647,7 +734,7 @@ export default function App() {
 
       {/* Cryptographic SHA-256 Audit Chain Inspector Modal */}
       {isAuditModalOpen && (
-        <AuditChainModal 
+        <AuditChainModal
           auditLogs={auditLogs}
           setAuditLogs={setAuditLogs}
           onClose={() => setIsAuditModalOpen(false)}
@@ -655,7 +742,7 @@ export default function App() {
       )}
 
       {/* Document-Grounded RAG Knowledge Chatbot Drawer */}
-      <ChatbotDrawer 
+      <ChatbotDrawer
         isOpen={isChatbotOpen}
         onClose={() => setIsChatbotOpen(false)}
         knowledgeDocs={knowledgeDocs}

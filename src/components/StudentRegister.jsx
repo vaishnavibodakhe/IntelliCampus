@@ -1,14 +1,14 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { 
-  User, 
-  Mail, 
-  Phone, 
-  KeyRound, 
-  Building, 
-  Layers, 
-  ShieldCheck, 
-  AlertCircle, 
-  CheckCircle2, 
+import {
+  User,
+  Mail,
+  Phone,
+  KeyRound,
+  Building,
+  Layers,
+  ShieldCheck,
+  AlertCircle,
+  CheckCircle2,
   ArrowRight,
   Eye,
   EyeOff,
@@ -21,7 +21,7 @@ import {
   Smile,
   Lock
 } from 'lucide-react';
-import { 
+import {
   validateStudentRegistration,
   validateImageBrightness,
   estimateImageSharpness,
@@ -399,7 +399,7 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
             {step === 1 ? 'Create Student Account' : 'Step 2: Live Biometric Enrollment'}
           </h2>
           <p className="auth-subtitle">
-            {step === 1 
+            {step === 1
               ? 'Enter your academic credentials and DPDP Act 2023 biometric consent.'
               : 'Face templates are extracted directly from your camera in memory. Raw photos are never stored on disk.'}
           </p>
@@ -407,17 +407,17 @@ export default function StudentRegister({ onSwitchToLogin, onRegisterSuccess }) 
 
         {/* Step Indicator */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
-          <div style={{ 
-            flex: 1, 
-            height: '4px', 
-            borderRadius: '2px', 
-            backgroundColor: 'var(--accent, #06b6d4)' 
+          <div style={{
+            flex: 1,
+            height: '4px',
+            borderRadius: '2px',
+            backgroundColor: 'var(--accent, #06b6d4)'
           }} />
-          <div style={{ 
-            flex: 1, 
-            height: '4px', 
-            borderRadius: '2px', 
-            backgroundColor: step === 2 ? 'var(--accent, #06b6d4)' : 'rgba(255,255,255,0.1)' 
+          <div style={{
+            flex: 1,
+            height: '4px',
+            borderRadius: '2px',
+            backgroundColor: step === 2 ? 'var(--accent, #06b6d4)' : 'rgba(255,255,255,0.1)'
           }} />
         </div>
 

@@ -1,13 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { 
-  validateStaffRegisterForm, 
-  validateStaffLoginForm, 
+import {
+  validateStaffRegisterForm,
+  validateStaffLoginForm,
   validateForgotPasswordForm,
   validateResetPasswordForm,
   validateChangePasswordForm,
   isValidStrongPassword,
-  registerStaffApi, 
+  registerStaffApi,
   loginStaffApi,
   forgotPasswordApi,
   resetPasswordApi,

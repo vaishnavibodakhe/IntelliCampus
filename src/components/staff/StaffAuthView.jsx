@@ -1,35 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  BookOpen, 
-  UserCheck, 
-  Users, 
-  Lock, 
-  Mail, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  AlertCircle, 
-  CheckCircle2, 
-  KeyRound, 
-  LogIn, 
+import {
+  BookOpen,
+  UserCheck,
+  Users,
+  Lock,
+  Mail,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  LogIn,
   RotateCw,
   Sparkles,
   ShieldAlert
 } from 'lucide-react';
-import { 
-  loginStaffApi, 
-  forgotPasswordApi, 
+import {
+  loginStaffApi,
+  forgotPasswordApi,
   resetPasswordApi,
-  saveStaffSession, 
-  validateStaffLoginForm, 
+  saveStaffSession,
+  validateStaffLoginForm,
   validateForgotPasswordForm,
-  validateOtpResetPasswordForm 
+  validateOtpResetPasswordForm
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
-export default function StaffAuthView({ 
-  initialRole = 'FACULTY', 
-  onAuthSuccess, 
+export default function StaffAuthView({
+  initialRole = 'FACULTY',
+  onAuthSuccess,
   noticeMessage = '',
   onRoleChange
 }) {
@@ -285,7 +285,7 @@ export default function StaffAuthView({
 
         {/* Tab Switcher: Login and Forgot/Set Password Only (No Registration) */}
         <div className="staff-tabs">
-          <button 
+          <button
             type="button"
             className={`staff-tab-btn ${activeTab === 'login' ? 'active' : ''}`}
             onClick={() => handleTabSwitch('login')}
@@ -293,7 +293,7 @@ export default function StaffAuthView({
             <LogIn size={15} />
             <span>Sign In</span>
           </button>
-          <button 
+          <button
             type="button"
             className={`staff-tab-btn ${activeTab === 'forgot' ? 'active' : ''}`}
             onClick={() => handleTabSwitch('forgot')}
@@ -310,7 +310,7 @@ export default function StaffAuthView({
               <label htmlFor="staff-login-email">Registered Institutional Email</label>
               <div className="input-wrap">
                 <Mail size={16} className="input-icon" />
-                <input 
+                <input
                   id="staff-login-email"
                   type="email"
                   placeholder={`name@intellicampus.edu`}
@@ -326,7 +326,7 @@ export default function StaffAuthView({
               <label htmlFor="staff-login-password">Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
-                <input 
+                <input
                   id="staff-login-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter your password"
@@ -334,7 +334,7 @@ export default function StaffAuthView({
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                   autoComplete="current-password"
                 />
-                <button 
+                <button
                   type="button"
                   className="eye-toggle"
                   onClick={() => setShowPassword(!showPassword)}
@@ -346,7 +346,7 @@ export default function StaffAuthView({
             </div>
 
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px' }}>
-              <button 
+              <button
                 type="button"
                 onClick={() => handleTabSwitch('forgot')}
                 style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
@@ -355,8 +355,8 @@ export default function StaffAuthView({
               </button>
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="submit-btn"
               disabled={loading}
               style={{ background: roleMeta[selectedRole]?.accent }}
@@ -389,7 +389,7 @@ export default function StaffAuthView({
                   <label htmlFor="staff-forgot-email">Registered Institutional Email</label>
                   <div className="input-wrap">
                     <Mail size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="staff-forgot-email"
                       type="email"
                       placeholder="name@intellicampus.edu"
@@ -401,8 +401,8 @@ export default function StaffAuthView({
                   {errors.email && <span className="field-error">{errors.email}</span>}
                 </div>
 
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="submit-btn"
                   disabled={loading}
                   style={{ background: roleMeta[selectedRole]?.accent }}
@@ -426,7 +426,7 @@ export default function StaffAuthView({
                   <label htmlFor="staff-otp">6-Digit Verification OTP</label>
                   <div className="input-wrap">
                     <KeyRound size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="staff-otp"
                       type="text"
                       maxLength={6}
@@ -442,14 +442,14 @@ export default function StaffAuthView({
                   <label htmlFor="staff-new-password">New Secure Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="staff-new-password"
                       type={showOtpPassword ? 'text' : 'password'}
                       placeholder="Minimum 8 characters"
                       value={otpNewPassword}
                       onChange={(e) => setOtpNewPassword(e.target.value)}
                     />
-                    <button 
+                    <button
                       type="button"
                       className="eye-toggle"
                       onClick={() => setShowOtpPassword(!showOtpPassword)}
@@ -464,7 +464,7 @@ export default function StaffAuthView({
                   <label htmlFor="staff-confirm-password">Confirm New Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="staff-confirm-password"
                       type={showOtpPassword ? 'text' : 'password'}
                       placeholder="Re-enter new password"
@@ -475,8 +475,8 @@ export default function StaffAuthView({
                   {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
                 </div>
 
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="submit-btn"
                   disabled={loading}
                   style={{ background: roleMeta[selectedRole]?.accent }}
@@ -495,14 +495,14 @@ export default function StaffAuthView({
                 </button>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setForgotStep('email')}
                     style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}
                   >
                     ← Change Email
                   </button>
-                  <button 
+                  <button
                     type="button"
                     disabled={resendCooldown > 0 || loading}
                     onClick={handleRequestOtp}

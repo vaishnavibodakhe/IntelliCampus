@@ -1,15 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  Users, 
-  Layers, 
-  Bell, 
-  CreditCard, 
-  FileCheck2, 
-  BrainCircuit, 
-  Plus, 
-  Upload, 
-  Search, 
-  CheckCircle2, 
+import {
+  Users,
+  Layers,
+  Bell,
+  CreditCard,
+  FileCheck2,
+  BrainCircuit,
+  Plus,
+  Upload,
+  Search,
+  CheckCircle2,
   AlertCircle,
   Building2,
   Trash2,
@@ -25,10 +25,10 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
-import { 
-  adminCreateStaffApi, 
-  resendStaffSetupOtpApi, 
-  deactivateStaffApi 
+import {
+  adminCreateStaffApi,
+  resendStaffSetupOtpApi,
+  deactivateStaffApi
 } from '../utils/staffAuthService';
 import NoticeComposer from './NoticeComposer';
 
@@ -106,10 +106,10 @@ export default function AdminView({
   // Document state
   const [newDoc, setNewDoc] = useState({
     type: 'Provisional Degree Certificate',
-    studentName: 'Aarav Shah',
-    rollNo: 'CS-104',
+    studentName: '',
+    rollNo: '',
     department: 'Computer Science',
-    gpa: '8.92'
+    gpa: ''
   });
 
   // Knowledge doc state
@@ -316,7 +316,7 @@ export default function AdminView({
       const line = lines[i].trim();
       if (!line) continue;
       const cols = line.split(',').map(c => c.trim().replace(/^["']|["']$/g, ''));
-      
+
       const userCode = cols[0] || `student.${cols[1]?.toLowerCase().replace(/\s+/g, '') || i}`;
       const name = cols[1] || '';
       const email = cols[2] || `${userCode}@intellicampus.edu`;
@@ -391,11 +391,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       open: true,
       isEditing: false,
       id: null,
-      name: 'Classroom 305',
-      latitude: 18.52045,
-      longitude: 73.85680,
+      name: '',
+      latitude: 18.52043,
+      longitude: 73.85674,
       radiusM: 50,
-      capacity: 65
+      capacity: 60
     });
   };
 
@@ -412,14 +412,14 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     });
   };
 
-  const handleSaveRoom = (e) => {
+  const handleSaveRoom = async (e) => {
     e.preventDefault();
-    if (!roomModal.name) return;
+    if (!roomModal.name || !roomModal.name.trim()) return;
 
     if (roomModal.isEditing) {
       const updated = rooms.map(r => r.id === roomModal.id ? {
         ...r,
-        name: roomModal.name,
+        name: roomModal.name.trim(),
         latitude: parseFloat(roomModal.latitude),
         longitude: parseFloat(roomModal.longitude),
         radiusM: parseInt(roomModal.radiusM, 10),
@@ -436,9 +436,23 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       });
       alert(`Geofence coordinates updated for ${roomModal.name}.`);
     } else {
-      const newRoom = {
+      let createdRoom = null;
+      try {
+        const saved = await api.createRoom({
+          name: roomModal.name.trim(),
+          latitude: parseFloat(roomModal.latitude),
+          longitude: parseFloat(roomModal.longitude),
+          radiusM: parseInt(roomModal.radiusM, 10),
+          capacity: parseInt(roomModal.capacity, 10)
+        });
+        if (saved && saved.id) createdRoom = saved;
+      } catch (err) {
+        console.warn('API createRoom:', err.message);
+      }
+
+      const newRoom = createdRoom || {
         id: Date.now(),
-        name: roomModal.name,
+        name: roomModal.name.trim(),
         latitude: parseFloat(roomModal.latitude),
         longitude: parseFloat(roomModal.longitude),
         radiusM: parseInt(roomModal.radiusM, 10),
@@ -460,21 +474,42 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
   };
 
   // Handle Issue Verifiable Document
-  const handleIssueDocument = (e) => {
+  const handleIssueDocument = async (e) => {
     e.preventDefault();
-    const docCode = `DOC-2026-CS-${Math.floor(1000 + Math.random() * 9000)}`;
-    const doc = {
+    if (!newDoc.studentName || !newDoc.rollNo) {
+      alert('Student name and roll number are required to issue a verifiable document.');
+      return;
+    }
+
+    let issued = null;
+    try {
+      issued = await api.issueDocument({
+        type: newDoc.type,
+        studentName: newDoc.studentName.trim(),
+        rollNo: newDoc.rollNo.trim(),
+        department: newDoc.department,
+        gpa: newDoc.gpa ? `${newDoc.gpa} / 10.0` : null,
+        authorizedSignatory: 'Registrar & Senate Board',
+        issuerName: staffSession?.user?.name || 'Administrator',
+        issuerId: staffSession?.user?.id || 1
+      });
+    } catch (err) {
+      console.warn('Backend issueDocument API call failed, generating cryptographic block:', err);
+    }
+
+    const docCode = issued?.code || `DOC-${new Date().getFullYear()}-${newDoc.rollNo.replace(/[^A-Za-z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
+    const doc = issued || {
       code: docCode,
       type: newDoc.type,
-      studentName: newDoc.studentName,
-      maskedStudentName: newDoc.studentName.slice(0, 2) + '*** ' + newDoc.studentName.split(' ')[1]?.slice(0, 2) + '***',
-      rollNo: newDoc.rollNo,
+      studentName: newDoc.studentName.trim(),
+      maskedStudentName: newDoc.studentName.slice(0, 2) + '***',
+      rollNo: newDoc.rollNo.trim(),
       department: newDoc.department,
       issueDate: new Date().toISOString().split('T')[0],
       status: 'VALID',
       revokedReason: null,
-      fileHash: 'sha256_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
-      gpa: newDoc.gpa + ' / 10.0',
+      fileHash: '',
+      gpa: newDoc.gpa ? newDoc.gpa + ' / 10.0' : '',
       authorizedSignatory: 'Registrar & Senate Board'
     };
 
@@ -482,25 +517,38 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     onAddAuditLog({
       action: 'ISSUE',
       entityType: 'VERIFIABLE_DOCUMENT',
-      entityId: docCode,
+      entityId: doc.code,
       oldValue: '{}',
-      newValue: JSON.stringify({ code: docCode, status: 'VALID' }),
+      newValue: JSON.stringify({ code: doc.code, status: 'VALID' }),
       reason: `Official ${doc.type} issued with QR verification link (DOC-01)`
     });
-    alert(`Document Issued! Public verification code: ${docCode}`);
+    alert(`Document Issued! Public verification code: ${doc.code}`);
+    setNewDoc({
+      type: 'Provisional Degree Certificate',
+      studentName: '',
+      rollNo: '',
+      department: 'Computer Science',
+      gpa: ''
+    });
   };
 
   // Revoke Document
-  const handleRevokeDocument = (code) => {
+  const handleRevokeDocument = async (code) => {
     const reason = prompt('Enter mandatory reason for revoking this document (min 10 characters):');
     if (!reason || reason.trim().length < 10) {
       alert('Revocation aborted. A reason of at least 10 characters is mandatory.');
       return;
     }
 
+    try {
+      await api.revokeDocument(code, { revokedReason: reason.trim() });
+    } catch (err) {
+      console.warn('API revokeDocument call:', err);
+    }
+
     setIssuedDocuments(issuedDocuments.map(d => {
       if (d.code === code) {
-        return { ...d, status: 'REVOKED', revokedReason: reason };
+        return { ...d, status: 'REVOKED', revokedReason: reason.trim() };
       }
       return d;
     }));
@@ -510,8 +558,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       entityType: 'VERIFIABLE_DOCUMENT',
       entityId: code,
       oldValue: '{"status":"VALID"}',
-      newValue: JSON.stringify({ status: 'REVOKED', reason }),
-      reason: `Document revoked by Admin: ${reason}`
+      newValue: JSON.stringify({ status: 'REVOKED', reason: reason.trim() }),
+      reason: `Document revoked by Admin: ${reason.trim()}`
     });
     alert(`Document ${code} status marked as REVOKED.`);
   };
@@ -519,16 +567,16 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
   // Add Knowledge Circular
   const handleAddKnowledgeDoc = (e) => {
     e.preventDefault();
-    if (!newKnowledgeTitle) return;
+    if (!newKnowledgeTitle || !newKnowledgeTitle.trim()) return;
 
     const doc = {
       id: Date.now(),
-      title: newKnowledgeTitle,
-      filename: newKnowledgeTitle.replace(/\s+/g, '_') + '.pdf',
-      uploadedBy: 'Admin Office',
+      title: newKnowledgeTitle.trim(),
+      filename: newKnowledgeTitle.trim().replace(/\s+/g, '_') + '.pdf',
+      uploadedBy: staffSession?.user?.name || 'Admin Office',
       uploadDate: new Date().toISOString().split('T')[0],
-      pages: Math.floor(5 + Math.random() * 15),
-      chunksIndexed: Math.floor(20 + Math.random() * 40),
+      pages: 1,
+      chunksIndexed: 1,
       status: 'INDEXED',
       summary: 'Official college ordinance and policies indexed for RAG vector search.'
     };
@@ -549,7 +597,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
   const filteredUsers = users.filter(u => {
     const query = userSearch.toLowerCase();
-    const matchSearch = !userSearch || 
+    const matchSearch = !userSearch ||
       u.name.toLowerCase().includes(query) ||
       u.userCode.toLowerCase().includes(query) ||
       (u.rollNo && u.rollNo.toLowerCase().includes(query));
@@ -598,38 +646,38 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
       {/* Admin Tab Navigation */}
       <div className="sub-nav-tabs">
-        <button 
-          onClick={() => setActiveTab('users')} 
+        <button
+          onClick={() => setActiveTab('users')}
           className={`tab-btn ${activeTab === 'users' ? 'active' : ''}`}
         >
           <Users size={16} /> User Management ({users.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('academic')} 
+        <button
+          onClick={() => setActiveTab('academic')}
           className={`tab-btn ${activeTab === 'academic' ? 'active' : ''}`}
         >
           <Layers size={16} /> Academic Setup & Rooms
         </button>
-        <button 
-          onClick={() => setActiveTab('notices')} 
+        <button
+          onClick={() => setActiveTab('notices')}
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
           <Bell size={16} /> Targeted Notices ({notices.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('documents')} 
+        <button
+          onClick={() => setActiveTab('documents')}
           className={`tab-btn ${activeTab === 'documents' ? 'active' : ''}`}
         >
           <FileCheck2 size={16} /> Verifiable Documents ({issuedDocuments.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('knowledge')} 
+        <button
+          onClick={() => setActiveTab('knowledge')}
           className={`tab-btn ${activeTab === 'knowledge' ? 'active' : ''}`}
         >
           <BrainCircuit size={16} /> Chatbot Knowledge Base ({knowledgeDocs.length})
         </button>
-        <button 
-          onClick={() => setActiveTab('approvals')} 
+        <button
+          onClick={() => setActiveTab('approvals')}
           className={`tab-btn ${activeTab === 'approvals' ? 'active' : ''}`}
         >
           <ShieldCheck size={16} /> Staff Approvals
@@ -642,17 +690,17 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
           <div className="pane-toolbar" style={{ flexWrap: 'wrap', gap: '12px' }}>
             <div className="search-box">
               <Search size={16} />
-              <input 
-                type="text" 
-                placeholder="Search by name, roll no, or code..." 
+              <input
+                type="text"
+                placeholder="Search by name, roll no, or code..."
                 value={userSearch}
                 onChange={e => setUserSearch(e.target.value)}
               />
             </div>
-            
+
             <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-              <select 
-                value={roleFilter} 
+              <select
+                value={roleFilter}
                 onChange={e => setRoleFilter(e.target.value)}
                 style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'inherit' }}
               >
@@ -664,8 +712,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <option value="ADMIN">Principal</option>
               </select>
 
-              <select 
-                value={deptFilter} 
+              <select
+                value={deptFilter}
                 onChange={e => setDeptFilter(e.target.value)}
                 style={{ padding: '8px 12px', borderRadius: '8px', background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: 'inherit' }}
               >
@@ -699,95 +747,103 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map(u => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="avatar-circle">{u.name.charAt(0)}</div>
-                        <div>
-                          <div className="user-name">{u.name}</div>
-                          <div className="user-sub">{u.userCode} {u.rollNo && `• ${u.rollNo}`}</div>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                      No user accounts found matching current filters.
+                    </td>
+                  </tr>
+                ) : (
+                  filteredUsers.map(u => (
+                    <tr key={u.id}>
+                      <td>
+                        <div className="user-cell">
+                          <div className="avatar-circle">{u.name.charAt(0)}</div>
+                          <div>
+                            <div className="user-name">{u.name}</div>
+                            <div className="user-sub">{u.userCode} {u.rollNo && `• ${u.rollNo}`}</div>
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge-role ${u.role.toLowerCase()}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td>{u.department}</td>
-                    <td>
-                      {u.role === 'STUDENT' ? (
-                        u.faceEnrolled ? (
-                          <span className="badge-pill success"><CheckCircle2 size={12} /> Enrolled (512-d)</span>
-                        ) : (
-                          <span className="badge-pill warning"><AlertCircle size={12} /> Pending</span>
-                        )
-                      ) : (
-                        <span className="badge-pill muted">N/A</span>
-                      )}
-                    </td>
-                    <td>
-                      {u.role === 'STUDENT' ? (
-                        <span className={u.attendanceRate < 75 ? 'text-danger font-bold' : 'text-success'}>
-                          {u.attendanceRate}% {u.attendanceRate < 75 && '(Defaulter)'}
+                      </td>
+                      <td>
+                        <span className={`badge-role ${u.role.toLowerCase()}`}>
+                          {u.role}
                         </span>
-                      ) : '-'}
-                    </td>
-                    <td>
-                      <span className={`status-dot ${u.status === 'ACTIVE' ? 'active' : 'disabled'}`}>
-                        {u.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {u.role === 'STUDENT' && (
-                          <button 
-                            className="table-action-btn"
-                            onClick={() => handleOpenEnrollModal(u)}
-                            title={u.faceEnrolled ? "Re-enroll Face Photo" : "Enroll Face Photo"}
-                            style={{ color: u.faceEnrolled ? '#10b981' : '#f59e0b' }}
-                          >
-                            <Camera size={15} />
-                          </button>
+                      </td>
+                      <td>{u.department}</td>
+                      <td>
+                        {u.role === 'STUDENT' ? (
+                          u.faceEnrolled ? (
+                            <span className="badge-pill success"><CheckCircle2 size={12} /> Enrolled (512-d)</span>
+                          ) : (
+                            <span className="badge-pill warning"><AlertCircle size={12} /> Pending</span>
+                          )
+                        ) : (
+                          <span className="badge-pill muted">N/A</span>
                         )}
-                        {u.role !== 'STUDENT' && (
-                          <>
-                            <button 
-                              type="button"
+                      </td>
+                      <td>
+                        {u.role === 'STUDENT' ? (
+                          <span className={u.attendanceRate < 75 ? 'text-danger font-bold' : 'text-success'}>
+                            {u.attendanceRate}% {u.attendanceRate < 75 && '(Defaulter)'}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td>
+                        <span className={`status-dot ${u.status === 'ACTIVE' ? 'active' : 'disabled'}`}>
+                          {u.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {u.role === 'STUDENT' && (
+                            <button
                               className="table-action-btn"
-                              onClick={() => handleResendSetupOtp(u)}
-                              title="Resend 24-hour setup OTP to staff email"
-                              style={{ color: '#38bdf8' }}
+                              onClick={() => handleOpenEnrollModal(u)}
+                              title={u.faceEnrolled ? "Re-enroll Face Photo" : "Enroll Face Photo"}
+                              style={{ color: u.faceEnrolled ? '#10b981' : '#f59e0b' }}
+                            >
+                              <Camera size={15} />
+                            </button>
+                          )}
+                          {u.role !== 'STUDENT' && (
+                            <>
+                              <button
+                                type="button"
+                                className="table-action-btn"
+                                onClick={() => handleResendSetupOtp(u)}
+                                title="Resend 24-hour setup OTP to staff email"
+                                style={{ color: '#38bdf8' }}
+                              >
+                                <KeyRound size={15} />
+                              </button>
+                              {u.status === 'ACTIVE' && staffSession?.user?.email !== u.email && (
+                                <button
+                                  type="button"
+                                  className="table-action-btn"
+                                  onClick={() => handleDeactivateStaff(u)}
+                                  title="Deactivate staff account"
+                                  style={{ color: '#ef4444' }}
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                            </>
+                          )}
+                          {u.role === 'STUDENT' && (
+                            <button
+                              className="table-action-btn"
+                              onClick={() => alert(`Password reset instructions for student sent to ${u.email}`)}
+                              title="Reset student password"
                             >
                               <KeyRound size={15} />
                             </button>
-                            {u.status === 'ACTIVE' && staffSession?.user?.email !== u.email && (
-                              <button 
-                                type="button"
-                                className="table-action-btn"
-                                onClick={() => handleDeactivateStaff(u)}
-                                title="Deactivate staff account"
-                                style={{ color: '#ef4444' }}
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            )}
-                          </>
-                        )}
-                        {u.role === 'STUDENT' && (
-                          <button 
-                            className="table-action-btn"
-                            onClick={() => alert(`Password reset instructions for student sent to ${u.email}`)}
-                            title="Reset student password"
-                          >
-                            <KeyRound size={15} />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -813,28 +869,34 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </p>
 
               <div className="room-list">
-                {rooms.map(room => (
-                  <div key={room.id} className="room-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div className="room-info">
-                      <div className="room-title">{room.name}</div>
-                      <div className="room-meta">
-                        Lat: <code>{room.latitude}</code>, Lng: <code>{room.longitude}</code>
+                {rooms.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No geofenced classrooms configured yet.
+                  </div>
+                ) : (
+                  rooms.map(room => (
+                    <div key={room.id} className="room-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="room-info">
+                        <div className="room-title">{room.name}</div>
+                        <div className="room-meta">
+                          Lat: <code>{room.latitude}</code>, Lng: <code>{room.longitude}</code>
+                        </div>
+                      </div>
+                      <div className="room-badge-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="badge-pill success">Radius: {room.radiusM}m</span>
+                        <span className="badge-pill muted">{room.capacity} seats</span>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenEditRoom(room)}
+                          className="btn-secondary btn-xs"
+                          title="Configure room coordinates & geofence perimeter"
+                        >
+                          <Edit3 size={12} /> Edit GPS
+                        </button>
                       </div>
                     </div>
-                    <div className="room-badge-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="badge-pill success">Radius: {room.radiusM}m</span>
-                      <span className="badge-pill muted">{room.capacity} seats</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleOpenEditRoom(room)} 
-                        className="btn-secondary btn-xs"
-                        title="Configure room coordinates & geofence perimeter"
-                      >
-                        <Edit3 size={12} /> Edit GPS
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -844,15 +906,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <span className="badge-pill info">{subjects.length} Courses</span>
               </div>
               <div className="room-list">
-                {subjects.map(s => (
-                  <div key={s.id} className="room-card">
-                    <div className="room-info">
-                      <div className="room-title">{s.code} - {s.name}</div>
-                      <div className="room-meta">Faculty In-Charge: <strong>{s.facultyName}</strong></div>
-                    </div>
-                    <span className="badge-pill accent">{s.credits} Credits</span>
+                {subjects.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No active academic courses registered yet.
                   </div>
-                ))}
+                ) : (
+                  subjects.map(s => (
+                    <div key={s.id} className="room-card">
+                      <div className="room-info">
+                        <div className="room-title">{s.code} - {s.name}</div>
+                        <div className="room-meta">Faculty In-Charge: <strong>{s.facultyName || 'Staff'}</strong></div>
+                      </div>
+                      <span className="badge-pill accent">{s.credits} Credits</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -863,9 +931,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col">
-            <NoticeComposer 
+            <NoticeComposer
               publisherRole="ADMIN"
-              publisherName={staffSession?.user?.name || "Rajesh Patel"}
+              publisherName={staffSession?.user?.name || "Admin Office"}
               publisherId={staffSession?.user?.id || 1}
               defaultDepartment="All Departments"
               onNoticePublished={(newNoticeItem) => {
@@ -882,31 +950,37 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Active Circulars &amp; Read Analytics</h3>
               <div className="notices-stream">
-                {notices.map(n => (
-                  <div key={n.id} className="notice-item-card">
-                    <div className="notice-item-header">
-                      <h4>{n.title}</h4>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <span className="badge-pill info">{n.targetDepartment}</span>
-                        {n.targetYear && n.targetYear !== 'All Years' && (
-                          <span className="badge-pill accent">{n.targetYear}</span>
-                        )}
-                        {n.targetDivision && n.targetDivision !== 'All Divisions' && (
-                          <span className="badge-pill warning">{n.targetDivision}</span>
+                {notices.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No active circulars published yet.
+                  </div>
+                ) : (
+                  notices.map(n => (
+                    <div key={n.id} className="notice-item-card">
+                      <div className="notice-item-header">
+                        <h4>{n.title}</h4>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <span className="badge-pill info">{n.targetDepartment}</span>
+                          {n.targetYear && n.targetYear !== 'All Years' && (
+                            <span className="badge-pill accent">{n.targetYear}</span>
+                          )}
+                          {n.targetDivision && n.targetDivision !== 'All Divisions' && (
+                            <span className="badge-pill warning">{n.targetDivision}</span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="notice-item-body">{n.body || n.message}</p>
+                      <div className="notice-item-footer">
+                        <span className="notice-reads">
+                          Read by {n.readsCount || 0} / {n.totalTargeted || 0} targeted students
+                        </span>
+                        {n.deadline && (
+                          <span className="badge-pill warning">Deadline: {n.deadline}</span>
                         )}
                       </div>
                     </div>
-                    <p className="notice-item-body">{n.body || n.message}</p>
-                    <div className="notice-item-footer">
-                      <span className="notice-reads">
-                        Read by {n.readsCount || 0} / {n.totalTargeted || 65} targeted students
-                      </span>
-                      {n.deadline && (
-                        <span className="badge-pill warning">Deadline: {n.deadline}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -922,11 +996,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <p className="card-desc">
                 Generate cryptographic credentials with unique tracking codes and QR links (`DOC-01`).
               </p>
-              
+
               <form onSubmit={handleIssueDocument} className="form-stack">
                 <div className="form-group">
                   <label>Document Classification</label>
-                  <select 
+                  <select
                     value={newDoc.type}
                     onChange={e => setNewDoc({...newDoc, type: e.target.value})}
                   >
@@ -937,12 +1011,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Recipient Student</label>
-                  <select 
+                  <select
                     value={newDoc.studentName}
                     onChange={e => {
                       const sel = users.find(u => u.name === e.target.value);
                       setNewDoc({
-                        ...newDoc, 
+                        ...newDoc,
                         studentName: e.target.value,
                         rollNo: sel?.rollNo || 'CS-104'
                       });
@@ -955,8 +1029,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>GPA / Academic Standing</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={newDoc.gpa}
                     onChange={e => setNewDoc({...newDoc, gpa: e.target.value})}
                   />
@@ -970,31 +1044,37 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Issued Documents Registry</h3>
               <div className="doc-registry-list">
-                {issuedDocuments.map(doc => (
-                  <div key={doc.code} className="registry-card">
-                    <div className="registry-main">
-                      <div className="registry-code font-mono">{doc.code}</div>
-                      <div className="registry-type">{doc.type}</div>
-                      <div className="registry-student">{doc.studentName} ({doc.rollNo})</div>
-                    </div>
-                    <div className="registry-actions">
-                      <span className={`badge-pill ${doc.status === 'VALID' ? 'success' : 'danger'}`}>
-                        {doc.status}
-                      </span>
-                      {doc.status === 'VALID' ? (
-                        <button 
-                          onClick={() => handleRevokeDocument(doc.code)}
-                          className="btn-danger-outline btn-xs"
-                          title="Revoke certificate"
-                        >
-                          Revoke
-                        </button>
-                      ) : (
-                        <span className="text-danger text-xs">{doc.revokedReason}</span>
-                      )}
-                    </div>
+                {issuedDocuments.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No verifiable credentials issued yet.
                   </div>
-                ))}
+                ) : (
+                  issuedDocuments.map(doc => (
+                    <div key={doc.code} className="registry-card">
+                      <div className="registry-main">
+                        <div className="registry-code font-mono">{doc.code}</div>
+                        <div className="registry-type">{doc.type}</div>
+                        <div className="registry-student">{doc.studentName} ({doc.rollNo})</div>
+                      </div>
+                      <div className="registry-actions">
+                        <span className={`badge-pill ${doc.status === 'VALID' ? 'success' : 'danger'}`}>
+                          {doc.status}
+                        </span>
+                        {doc.status === 'VALID' ? (
+                          <button
+                            onClick={() => handleRevokeDocument(doc.code)}
+                            className="btn-danger-outline btn-xs"
+                            title="Revoke certificate"
+                          >
+                            Revoke
+                          </button>
+                        ) : (
+                          <span className="text-danger text-xs">{doc.revokedReason}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1010,12 +1090,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <p className="card-desc">
                 Upload official circulars, syllabi, or exam ordinances. Document is split into 500-token chunks and vectorized for semantic search (`BOT-01`).
               </p>
-              
+
               <form onSubmit={handleAddKnowledgeDoc} className="form-stack">
                 <div className="form-group">
                   <label>Document Subject / Title</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     placeholder="e.g. Supplementary & Re-evaluation Ordinance 2026"
                     value={newKnowledgeTitle}
                     onChange={e => setNewKnowledgeTitle(e.target.value)}
@@ -1036,20 +1116,26 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Vectorized Knowledge Catalog</h3>
               <div className="knowledge-catalog-list">
-                {knowledgeDocs.map(doc => (
-                  <div key={doc.id} className="knowledge-card">
-                    <div className="knowledge-header">
-                      <h4>{doc.title}</h4>
-                      <span className="badge-pill success">{doc.status}</span>
-                    </div>
-                    <p className="knowledge-desc">{doc.summary}</p>
-                    <div className="knowledge-meta">
-                      <span>📄 {doc.pages} pages</span>
-                      <span>🧩 {doc.chunksIndexed} chunks embedded</span>
-                      <span>📅 {doc.uploadDate}</span>
-                    </div>
+                {knowledgeDocs.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No knowledge base documents indexed yet.
                   </div>
-                ))}
+                ) : (
+                  knowledgeDocs.map(doc => (
+                    <div key={doc.id} className="knowledge-card">
+                      <div className="knowledge-header">
+                        <h4>{doc.title}</h4>
+                        <span className="badge-pill success">{doc.status}</span>
+                      </div>
+                      <p className="knowledge-desc">{doc.summary}</p>
+                      <div className="knowledge-meta">
+                        <span>📄 {doc.pages} pages</span>
+                        <span>🧩 {doc.chunksIndexed} chunks embedded</span>
+                        <span>📅 {doc.uploadDate}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -1074,7 +1160,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <form onSubmit={handleCreateUser} className="form-stack">
               <div className="form-group">
                 <label>Full Name</label>
-                <input 
+                <input
                   type="text"
                   placeholder="e.g. Sneha Roy"
                   value={newUser.name}
@@ -1085,7 +1171,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>User Login Code</label>
-                  <input 
+                  <input
                     type="text"
                     placeholder="e.g. student.sneha"
                     value={newUser.userCode}
@@ -1095,7 +1181,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Role</label>
-                  <select 
+                  <select
                     value={newUser.role}
                     onChange={e => setNewUser({...newUser, role: e.target.value})}
                   >
@@ -1109,7 +1195,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
               <div className="form-group">
                 <label>Institutional Email Address</label>
-                <input 
+                <input
                   type="email"
                   placeholder="s.roy@intellicampus.edu"
                   value={newUser.email}
@@ -1128,7 +1214,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   <div className="grid-two-col-compact">
                     <div className="form-group">
                       <label>Roll Number</label>
-                      <input 
+                      <input
                         type="text"
                         placeholder="e.g. CS-111"
                         value={newUser.rollNo}
@@ -1137,7 +1223,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     </div>
                     <div className="form-group">
                       <label>Division</label>
-                      <select 
+                      <select
                         value={newUser.division}
                         onChange={e => setNewUser({...newUser, division: e.target.value})}
                       >
@@ -1150,8 +1236,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   <div className="form-group">
                     <label>Face Photo Enrollment (Required for Attendance)</label>
                     <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginTop: '4px' }}>
-                      <input 
-                        type="file" 
+                      <input
+                        type="file"
                         accept="image/jpeg,image/png"
                         onChange={e => {
                           const file = e.target.files?.[0];
@@ -1165,9 +1251,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                         }}
                       />
                       {newUser.photoPreview && (
-                        <img 
-                          src={newUser.photoPreview} 
-                          alt="Face Preview" 
+                        <img
+                          src={newUser.photoPreview}
+                          alt="Face Preview"
                           style={{ width: '48px', height: '48px', borderRadius: '50%', objectFit: 'cover', border: '2px solid #38bdf8' }}
                         />
                       )}
@@ -1179,7 +1265,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
                   <div className="form-group" style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
                     <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', color: '#e2e8f0' }}>
-                      <input 
+                      <input
                         type="checkbox"
                         checked={newUser.biometricConsent}
                         onChange={e => setNewUser({ ...newUser, biometricConsent: e.target.checked })}
@@ -1215,9 +1301,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <Camera size={20} className="text-primary" />
                 <h3>Biometric Face Enrollment: {enrollModal.student?.name}</h3>
               </div>
-              <button 
-                type="button" 
-                onClick={() => setEnrollModal({ ...enrollModal, open: false })} 
+              <button
+                type="button"
+                onClick={() => setEnrollModal({ ...enrollModal, open: false })}
                 className="modal-close"
               >
                 &times;
@@ -1230,7 +1316,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               <div className="form-group">
                 <label>Select Face Photo (JPEG/PNG, max 15MB)</label>
-                <input 
+                <input
                   type="file"
                   accept="image/jpeg,image/png"
                   onChange={e => {
@@ -1249,9 +1335,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               {enrollModal.photoPreview && (
                 <div style={{ textAlign: 'center', margin: '12px 0' }}>
-                  <img 
-                    src={enrollModal.photoPreview} 
-                    alt="Student Preview" 
+                  <img
+                    src={enrollModal.photoPreview}
+                    alt="Student Preview"
                     style={{ width: '120px', height: '120px', borderRadius: '12px', objectFit: 'cover', border: '2px solid #10b981', margin: '0 auto' }}
                   />
                   <div style={{ fontSize: '0.8rem', color: '#10b981', marginTop: '6px' }}>Ready for ArcFace 512-d feature extraction</div>
@@ -1260,7 +1346,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
 
               <div className="form-group" style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.2)' }}>
                 <label style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', cursor: 'pointer', fontSize: '0.82rem', color: '#e2e8f0' }}>
-                  <input 
+                  <input
                     type="checkbox"
                     checked={enrollModal.consent}
                     onChange={e => setEnrollModal({ ...enrollModal, consent: e.target.checked })}
@@ -1274,15 +1360,15 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  onClick={() => setEnrollModal({ ...enrollModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setEnrollModal({ ...enrollModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={enrollModal.isSubmitting}
                   className="btn-primary"
                 >
@@ -1303,15 +1389,15 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <FileSpreadsheet size={20} className="text-primary" />
                 <h3>Bulk Student Ingestion &amp; CSV Preview (ADM-01)</h3>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={() => setCsvModal({ ...csvModal, open: false })} 
+                onClick={() => setCsvModal({ ...csvModal, open: false })}
                 className="modal-close"
               >
                 &times;
               </button>
             </div>
-            
+
             <div className="modal-body form-stack">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                 <div>
@@ -1382,16 +1468,16 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer" style={{ marginTop: '16px' }}>
-                <button 
-                  type="button" 
-                  onClick={() => setCsvModal({ ...csvModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setCsvModal({ ...csvModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel
                 </button>
-                <button 
-                  type="button" 
-                  onClick={handleConfirmCsvImport} 
+                <button
+                  type="button"
+                  onClick={handleConfirmCsvImport}
                   className="btn-primary"
                   disabled={csvModal.parsedRows.length === 0}
                 >
@@ -1412,19 +1498,19 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <MapPin size={20} className="text-primary" />
                 <h3>{roomModal.isEditing ? 'Configure Geofence Coordinates' : 'Register New Geofenced Room'}</h3>
               </div>
-              <button 
+              <button
                 type="button"
-                onClick={() => setRoomModal({ ...roomModal, open: false })} 
+                onClick={() => setRoomModal({ ...roomModal, open: false })}
                 className="modal-close"
               >
                 &times;
               </button>
             </div>
-            
+
             <form onSubmit={handleSaveRoom} className="form-stack">
               <div className="form-group">
                 <label>Room / Hall Name</label>
-                <input 
+                <input
                   type="text"
                   placeholder="e.g. CS Lab 201"
                   value={roomModal.name}
@@ -1436,7 +1522,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>Latitude (Center Point)</label>
-                  <input 
+                  <input
                     type="number"
                     step="0.000001"
                     placeholder="18.52043"
@@ -1447,7 +1533,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Longitude (Center Point)</label>
-                  <input 
+                  <input
                     type="number"
                     step="0.000001"
                     placeholder="73.85674"
@@ -1461,7 +1547,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               <div className="grid-two-col-compact">
                 <div className="form-group">
                   <label>Geofence Radius (meters)</label>
-                  <input 
+                  <input
                     type="number"
                     min="5"
                     max="500"
@@ -1476,7 +1562,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </div>
                 <div className="form-group">
                   <label>Seating Capacity</label>
-                  <input 
+                  <input
                     type="number"
                     min="1"
                     placeholder="60"
@@ -1495,9 +1581,9 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </div>
 
               <div className="modal-footer">
-                <button 
-                  type="button" 
-                  onClick={() => setRoomModal({ ...roomModal, open: false })} 
+                <button
+                  type="button"
+                  onClick={() => setRoomModal({ ...roomModal, open: false })}
                   className="btn-secondary"
                 >
                   Cancel

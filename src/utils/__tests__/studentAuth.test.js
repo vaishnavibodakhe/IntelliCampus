@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { 
-  validateRegistrationForm, 
-  validateLoginForm, 
-  registerStudentApi, 
-  loginStudentApi 
+import {
+  validateRegistrationForm,
+  validateLoginForm,
+  registerStudentApi,
+  loginStudentApi
 } from '../studentAuthService.js';
 
 describe('Student Authentication - Form Validation Rules', () => {

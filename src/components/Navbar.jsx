@@ -1,22 +1,22 @@
 import React from 'react';
-import { 
-  ShieldCheck, 
-  UserCheck, 
-  GraduationCap, 
-  QrCode, 
-  Sun, 
-  Moon, 
+import {
+  ShieldCheck,
+  UserCheck,
+  GraduationCap,
+  QrCode,
+  Sun,
+  Moon,
   LogOut,
   LayoutGrid
 } from 'lucide-react';
 import NotificationBell from './NotificationBell';
 
-export default function Navbar({ 
+export default function Navbar({
   currentPath = '/',
-  currentRole, 
-  onNavigateHome, 
-  theme, 
-  setTheme, 
+  currentRole,
+  onNavigateHome,
+  theme,
+  setTheme,
   activeSession,
   notificationCount = 0,
   staffSession,
@@ -44,8 +44,8 @@ export default function Navbar({
   return (
     <header className="navbar-container">
       {/* Brand logo & return to portal landing */}
-      <div 
-        className="navbar-brand" 
+      <div
+        className="navbar-brand"
         onClick={onNavigateHome}
         style={{ cursor: 'pointer' }}
         title="Return to IntelliCampus Portal Selection"
@@ -112,7 +112,7 @@ export default function Navbar({
 
         {/* Notice Broadcast Alerts Indicator & Dropdown (only for Staff and Students) */}
         {(isStaffPortal || isStudentPortal) && (
-          <NotificationBell 
+          <NotificationBell
             notices={notices}
             unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
             isLoading={isLoadingNotices}
@@ -127,7 +127,7 @@ export default function Navbar({
 
         {/* Switch Portal / Return to Home button when inside a specific portal */}
         {!isLanding && (
-          <button 
+          <button
             type="button"
             onClick={onNavigateHome}
             className="action-icon-btn home-nav-btn"
@@ -166,7 +166,7 @@ export default function Navbar({
           (isStaffPortal && staffSession?.user) ||
           (isStudentPortal && currentUser)
         ) && (
-          <button 
+          <button
             type="button"
             onClick={onLogout}
             className="action-icon-btn"
@@ -179,7 +179,7 @@ export default function Navbar({
         )}
 
         {/* Theme Toggle */}
-        <button 
+        <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className="action-icon-btn"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}

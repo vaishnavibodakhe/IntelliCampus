@@ -1,31 +1,31 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  ShieldCheck, 
-  Lock, 
-  Mail, 
-  User, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  AlertCircle, 
-  CheckCircle2, 
-  KeyRound, 
-  LogIn, 
-  UserPlus, 
+import {
+  ShieldCheck,
+  Lock,
+  Mail,
+  User,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  KeyRound,
+  LogIn,
+  UserPlus,
   RotateCw,
   ShieldAlert
 } from 'lucide-react';
-import { 
-  loginStaffApi, 
-  registerStaffApi, 
-  forgotPasswordApi, 
-  resetPasswordApi, 
-  checkAdminBootstrapApi, 
-  saveStaffSession, 
-  validateStaffLoginForm, 
-  validateStaffRegisterForm, 
-  validateForgotPasswordForm, 
-  validateOtpResetPasswordForm 
+import {
+  loginStaffApi,
+  registerStaffApi,
+  forgotPasswordApi,
+  resetPasswordApi,
+  checkAdminBootstrapApi,
+  saveStaffSession,
+  validateStaffLoginForm,
+  validateStaffRegisterForm,
+  validateForgotPasswordForm,
+  validateOtpResetPasswordForm
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
@@ -300,7 +300,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
 
         {/* Tab Switcher */}
         <div className="staff-tabs">
-          <button 
+          <button
             type="button"
             className={`staff-tab-btn ${activeTab === 'login' ? 'active' : ''}`}
             onClick={() => handleTabSwitch('login')}
@@ -309,7 +309,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             <span>Sign In</span>
           </button>
 
-          <button 
+          <button
             type="button"
             className={`staff-tab-btn ${activeTab === 'register' ? 'active' : ''}`}
             onClick={() => handleTabSwitch('register')}
@@ -318,7 +318,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
             <span>Register</span>
           </button>
 
-          <button 
+          <button
             type="button"
             className={`staff-tab-btn ${activeTab === 'forgot' ? 'active' : ''}`}
             onClick={() => handleTabSwitch('forgot')}
@@ -335,7 +335,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-login-email">Principal Email</label>
               <div className="input-wrap">
                 <Mail size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-login-email"
                   type="email"
                   placeholder="principal@intellicampus.edu"
@@ -351,7 +351,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-login-password">Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-login-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Enter principal password"
@@ -359,7 +359,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
                   autoComplete="current-password"
                 />
-                <button 
+                <button
                   type="button"
                   className="eye-toggle"
                   onClick={() => setShowPassword(!showPassword)}
@@ -370,8 +370,8 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               {errors.password && <span className="field-error">{errors.password}</span>}
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="submit-btn"
               disabled={loading}
               style={{ background: '#6366f1' }}
@@ -404,7 +404,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-reg-name">Full Name</label>
               <div className="input-wrap">
                 <User size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-reg-name"
                   type="text"
                   placeholder="e.g. Dr. Alan Turing"
@@ -419,7 +419,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-reg-email">Principal Email</label>
               <div className="input-wrap">
                 <Mail size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-reg-email"
                   type="email"
                   placeholder="principal@intellicampus.edu"
@@ -434,14 +434,14 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-reg-password">Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-reg-password"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Min 8 chars with upper, lower, digit & symbol"
                   value={registerForm.password}
                   onChange={(e) => setRegisterForm({ ...registerForm, password: e.target.value })}
                 />
-                <button 
+                <button
                   type="button"
                   className="eye-toggle"
                   onClick={() => setShowPassword(!showPassword)}
@@ -456,7 +456,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               <label htmlFor="admin-reg-confirm">Confirm Principal Password</label>
               <div className="input-wrap">
                 <Lock size={16} className="input-icon" />
-                <input 
+                <input
                   id="admin-reg-confirm"
                   type={showPassword ? 'text' : 'password'}
                   placeholder="Re-enter principal password"
@@ -467,8 +467,8 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
               {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="submit-btn"
               disabled={loading}
               style={{ background: '#6366f1' }}
@@ -497,7 +497,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   <label htmlFor="admin-forgot-email">Principal Email</label>
                   <div className="input-wrap">
                     <Mail size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="admin-forgot-email"
                       type="email"
                       placeholder="principal@intellicampus.edu"
@@ -509,8 +509,8 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   {errors.email && <span className="field-error">{errors.email}</span>}
                 </div>
 
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="submit-btn"
                   disabled={loading}
                   style={{ background: '#6366f1' }}
@@ -534,7 +534,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   <label htmlFor="admin-otp">6-Digit Verification OTP</label>
                   <div className="input-wrap">
                     <KeyRound size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="admin-otp"
                       type="text"
                       maxLength={6}
@@ -550,14 +550,14 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   <label htmlFor="admin-new-password">New Principal Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="admin-new-password"
                       type={showOtpPassword ? 'text' : 'password'}
                       placeholder="Minimum 8 characters"
                       value={otpNewPassword}
                       onChange={(e) => setOtpNewPassword(e.target.value)}
                     />
-                    <button 
+                    <button
                       type="button"
                       className="eye-toggle"
                       onClick={() => setShowOtpPassword(!showOtpPassword)}
@@ -572,7 +572,7 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   <label htmlFor="admin-confirm-password">Confirm New Principal Password</label>
                   <div className="input-wrap">
                     <Lock size={16} className="input-icon" />
-                    <input 
+                    <input
                       id="admin-confirm-password"
                       type={showOtpPassword ? 'text' : 'password'}
                       placeholder="Re-enter password"
@@ -583,8 +583,8 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                   {errors.confirmPassword && <span className="field-error">{errors.confirmPassword}</span>}
                 </div>
 
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   className="submit-btn"
                   disabled={loading}
                   style={{ background: '#6366f1' }}
@@ -603,14 +603,14 @@ export default function AdminAuthView({ onAuthSuccess, noticeMessage = '' }) {
                 </button>
 
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
-                  <button 
+                  <button
                     type="button"
                     onClick={() => setForgotStep('email')}
                     style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}
                   >
                     ← Change Email
                   </button>
-                  <button 
+                  <button
                     type="button"
                     disabled={resendCooldown > 0 || loading}
                     onClick={handleRequestOtp}

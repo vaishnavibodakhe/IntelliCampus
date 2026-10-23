@@ -3,7 +3,7 @@ import StaffAuthView from './StaffAuthView';
 
 export default function HodAuthView({ onAuthSuccess, noticeMessage = '', onRoleChange }) {
   return (
-    <StaffAuthView 
+    <StaffAuthView
       initialRole="HOD"
       onAuthSuccess={onAuthSuccess}
       noticeMessage={noticeMessage}
