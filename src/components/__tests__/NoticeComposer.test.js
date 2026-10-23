@@ -1,9 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { 
-  getMyNoticeFeed, 
-  publishNotice, 
-  markNoticeRead, 
+import {
+  getMyNoticeFeed,
+  publishNotice,
+  markNoticeRead,
   searchStudents,
   listNotices
 } from '../../api/client.js';

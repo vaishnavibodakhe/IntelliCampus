@@ -1,17 +1,17 @@
 import React, { useState } from 'react';
-import { 
-  KeyRound, 
-  Lock, 
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  AlertCircle, 
-  CheckCircle2, 
-  X 
+import {
+  KeyRound,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  X
 } from 'lucide-react';
-import { 
-  changePasswordApi, 
-  validateChangePasswordForm 
+import {
+  changePasswordApi,
+  validateChangePasswordForm
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
@@ -63,10 +63,10 @@ export default function StaffChangePasswordView({ staffSession, onClose, onPassw
     <div className="staff-auth-container" style={{ position: 'relative' }}>
       <div className="staff-auth-card" style={{ position: 'relative' }}>
         {onClose && (
-          <button 
-            type="button" 
-            onClick={onClose} 
-            className="staff-eye-btn" 
+          <button
+            type="button"
+            onClick={onClose}
+            className="staff-eye-btn"
             style={{ position: 'absolute', top: '1.25rem', right: '1.25rem' }}
           >
             <X size={20} />
@@ -102,15 +102,15 @@ export default function StaffChangePasswordView({ staffSession, onClose, onPassw
             <label className="staff-field-label">Current Password</label>
             <div className="staff-input-wrapper">
               <Lock className="staff-input-icon" size={18} />
-              <input 
+              <input
                 type={showCurrent ? 'text' : 'password'}
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 placeholder="Enter current password"
                 className={`staff-input ${errors.currentPassword ? 'has-error' : ''}`}
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="staff-eye-btn"
                 onClick={() => setShowCurrent(!showCurrent)}
                 tabIndex="-1"
@@ -125,15 +125,15 @@ export default function StaffChangePasswordView({ staffSession, onClose, onPassw
             <label className="staff-field-label">New Password (Min 6 chars)</label>
             <div className="staff-input-wrapper">
               <Lock className="staff-input-icon" size={18} />
-              <input 
+              <input
                 type={showNew ? 'text' : 'password'}
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 placeholder="Enter new password"
                 className={`staff-input ${errors.newPassword ? 'has-error' : ''}`}
               />
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="staff-eye-btn"
                 onClick={() => setShowNew(!showNew)}
                 tabIndex="-1"
@@ -148,7 +148,7 @@ export default function StaffChangePasswordView({ staffSession, onClose, onPassw
             <label className="staff-field-label">Confirm New Password</label>
             <div className="staff-input-wrapper">
               <Lock className="staff-input-icon" size={18} />
-              <input 
+              <input
                 type={showNew ? 'text' : 'password'}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -159,8 +159,8 @@ export default function StaffChangePasswordView({ staffSession, onClose, onPassw
             {errors.confirmPassword && <span className="staff-error-text">{errors.confirmPassword}</span>}
           </div>
 
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             className="staff-submit-btn"
             disabled={loading}
           >

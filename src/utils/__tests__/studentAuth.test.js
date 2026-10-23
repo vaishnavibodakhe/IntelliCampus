@@ -1,10 +1,10 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { 
-  validateRegistrationForm, 
-  validateLoginForm, 
-  registerStudentApi, 
-  loginStudentApi 
+import {
+  validateRegistrationForm,
+  validateLoginForm,
+  registerStudentApi,
+  loginStudentApi
 } from '../studentAuthService.js';
 
 describe('Student Authentication - Form Validation Rules', () => {
@@ -13,8 +13,8 @@ describe('Student Authentication - Form Validation Rules', () => {
     const validData = {
       name: 'Pooja Deshmukh',
       email: 'pooja.cs@intellicampus.edu',
-      password: 'Password@123',
-      confirmPassword: 'Password@123',
+      password: 'SecurePass#2026',
+      confirmPassword: 'SecurePass#2026',
       rollNo: '2024-CS-042',
       department: 'Computer Science',
       year: 3
@@ -29,8 +29,8 @@ describe('Student Authentication - Form Validation Rules', () => {
     const invalidData = {
       name: ' ',
       email: 'pooja@intellicampus.edu',
-      password: 'Password@123',
-      confirmPassword: 'Password@123',
+      password: 'SecurePass#2026',
+      confirmPassword: 'SecurePass#2026',
       rollNo: '2024-CS-042',
       department: 'Computer Science',
       year: 3
@@ -45,8 +45,8 @@ describe('Student Authentication - Form Validation Rules', () => {
     const invalidData = {
       name: 'Pooja Deshmukh',
       email: 'pooja-not-an-email',
-      password: 'Password@123',
-      confirmPassword: 'Password@123',
+      password: 'SecurePass#2026',
+      confirmPassword: 'SecurePass#2026',
       rollNo: '2024-CS-042',
       department: 'Computer Science',
       year: 3
@@ -77,7 +77,7 @@ describe('Student Authentication - Form Validation Rules', () => {
     const invalidData = {
       name: 'Pooja Deshmukh',
       email: 'pooja@intellicampus.edu',
-      password: 'Password@123',
+      password: 'SecurePass#2026',
       confirmPassword: 'DifferentPassword',
       rollNo: '2024-CS-042',
       department: 'Computer Science',
@@ -93,8 +93,8 @@ describe('Student Authentication - Form Validation Rules', () => {
     const invalidData = {
       name: 'Pooja Deshmukh',
       email: 'pooja@intellicampus.edu',
-      password: 'Password@123',
-      confirmPassword: 'Password@123',
+      password: 'SecurePass#2026',
+      confirmPassword: 'SecurePass#2026',
       rollNo: '',
       department: 'Computer Science',
       year: 3
@@ -144,7 +144,7 @@ describe('Student Authentication - API Client Integration', () => {
     const result = await registerStudentApi({
       name: 'Pooja Deshmukh',
       email: 'pooja.cs@intellicampus.edu',
-      password: 'Password@123',
+      password: 'SecurePass#2026',
       rollNo: '2024-CS-042',
       department: 'Computer Science',
       year: 3
@@ -171,7 +171,7 @@ describe('Student Authentication - API Client Integration', () => {
         await registerStudentApi({
           name: 'Pooja Deshmukh',
           email: 'pooja.cs@intellicampus.edu',
-          password: 'Password@123',
+          password: 'SecurePass#2026',
           rollNo: '2024-CS-042',
           department: 'Computer Science',
           year: 3
@@ -204,7 +204,7 @@ describe('Student Authentication - API Client Integration', () => {
 
     const result = await loginStudentApi({
       email: 'aarav.cs24@intellicampus.edu',
-      password: 'Password@123'
+      password: 'SecurePass#2026'
     });
 
     assert.strictEqual(result.accessToken, 'jwt.student.access');

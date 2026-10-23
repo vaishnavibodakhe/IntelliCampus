@@ -109,10 +109,10 @@ public class StaffAuthService {
         }
 
         String baseCode = "ADM-"
-                + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty() 
+                + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty()
                    ? req.getEmployeeCode().trim().toUpperCase().replaceAll("[^A-Z0-9]", "-")
                    : Math.abs(email.hashCode() % 10000));
-        
+
         String userCode = baseCode;
         int suffix = 1;
         while (userRepository.existsByUserCode(userCode)) {
@@ -174,10 +174,10 @@ public class StaffAuthService {
         }
 
         String baseCode = (role == Role.ADMIN ? "ADM-" : role == Role.HOD ? "HOD-" : role == Role.MENTOR ? "MEN-" : "FAC-")
-                + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty() 
+                + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty()
                    ? req.getEmployeeCode().trim().toUpperCase().replaceAll("[^A-Z0-9]", "-")
                    : Math.abs(email.hashCode() % 10000));
-        
+
         String userCode = baseCode;
         int suffix = 1;
         while (userRepository.existsByUserCode(userCode)) {

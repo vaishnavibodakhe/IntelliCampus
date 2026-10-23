@@ -53,12 +53,14 @@ public class EmailService {
             return;
         }
 
-        if (mailSender instanceof org.springframework.mail.javamail.JavaMailSenderImpl senderImpl) {
+        if (mailSender != null && mailSender.getClass().getName().contains("JavaMailSenderImpl")) {
             try {
-                senderImpl.testConnection();
+                java.lang.reflect.Method testMethod = mailSender.getClass().getMethod("testConnection");
+                testMethod.invoke(mailSender);
                 logger.info("SMTP auth check: OK");
             } catch (Exception ex) {
-                String code = extractSmtpCode(ex);
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                String code = extractSmtpCode(cause instanceof Exception ? (Exception) cause : ex);
                 logger.warn("SMTP auth check: FAILED ({})", code);
             }
         } else {

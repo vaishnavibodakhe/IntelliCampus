@@ -17,6 +17,9 @@ public class SessionResponseDto {
     private Long divisionId;
     private String divisionName;
     private String challengeCode;
+    private String sessionNonce;
+    private Integer photoCount = 0;
+    private LocalDateTime expiresAt;
     private SessionStatus status;
     private LocalDateTime startedAt;
     private LocalDateTime photoWindowEndsAt;
@@ -28,6 +31,15 @@ public class SessionResponseDto {
     private List<AttendanceRecordResponseDto> records = new ArrayList<>();
 
     public SessionResponseDto() {}
+
+    public String getSessionNonce() { return sessionNonce; }
+    public void setSessionNonce(String sessionNonce) { this.sessionNonce = sessionNonce; }
+
+    public Integer getPhotoCount() { return photoCount; }
+    public void setPhotoCount(Integer photoCount) { this.photoCount = photoCount; }
+
+    public LocalDateTime getExpiresAt() { return expiresAt; }
+    public void setExpiresAt(LocalDateTime expiresAt) { this.expiresAt = expiresAt; }
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
