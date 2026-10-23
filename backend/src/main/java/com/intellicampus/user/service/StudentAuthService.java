@@ -127,7 +127,9 @@ public class StudentAuthService {
             }
         }
         final int targetYear = yearNum;
-        Division division = divisionRepository.findByNameAndDepartmentId(divName, dept.getId())
+        String canonicalName = "Year " + targetYear + " " + divName;
+        Division division = divisionRepository.findByNameAndDepartmentId(canonicalName, dept.getId())
+                .or(() -> divisionRepository.findByNameAndDepartmentId(divName, dept.getId()))
                 .orElseGet(() -> divisionRepository.save(new Division(dept, targetYear, divName)));
 
         // Generate user code e.g. student.cs104

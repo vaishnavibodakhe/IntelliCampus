@@ -1,47 +1,57 @@
-import { 
-  ShieldCheck, 
-  UserCheck, 
-  GraduationCap, 
-  Users, 
-  FileText, 
-  QrCode, 
-  Bell, 
-  Link2, 
-  Sun, 
-  Moon, 
-  Sparkles,
+import React from 'react';
+import {
+  ShieldCheck,
+  UserCheck,
+  GraduationCap,
+  Users,
   BookOpen,
-  LogOut
+  QrCode,
+  Sun,
+  Moon,
+  LogOut,
+  LayoutGrid
 } from 'lucide-react';
+import NotificationBell from './NotificationBell';
 
-export default function Navbar({ 
-  currentRole, 
-  setCurrentRole, 
-  theme, 
-  setTheme, 
-  onOpenAudit, 
-  onOpenChat,
+export default function Navbar({
+  currentPath = '/',
+  currentRole,
+  onNavigateHome,
+  theme,
+  setTheme,
   activeSession,
-  notificationCount = 2,
+  notificationCount = 0,
+  staffSession,
+  notices = [],
+  unreadCount,
+  isLoadingNotices = false,
+  noticeError = null,
+  onMarkNoticeRead,
+  onRefreshNotices,
+  onViewAllNotices,
   currentUser = null,
-  onLogout = null
+  onLogout
 }) {
-  const roleConfig = {
-    PRINCIPAL: { label: 'Principal Operations Console', icon: ShieldCheck, color: '#6366f1' },
-    ADMIN: { label: 'Principal Operations Console', icon: ShieldCheck, color: '#6366f1' },
-    HOD: { label: 'HOD Academic Console', icon: BookOpen, color: '#8b5cf6' },
-    FACULTY: { label: 'Faculty Management Portal', icon: UserCheck, color: '#06b6d4' },
-    MENTOR: { label: 'Mentor Advisory Workspace', icon: Users, color: '#10b981' },
-    STUDENT: { label: 'Student Campus Portal', icon: GraduationCap, color: '#f59e0b' },
-    PUBLIC: { label: 'Public Credential Verifier', icon: QrCode, color: '#ec4899' }
-  };
+  // Determine active portal mode
+  const isLanding = currentPath === '/' && (!currentRole || currentRole === 'LANDING');
+  const isPrincipalPortal = currentPath === '/admin/login' || currentRole === 'PRINCIPAL' || currentRole === 'ADMIN';
+  const isStaffPortal = currentPath === '/staff/login' || ['STAFF', 'HOD', 'FACULTY', 'MENTOR'].includes(currentRole);
+  const isStudentPortal = currentPath === '/student/login' || currentRole === 'STUDENT';
+  const isPublicPortal = currentPath === '/verify' || currentRole === 'PUBLIC';
 
-  const activePortal = roleConfig[currentRole] || roleConfig.STUDENT;
-  const PortalIcon = activePortal.icon;
+  const staffRole = staffSession?.user?.role;
+  const staffName = staffSession?.user?.name;
+  const studentName = currentUser?.name;
 
   return (
     <header className="navbar-container">
-      <div className="navbar-brand">
+      {/* Brand logo & return to portal landing */}
+      <div
+        className="navbar-brand"
+        onClick={onNavigateHome}
+        style={{ cursor: 'pointer' }}
+        title="Return to IntelliCampus Portal Selection"
+      >
         <div className="brand-logo-wrap">
           <svg className="brand-logo" viewBox="0 0 100 100">
             <defs>
@@ -56,97 +66,123 @@ export default function Navbar({
           </svg>
         </div>
         <div className="brand-text">
-          <div className="brand-title">
-            IntelliCampus
-            <span className="brand-pill">v1.0</span>
-          </div>
+          <div className="brand-title">IntelliCampus</div>
           <div className="brand-subtitle">Intelligent College Platform</div>
         </div>
       </div>
 
-      {/* Authenticated Workspace Portal Indicator (Role Switcher Removed) */}
-      <div className="active-portal-badge-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '6px 14px', borderRadius: '20px', border: `1px solid ${activePortal.color}40` }}>
-        <PortalIcon size={16} color={activePortal.color} />
-        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-          {activePortal.label}
-        </span>
+      {/* Role-Specific Portal Indicator without mixing options */}
+      <div className="navbar-portal-center">
+        {isLanding ? (
+          <div className="portal-indicator-badge landing">
+            <LayoutGrid size={15} style={{ color: '#818cf8' }} />
+            <span>Role Selection Portal</span>
+          </div>
+        ) : isPrincipalPortal ? (
+          <div className="portal-indicator-badge principal">
+            <ShieldCheck size={16} />
+            <span>Principal Portal</span>
+          </div>
+        ) : isStaffPortal ? (
+          <div className="portal-indicator-badge staff">
+            <UserCheck size={16} />
+            <span>Staff Portal</span>
+            {staffRole && <span className="staff-subrole-badge">{staffRole}</span>}
+          </div>
+        ) : isStudentPortal ? (
+          <div className="portal-indicator-badge student">
+            <GraduationCap size={16} />
+            <span>Student Portal</span>
+          </div>
+        ) : isPublicPortal ? (
+          <div className="portal-indicator-badge public">
+            <QrCode size={16} />
+            <span>Public Document Verifier</span>
+          </div>
+        ) : null}
       </div>
 
       {/* Action shortcuts */}
       <div className="navbar-actions">
-        {/* Active Class Live Indicator */}
-        {activeSession && activeSession.status === 'OPEN' && (
+        {/* Active Class Live Indicator (only for Staff and Students) */}
+        {(isStaffPortal || isStudentPortal) && activeSession && activeSession.status === 'OPEN' && (
           <div className="live-session-badge animate-pulse-glow" title="Active attendance session ongoing">
             <span className="live-dot" />
             <span>Live: {activeSession.challengeCode}</span>
           </div>
         )}
 
-        {/* Notice Broadcast Alerts Indicator */}
-        <div className="action-icon-btn notice-bell-btn" title={`${notificationCount} Active Campus Notices`} style={{ position: 'relative' }}>
-          <Bell size={17} />
-          {notificationCount > 0 && (
-            <span className="badge-notification-count" style={{
-              position: 'absolute',
-              top: '-4px',
-              right: '-4px',
-              background: '#ef4444',
-              color: '#ffffff',
-              borderRadius: '9999px',
-              fontSize: '0.65rem',
-              fontWeight: 700,
-              minWidth: '16px',
-              height: '16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '0 3px'
-            }}>
-              {notificationCount}
-            </span>
-          )}
-        </div>
+        {/* Notice Broadcast Alerts Indicator & Dropdown (only for Staff and Students) */}
+        {(isStaffPortal || isStudentPortal) && (
+          <NotificationBell
+            notices={notices}
+            unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
+            isLoading={isLoadingNotices}
+            error={noticeError}
+            onMarkNoticeRead={onMarkNoticeRead}
+            onRefresh={onRefreshNotices}
+            onViewAll={onViewAllNotices}
+            currentRole={currentRole}
+            currentUser={currentUser}
+          />
+        )}
 
-        {/* Cryptographic Audit Hash Chain Inspector */}
-        <button 
-          onClick={onOpenAudit}
-          className="action-icon-btn audit-btn"
-          title="Cryptographic SHA-256 Audit Chain Inspector"
-        >
-          <Link2 size={17} />
-          <span className="btn-label">Audit Chain</span>
-        </button>
+        {/* Switch Portal / Return to Home button when inside a specific portal */}
+        {!isLanding && (
+          <button
+            type="button"
+            onClick={onNavigateHome}
+            className="action-icon-btn home-nav-btn"
+            title="Switch to another Role Portal"
+          >
+            <LayoutGrid size={16} />
+            <span className="btn-label">Portals</span>
+          </button>
+        )}
 
-        {/* RAG Chatbot Button */}
-        <button 
-          onClick={onOpenChat}
-          className="action-icon-btn chat-btn"
-          title="Ask IntelliCampus Document AI Chatbot"
-        >
-          <Sparkles size={17} />
-          <span className="btn-label">Ask AI</span>
-        </button>
-
-        {/* Authenticated User Badge & Logout Option */}
-        {currentUser && (
-          <div className="auth-nav-user" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', background: 'var(--bg-surface)', padding: '3px 8px 3px 10px', borderRadius: 'var(--radius-full)', border: '1px solid var(--border-medium)' }}>
-            <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {currentUser.name}
-            </span>
-            <button
-              onClick={onLogout}
-              id="navbar-logout-btn"
-              className="action-icon-btn"
-              title="Logout from session"
-              style={{ padding: '4px', background: 'transparent', border: 'none', color: 'var(--danger-text)', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
-            >
-              <LogOut size={14} />
-            </button>
+        {/* User Identity Chip when logged in */}
+        {isPrincipalPortal && (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN') && (
+          <div className="navbar-user-chip" title="Connected as Principal">
+            <span className="dot" />
+            <span>{staffName || 'Principal'}</span>
           </div>
         )}
 
+        {isStaffPortal && staffSession?.user && (
+          <div className="navbar-user-chip" title={`Connected as ${staffRole}`}>
+            <span className="dot" />
+            <span>{staffName}</span>
+          </div>
+        )}
+
+        {isStudentPortal && currentUser && (
+          <div className="navbar-user-chip" title="Connected as Student">
+            <span className="dot" />
+            <span>{studentName}</span>
+          </div>
+        )}
+
+        {/* Logout button in navbar when logged into any portal */}
+        {onLogout && (
+          (isPrincipalPortal && (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN')) ||
+          (isStaffPortal && staffSession?.user) ||
+          (isStudentPortal && currentUser)
+        ) && (
+          <button
+            type="button"
+            onClick={onLogout}
+            id="navbar-logout-btn"
+            className="action-icon-btn"
+            style={{ color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.3)' }}
+            title="Sign Out of Session"
+          >
+            <LogOut size={16} />
+            <span className="btn-label">Sign Out</span>
+          </button>
+        )}
+
         {/* Theme Toggle */}
-        <button 
+        <button
           onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
           className="action-icon-btn"
           title={`Switch to ${theme === 'dark' ? 'Light' : 'Dark'} Mode`}

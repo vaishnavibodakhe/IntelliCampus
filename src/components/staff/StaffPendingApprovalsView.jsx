@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  Users, 
-  Check, 
-  X, 
-  AlertCircle, 
-  CheckCircle2, 
-  RefreshCw, 
-  ShieldCheck, 
-  Clock 
+import {
+  Users,
+  Check,
+  X,
+  AlertCircle,
+  CheckCircle2,
+  RefreshCw,
+  ShieldCheck,
+  Clock
 } from 'lucide-react';
-import { 
-  getPendingApprovalsApi, 
-  approveStaffApi, 
-  rejectStaffApi 
+import {
+  getPendingApprovalsApi,
+  approveStaffApi,
+  rejectStaffApi
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
@@ -92,9 +92,9 @@ export default function StaffPendingApprovalsView({ staffSession, onNavigate }) 
           </div>
         </div>
 
-        <button 
-          type="button" 
-          onClick={loadApprovals} 
+        <button
+          type="button"
+          onClick={loadApprovals}
           disabled={loading}
           className="btn-reject"
           style={{ background: 'rgba(99, 102, 241, 0.15)', color: '#a5b4fc', borderColor: 'rgba(99, 102, 241, 0.3)' }}
@@ -163,7 +163,7 @@ export default function StaffPendingApprovalsView({ staffSession, onNavigate }) 
                   </td>
                   <td>
                     <div className="staff-actions-cell">
-                      <button 
+                      <button
                         type="button"
                         onClick={() => handleApprove(staff.id, staff.name)}
                         disabled={actionLoadingId === staff.id}
@@ -172,7 +172,7 @@ export default function StaffPendingApprovalsView({ staffSession, onNavigate }) 
                         <Check size={14} />
                         Approve
                       </button>
-                      <button 
+                      <button
                         type="button"
                         onClick={() => handleReject(staff.id, staff.name)}
                         disabled={actionLoadingId === staff.id}

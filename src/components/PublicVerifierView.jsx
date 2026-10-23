@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
-import { 
-  ShieldCheck, 
-  Search, 
-  CheckCircle, 
-  XCircle, 
-  AlertOctagon, 
-  QrCode, 
-  Copy, 
+import {
+  ShieldCheck,
+  Search,
+  CheckCircle,
+  XCircle,
+  AlertOctagon,
+  QrCode,
+  Copy,
   ExternalLink,
   Lock
 } from 'lucide-react';
-
 import { api } from '../api/client';
 
 export default function PublicVerifierView({ issuedDocuments = [] }) {
@@ -36,14 +35,20 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
 
   const executeVerification = async (codeOrHash) => {
     if (!codeOrHash || !codeOrHash.trim()) return;
+    const trimmed = codeOrHash.trim();
     setLoading(true);
     setHasSearched(true);
     try {
-      const data = await api.verifyCredential(codeOrHash.trim());
+      let data = null;
+      if (api.verifyCredential) {
+        data = await api.verifyCredential(trimmed);
+      } else if (api.verifyDocument) {
+        data = await api.verifyDocument(trimmed);
+      }
       if (data && data.code) {
         setSearchedDoc({
           code: data.code,
-          type: (data.credentialType || 'DEGREE').replace(/_/g, ' '),
+          type: (data.credentialType || data.type || 'DEGREE').replace(/_/g, ' '),
           maskedStudentName: data.maskedStudentName || data.studentName || 'Confidential Student',
           department: data.department || 'General Academic',
           issueDate: data.issueDate || data.issuedAt || 'Official Record',
@@ -52,19 +57,21 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           revokedReason: data.revocationReason || data.revokedReason || 'Document recalled by Principal',
           fileHash: data.documentHash || data.fileHash || 'SHA-256 Validated'
         });
-      } else {
-        setSearchedDoc(null);
+        return;
       }
     } catch {
       // Check local issued documents as fallback if offline
-      const found = (issuedDocuments || []).find(d => 
-        (d.code && d.code.toUpperCase() === codeOrHash.toUpperCase()) ||
-        (d.fileHash && d.fileHash.toLowerCase() === codeOrHash.toLowerCase())
-      );
-      setSearchedDoc(found || null);
     } finally {
       setLoading(false);
     }
+
+    const found = (issuedDocuments || []).find(d =>
+      (d.code && d.code.toUpperCase() === trimmed.toUpperCase()) ||
+      (d.fileHash && d.fileHash.toLowerCase() === trimmed.toLowerCase()) ||
+      (d.fileHash && d.fileHash.replace(/^sha256_/, '').toLowerCase() === trimmed.toLowerCase()) ||
+      trimmed.toLowerCase().includes(d.code?.toLowerCase())
+    );
+    setSearchedDoc(found || null);
   };
 
   const handleVerify = (e) => {
@@ -97,17 +104,17 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', margin: '16px 0 20px' }}>
           <button
             type="button"
-            onClick={() => { setSearchMode('CODE'); setSearchCode('DOC-2026-CS-8921'); }}
+            onClick={() => { setSearchMode('CODE'); setSearchCode(''); }}
             className={`btn-sm ${searchMode === 'CODE' ? 'btn-primary' : 'btn-secondary'}`}
           >
             <Search size={14} /> Verify by Document Code
           </button>
           <button
             type="button"
-            onClick={() => { 
-              setSearchMode('HASH'); 
+            onClick={() => {
+              setSearchMode('HASH');
               const validDoc = issuedDocuments[0];
-              setSearchCode(validDoc ? validDoc.fileHash : 'sha256_9f83a1b2c3d4e5f6'); 
+              setSearchCode(validDoc ? validDoc.fileHash : '');
             }}
             className={`btn-sm ${searchMode === 'HASH' ? 'btn-primary' : 'btn-secondary'}`}
           >
@@ -127,7 +134,7 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
             <QrCode size={48} className="text-primary" style={{ margin: '0 auto 12px' }} />
             <h3 style={{ margin: '0 0 6px' }}>Digital Certificate QR Scanner</h3>
             <p className="text-secondary text-xs" style={{ margin: '0 0 16px' }}>
-              Hold the physical degree certificate QR code up to your scanner camera, or test simulated scans:
+              Hold the physical degree certificate QR code up to your scanner camera, or select an issued credential:
             </p>
             {isScanningQr ? (
               <div style={{ padding: '16px', color: '#6366f1' }}>
@@ -136,16 +143,20 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
               </div>
             ) : (
               <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                {issuedDocuments.slice(0, 2).map((doc, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => handleSimulateQrScan(doc)}
-                    className="btn-primary btn-xs"
-                  >
-                    Scan QR for {doc.code} ({doc.status})
-                  </button>
-                ))}
+                {issuedDocuments && issuedDocuments.length > 0 ? (
+                  issuedDocuments.slice(0, 3).map((doc, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => handleSimulateQrScan(doc)}
+                      className="btn-primary btn-xs"
+                    >
+                      Scan QR for {doc.code} ({doc.status})
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted">No issued documents in database to scan.</p>
+                )}
               </div>
             )}
           </div>
@@ -153,9 +164,9 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           <form onSubmit={handleVerify} className="verifier-search-bar">
             <div className="search-input-wrapper">
               <Search size={18} className="search-icon-left text-muted" />
-              <input 
-                type="text" 
-                placeholder={searchMode === 'HASH' ? "Paste SHA-256 file checksum (e.g. sha256_a1b2c3d4...)" : "Enter 16-character document verification code (e.g. DOC-2026-CS-8921)"}
+              <input
+                type="text"
+                placeholder={searchMode === 'HASH' ? "Paste SHA-256 file checksum (e.g. 9f83a1b2...)" : "Enter document verification code (e.g. DOC-2026-CS-8921)"}
                 value={searchCode}
                 onChange={e => setSearchCode(e.target.value)}
                 className="verifier-input font-mono"
@@ -168,44 +179,26 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
           </form>
         )}
 
-        <div className="verifier-sample-codes">
-          <span className="text-xs text-muted">Try sample credentials:</span>
-          <button 
-            type="button" 
-            onClick={() => { setSearchMode('CODE'); setSearchCode('DOC-2026-CS-8921'); setSearchedDoc(issuedDocuments.find(d => d.code === 'DOC-2026-CS-8921')); }}
-            className="sample-chip"
-          >
-            DOC-2026-CS-8921 (Valid Degree)
-          </button>
-          <button 
-            type="button" 
-            onClick={() => { 
-              setSearchMode('HASH'); 
-              const doc = issuedDocuments[0];
-              if (doc) {
-                setSearchCode(doc.fileHash);
-                setSearchedDoc(doc);
-              }
-            }}
-            className="sample-chip"
-          >
-            Pasted SHA-256 Hash
-          </button>
-          <button 
-            type="button" 
-            onClick={() => { setSearchMode('CODE'); setSearchCode('DOC-2025-BC-1102'); setSearchedDoc(issuedDocuments.find(d => d.code === 'DOC-2025-BC-1102')); }}
-            className="sample-chip"
-          >
-            DOC-2025-BC-1102 (Revoked NOC)
-          </button>
-          <button 
-            type="button" 
-            onClick={() => { setSearchMode('CODE'); setSearchCode('DOC-UNKNOWN-0000'); setSearchedDoc(null); }}
-            className="sample-chip"
-          >
-            DOC-UNKNOWN-0000 (Invalid Code)
-          </button>
-        </div>
+        {issuedDocuments && issuedDocuments.length > 0 && (
+          <div className="verifier-sample-codes">
+            <span className="text-xs text-muted">Available issued credentials:</span>
+            {issuedDocuments.slice(0, 3).map((d) => (
+              <button
+                key={d.code}
+                type="button"
+                onClick={() => {
+                  setSearchMode('CODE');
+                  setSearchCode(d.code);
+                  setSearchedDoc(d);
+                  setHasSearched(true);
+                }}
+                className="sample-chip"
+              >
+                {d.code} ({d.type} - {d.status})
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Verification Result Card */}
@@ -289,8 +282,8 @@ export default function PublicVerifierView({ issuedDocuments = [] }) {
               <p className="text-secondary max-w-md mx-auto mb-4">
                 No issued record matches the code <code>{searchCode}</code> in the official college ledger. The document may be counterfeit or the tracking number was incorrectly entered.
               </p>
-              <button 
-                onClick={() => setSearchCode('')} 
+              <button
+                onClick={() => setSearchCode('')}
                 className="btn-secondary"
               >
                 Clear &amp; Try Another Code

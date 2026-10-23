@@ -1,6 +1,7 @@
 // =====================================================================
 // IntelliCampus Operational State
 // Hardcoded mock data arrays removed in favor of real database persistence.
+// All screens load authentic data from the Spring Boot REST API & database.
 // =====================================================================
 
 export const INITIAL_USERS = [];

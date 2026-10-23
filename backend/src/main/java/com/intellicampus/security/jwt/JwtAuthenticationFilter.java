@@ -25,9 +25,10 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
     private final com.intellicampus.user.repository.UserRepository userRepository;
     private final com.intellicampus.user.repository.TokenDenylistRepository tokenDenylistRepository;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public JwtAuthenticationFilter(
             JwtTokenProvider tokenProvider,
-            RevokedTokenRepository revokedTokenRepository,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) RevokedTokenRepository revokedTokenRepository,
             @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.user.repository.UserRepository userRepository,
             @org.springframework.beans.factory.annotation.Autowired(required = false) com.intellicampus.user.repository.TokenDenylistRepository tokenDenylistRepository) {
         this.tokenProvider = tokenProvider;

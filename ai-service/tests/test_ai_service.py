@@ -189,6 +189,107 @@ def test_recognize_matching_and_duplicate_conflict_handling():
         assert f1_result["spoofScore"] is None
 
 
+def test_recognize_low_similarity_below_20_percent_is_unmatched():
+    """
+    Test that an arbitrary face whose similarity to all candidates is < 0.20
+    is NOT forcibly matched to any student (matchedStudentId = None, similarity = None).
+    """
+    dummy_img = create_dummy_jpeg(640, 480)
+
+    # Candidate 101 along axis 0
+    target_emb = np.zeros(512, dtype=np.float32)
+    target_emb[0] = 1.0
+
+    candidates = [{"studentId": 101, "embedding": target_emb.tolist()}]
+
+    # Detected face is almost orthogonal (similarity ~ 0.10)
+    face_emb = np.zeros(512, dtype=np.float32)
+    face_emb[0] = 0.10
+    face_emb[1] = 0.99
+    face_emb = face_emb / np.linalg.norm(face_emb)
+
+    mock_face = create_mock_face([50, 50, 200, 200], face_emb, det_score=0.92)
+
+    with patch("app.main.get_face_analyzer") as mock_get_analyzer:
+        analyzer_mock = MagicMock()
+        analyzer_mock.get.return_value = [mock_face]
+        mock_get_analyzer.return_value = analyzer_mock
+
+        response = client.post(
+            "/ai/recognize",
+            files={"image": ("class.jpg", dummy_img, "image/jpeg")},
+            data={"candidates": json.dumps(candidates)}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert data["faceCount"] == 1
+        assert data["matchedCount"] == 0
+        assert data["unmatchedCount"] == 1
+        f = data["faces"][0]
+        assert f["matchedStudentId"] is None
+        assert f["similarity"] is None
+
+
+def test_recognize_residual_conflict_prevention():
+    """
+    Test residual conflict:
+    Face 1: matches Student 101 with 0.90
+    Face 2: matches Student 101 with 0.80, and Student 102 with 0.25 (< 0.50)
+    Student 101 is taken by Face 1.
+    Face 2 must NOT be assigned to Student 102 because Face 2's best candidate was Student 101
+    and its similarity to Student 102 is low (< 0.50).
+    """
+    dummy_img = create_dummy_jpeg(640, 480)
+
+    target_101 = np.zeros(512, dtype=np.float32)
+    target_101[0] = 1.0
+    target_102 = np.zeros(512, dtype=np.float32)
+    target_102[1] = 1.0
+
+    candidates = [
+        {"studentId": 101, "embedding": target_101.tolist()},
+        {"studentId": 102, "embedding": target_102.tolist()}
+    ]
+
+    # Face 1: strong match to 101
+    f1_emb = np.zeros(512, dtype=np.float32)
+    f1_emb[0] = 0.90
+    f1_emb[2] = 0.43
+    f1_emb = f1_emb / np.linalg.norm(f1_emb)
+
+    # Face 2: resembles 101 at 0.80, resembles 102 only at 0.25
+    f2_emb = np.zeros(512, dtype=np.float32)
+    f2_emb[0] = 0.80
+    f2_emb[1] = 0.25
+    f2_emb[3] = 0.54
+    f2_emb = f2_emb / np.linalg.norm(f2_emb)
+
+    mock_faces = [
+        create_mock_face([40, 40, 160, 160], f1_emb, det_score=0.94),
+        create_mock_face([200, 40, 320, 160], f2_emb, det_score=0.91)
+    ]
+
+    with patch("app.main.get_face_analyzer") as mock_get_analyzer:
+        analyzer_mock = MagicMock()
+        analyzer_mock.get.return_value = mock_faces
+        mock_get_analyzer.return_value = analyzer_mock
+
+        response = client.post(
+            "/ai/recognize",
+            files={"image": ("class.jpg", dummy_img, "image/jpeg")},
+            data={"candidates": json.dumps(candidates)}
+        )
+        assert response.status_code == 200
+        data = response.json()
+        f1_res = data["faces"][0]
+        f2_res = data["faces"][1]
+
+        assert f1_res["matchedStudentId"] == 101
+        # Face 2 was prevented from false assignment to leftover Student 102
+        assert f2_res["matchedStudentId"] is None
+        assert f2_res["similarity"] is None
+
+
 def test_early_warning_risk_scoring():
     payload = [
         {

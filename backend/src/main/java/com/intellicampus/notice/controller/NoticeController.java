@@ -3,9 +3,12 @@ package com.intellicampus.notice.controller;
 import com.intellicampus.notice.dto.CreateNoticeRequestDto;
 import com.intellicampus.notice.dto.NoticeDto;
 import com.intellicampus.notice.service.NoticeService;
+import com.intellicampus.user.model.Role;
+import com.intellicampus.user.model.User;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -29,26 +32,32 @@ public class NoticeController {
 
     @GetMapping("/my-feed")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<List<NoticeDto>> getMyTargetedFeed(@RequestParam(required = false) Long userId) {
-        return ResponseEntity.ok(noticeService.getFeedForUser(userId));
+    public ResponseEntity<List<NoticeDto>> getMyTargetedFeed(
+            @RequestParam(required = false) Long userId,
+            Authentication authentication) {
+        Long effectiveUserId = resolveUserId(userId, authentication);
+        if (effectiveUserId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        return ResponseEntity.ok(noticeService.getFeedForUser(effectiveUserId));
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'HOD', 'FACULTY')")
     public ResponseEntity<NoticeDto> publishNotice(@RequestBody CreateNoticeRequestDto req) {
         NoticeDto created = noticeService.createNotice(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'HOD', 'FACULTY')")
     public ResponseEntity<NoticeDto> updateNotice(@PathVariable Long id, @RequestBody CreateNoticeRequestDto req) {
         NoticeDto updated = noticeService.updateNotice(id, req);
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/{id}")
-    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     public ResponseEntity<Void> deleteNotice(@PathVariable Long id) {
         noticeService.deleteNotice(id);
         return ResponseEntity.noContent().build();
@@ -56,8 +65,25 @@ public class NoticeController {
 
     @PostMapping("/{id}/read")
     @PreAuthorize("isAuthenticated()")
-    public ResponseEntity<Void> markAsRead(@PathVariable Long id, @RequestParam(required = false) Long userId) {
-        boolean recorded = noticeService.markAsRead(id, userId);
+    public ResponseEntity<Void> markAsRead(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long userId,
+            Authentication authentication) {
+        Long effectiveUserId = resolveUserId(userId, authentication);
+        if (effectiveUserId == null) {
+            return ResponseEntity.badRequest().build();
+        }
+        boolean recorded = noticeService.markAsRead(id, effectiveUserId);
         return recorded ? ResponseEntity.ok().build() : ResponseEntity.noContent().build();
+    }
+
+    private Long resolveUserId(Long requestedUserId, Authentication authentication) {
+        if (authentication != null && authentication.getPrincipal() instanceof User user) {
+            if (user.getRole() == Role.STUDENT) {
+                return user.getId();
+            }
+            return requestedUserId != null ? requestedUserId : user.getId();
+        }
+        return requestedUserId;
     }
 }

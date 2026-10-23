@@ -4,7 +4,7 @@
 // =====================================================================
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL)
-  ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') 
+  ? import.meta.env.VITE_API_URL.replace(/\/+$/, '')
   : (typeof process !== 'undefined' && process.env?.VITE_API_URL)
     ? process.env.VITE_API_URL.replace(/\/+$/, '')
     : '';
@@ -189,10 +189,10 @@ export async function registerStaffApi({ name, email, password, role, department
 }
 
 /**
- * API Call: Login Staff (Principal / HOD)
+ * API Call: Login Staff (Principal / Admin / HOD / Faculty / Mentor)
  */
 export async function loginStaffApi({ email, password, role }) {
-  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/login`;
 
   const response = await fetch(url, {
@@ -200,7 +200,8 @@ export async function loginStaffApi({ email, password, role }) {
     headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
     body: JSON.stringify({
       email: email.trim().toLowerCase(),
-      password
+      password,
+      role: role || undefined
     })
   });
 
@@ -271,10 +272,26 @@ export async function getPrincipalSetupStatusApi() {
       return { setupRequired: false };
     }
     const data = await response.json();
-    return { setupRequired: Boolean(data.setupRequired) };
+    return { setupRequired: Boolean(data.canBootstrap || data.setupRequired) };
   } catch (err) {
     console.warn('Failed to query Principal setup status:', err);
     return { setupRequired: false };
+  }
+}
+
+/**
+ * API Call: Check if Admin/Principal registration is in bootstrap mode (0 Admins/Principals exist)
+ */
+export async function checkAdminBootstrapApi() {
+  const url = `${API_BASE}/api/auth/admin/bootstrap-status`;
+  try {
+    const response = await fetch(url, {
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!response.ok) return { canBootstrap: false };
+    return await response.json();
+  } catch {
+    return { canBootstrap: false };
   }
 }
 
@@ -292,6 +309,7 @@ export async function registerPrincipalApi({ name, email, password, confirmPassw
       email: email.trim().toLowerCase(),
       password,
       confirmPassword,
+      role: 'PRINCIPAL',
       setupToken: setupToken ? setupToken.trim() : null
     })
   });
@@ -302,6 +320,36 @@ export async function registerPrincipalApi({ name, email, password, confirmPassw
     const err = new Error(errorMsg);
     err.status = response.status;
     throw err;
+  }
+  return data;
+}
+
+/**
+ * API Call: Admin/Principal creates a Staff account (HOD, Faculty, Mentor)
+ * Generates unusable password hash and emails 24h setup OTP
+ */
+export async function adminCreateStaffApi({ name, email, role, department, employeeCode }, accessToken) {
+  const url = `${API_BASE}/api/auth/admin/staff`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    },
+    body: JSON.stringify({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      role,
+      department: department ? department.trim() : null,
+      employeeCode: employeeCode ? employeeCode.trim() : null
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || (data.validationErrors ? Object.values(data.validationErrors)[0] : null) || `Failed to create staff member (${response.status})`;
+    throw new Error(errorMsg);
   }
   return data;
 }
@@ -327,6 +375,50 @@ export async function verifyPrincipalOtpApi({ email, otp }) {
     const err = new Error(errorMsg);
     err.status = response.status;
     throw err;
+  }
+  return data;
+}
+
+/**
+ * API Call: Admin/Principal resends setup OTP (24h validity, invalidates previous OTP)
+ */
+export async function resendStaffSetupOtpApi(staffId, accessToken) {
+  const url = `${API_BASE}/api/auth/admin/staff/${staffId}/resend-setup`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || `Failed to resend setup OTP (${response.status})`;
+    throw new Error(errorMsg);
+  }
+  return data;
+}
+
+/**
+ * API Call: Admin/Principal deactivates staff account (sets status to DISABLED, revokes tokens)
+ */
+export async function deactivateStaffApi(staffId, accessToken) {
+  const url = `${API_BASE}/api/auth/admin/staff/${staffId}/deactivate`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      'Authorization': `Bearer ${accessToken}`
+    }
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || `Failed to deactivate staff member (${response.status})`;
+    throw new Error(errorMsg);
   }
   return data;
 }
@@ -379,7 +471,7 @@ export async function forgotPasswordApi(param) {
     email = String(param || '');
   }
 
-  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/forgot-password`;
 
   const response = await fetch(url, {
@@ -403,7 +495,7 @@ export async function forgotPasswordApi(param) {
  * API Call: Reset Password with OTP
  */
 export async function resetPasswordApi({ email, otp, token, newPassword, confirmPassword, role }) {
-  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/reset-password`;
 
   const response = await fetch(url, {

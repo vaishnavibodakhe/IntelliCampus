@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  KeyRound, 
-  Lock, 
+import {
+  KeyRound,
+  Lock,
   Mail,
-  Eye, 
-  EyeOff, 
-  ArrowRight, 
-  AlertCircle, 
-  CheckCircle2, 
-  ArrowLeft 
+  Eye,
+  EyeOff,
+  ArrowRight,
+  AlertCircle,
+  CheckCircle2,
+  ArrowLeft
 } from 'lucide-react';
-import { 
-  resetPasswordApi, 
-  validateResetPasswordForm 
+import {
+  resetPasswordApi,
+  validateResetPasswordForm
 } from '../../utils/staffAuthService';
 import './StaffAuth.css';
 
@@ -67,15 +67,15 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
 
     setLoading(true);
     try {
-      const data = await resetPasswordApi({ 
-        email: email.trim(), 
-        otp: token.trim(), 
-        token: token.trim(), 
-        newPassword, 
-        confirmPassword 
+      const data = await resetPasswordApi({
+        email: email.trim(),
+        otp: token.trim(),
+        token: token.trim(),
+        newPassword,
+        confirmPassword
       });
       setApiSuccess(data.message || 'Password reset successful! You can now sign in.');
-      
+
       // Clear reset token from URL so it cannot be resubmitted or exposed in history
       if (typeof window !== 'undefined' && window.history?.replaceState) {
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -115,18 +115,18 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="staff-submit-btn"
                 style={{ background: '#6366f1' }}
                 onClick={() => onNavigate && onNavigate('ADMIN')}
               >
-                Go to Admin login
+                Go to Principal login
                 <ArrowRight size={18} />
               </button>
 
-              <button 
-                type="button" 
+              <button
+                type="button"
                 className="staff-submit-btn"
                 style={{ background: '#8b5cf6' }}
                 onClick={() => onNavigate && onNavigate('HOD')}
@@ -142,7 +142,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
               <label className="staff-field-label">Account Email</label>
               <div className="staff-input-wrapper">
                 <Mail className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type="email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
@@ -156,7 +156,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
               <label className="staff-field-label">6-Digit Verification OTP / Reset Token</label>
               <div className="staff-input-wrapper">
                 <KeyRound className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type="text"
                   value={token}
                   onChange={(e) => setToken(e.target.value)}
@@ -171,7 +171,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
               <label className="staff-field-label">New Password (8+ chars, Upper, Lower, Number, Special)</label>
               <div className="staff-input-wrapper">
                 <Lock className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type={showPassword ? 'text' : 'password'}
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -179,8 +179,8 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
                   className={`staff-input ${errors.newPassword ? 'has-error' : ''}`}
                   autoComplete="new-password"
                 />
-                <button 
-                  type="button" 
+                <button
+                  type="button"
                   className="staff-eye-btn"
                   onClick={() => setShowPassword(!showPassword)}
                   tabIndex="-1"
@@ -195,7 +195,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
               <label className="staff-field-label">Confirm New Password</label>
               <div className="staff-input-wrapper">
                 <Lock className="staff-input-icon" size={18} />
-                <input 
+                <input
                   type={showPassword ? 'text' : 'password'}
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -207,8 +207,8 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
               {errors.confirmPassword && <span className="staff-error-text">{errors.confirmPassword}</span>}
             </div>
 
-            <button 
-              type="submit" 
+            <button
+              type="submit"
               className="staff-submit-btn"
               disabled={loading}
             >
@@ -219,16 +219,16 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
         )}
 
         <div className="staff-links" style={{ justifyContent: 'center', gap: '1.5rem' }}>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="staff-link"
             onClick={() => onNavigate && onNavigate('ADMIN')}
           >
             <ArrowLeft size={15} />
-            Admin Login
+            Principal Login
           </button>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className="staff-link"
             onClick={() => onNavigate && onNavigate('HOD')}
           >

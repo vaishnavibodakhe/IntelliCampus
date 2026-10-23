@@ -12,6 +12,7 @@ import java.util.Set;
 public class NoticeAudienceValidator {
 
     public static final Set<String> ALLOWED_DEPARTMENTS = Set.of(
+            "ALL",
             "ALL DEPARTMENTS",
             "COMPUTER SCIENCE",
             "INFORMATION TECHNOLOGY",
@@ -21,6 +22,7 @@ public class NoticeAudienceValidator {
     );
 
     public static final Set<String> ALLOWED_YEARS = Set.of(
+            "ALL",
             "ALL YEARS",
             "YEAR 1",
             "YEAR 2",
@@ -33,10 +35,14 @@ public class NoticeAudienceValidator {
     );
 
     public static final Set<String> ALLOWED_DIVISIONS = Set.of(
+            "ALL",
             "ALL DIVISIONS",
             "DIV A",
             "DIV B",
-            "DIV C"
+            "DIV C",
+            "DIVISION A",
+            "DIVISION B",
+            "DIVISION C"
     );
 
     /**

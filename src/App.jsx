@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import Navbar from './components/Navbar';
+import RolePortalLanding from './components/RolePortalLanding';
 import PrincipalView from './components/PrincipalView';
 import HodView from './components/HodView';
 import FacultyView from './components/FacultyView';
@@ -23,6 +24,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 
 import PrincipalAuthView from './components/staff/PrincipalAuthView';
 import HodAuthView from './components/staff/HodAuthView';
+import StaffAuthView from './components/staff/StaffAuthView';
 import StaffResetPasswordView from './components/staff/StaffResetPasswordView';
 import StaffChangePasswordView from './components/staff/StaffChangePasswordView';
 import { getStoredStaffSession, clearStaffSession, logoutStaffApi } from './utils/staffAuthService';
@@ -31,10 +33,49 @@ import { computeAuditEntryHash } from './utils/cryptoAndGeo';
 import { api, getStoredUser, clearAuthSession } from './api/client';
 
 function MainAppContent() {
-  const { currentUser, isAuthenticated, isAuthLoading, logout, navigate, currentPath } = useAuth();
+  const authContext = useAuth ? useAuth() : null;
+  const currentUser = authContext?.currentUser;
+  const isAuthenticated = authContext?.isAuthenticated;
+  const logout = authContext?.logout;
 
-  // Determine current active workflow strictly based on authenticated session
+  // Path-based routing state (/admin/login, /staff/login, /student/login, /verify, /)
+  const [currentPath, setCurrentPath] = useState(() => {
+    if (typeof window !== 'undefined') {
+      let p = window.location.pathname;
+      if (p === '/hod/login') {
+        window.history.replaceState({}, '', '/staff/login?role=HOD');
+        return '/staff/login';
+      }
+      if (p === '/principal' || p === '/principal/login') {
+        window.history.replaceState({}, '', '/admin/login');
+        return '/admin/login';
+      }
+      if (p === '/staff') {
+        window.history.replaceState({}, '', '/staff/login');
+        return '/staff/login';
+      }
+      if (p === '/student') {
+        window.history.replaceState({}, '', '/student/login');
+        return '/student/login';
+      }
+      if (p === '/public') {
+        window.history.replaceState({}, '', '/verify');
+        return '/verify';
+      }
+      return p;
+    }
+    return '/';
+  });
+
   const [currentRole, setCurrentRole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p === '/admin/login' || p === '/principal' || p === '/principal/login') return 'PRINCIPAL';
+      if (p === '/staff/login' || p === '/staff' || p === '/hod/login') return getStoredStaffSession()?.user?.role || 'STAFF';
+      if (p === '/student/login' || p === '/student') return 'STUDENT';
+      if (p === '/verify' || p === '/public') return 'PUBLIC';
+      if (p === '/') return 'LANDING';
+    }
     if (currentUser?.role === 'FACULTY') return 'FACULTY';
     if (currentUser?.role === 'MENTOR') return 'MENTOR';
     const staff = getStoredStaffSession();
@@ -42,7 +83,7 @@ function MainAppContent() {
     if (staff?.user?.role === 'HOD') return 'HOD';
     const user = getStoredUser();
     if (user?.role === 'STUDENT') return 'STUDENT';
-    return 'PUBLIC';
+    return 'LANDING';
   });
   const [theme, setTheme] = useState('dark');
 
@@ -78,6 +119,91 @@ function MainAppContent() {
     api.getCredentials().then(data => setIssuedDocuments(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
+  // Load real records from backend database on initial mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBackendData() {
+      // 1. Users
+      try {
+        const userList = await api.getUsers();
+        if (isMounted && Array.isArray(userList)) setUsers(userList);
+      } catch (err) {
+        console.warn('API getUsers unavailable:', err.message);
+      }
+
+      // 2. Academic Rooms
+      try {
+        const roomList = await api.getRooms();
+        if (isMounted && Array.isArray(roomList)) setRooms(roomList);
+      } catch (err) {
+        console.warn('API getRooms unavailable:', err.message);
+      }
+
+      // 3. Academic Subjects
+      try {
+        const subjectList = await api.getSubjects();
+        if (isMounted && Array.isArray(subjectList)) setSubjects(subjectList);
+      } catch (err) {
+        console.warn('API getSubjects unavailable:', err.message);
+      }
+
+      // 4. Circulars & Notices
+      try {
+        const noticeList = await api.listNotices();
+        if (isMounted && Array.isArray(noticeList)) setNotices(noticeList);
+      } catch (err) {
+        console.warn('API listNotices unavailable:', err.message);
+      }
+
+      // 5. Verifiable Documents
+      try {
+        const docList = await api.getAllDocuments();
+        if (isMounted && Array.isArray(docList)) setIssuedDocuments(docList);
+      } catch (err) {
+        console.warn('API getAllDocuments unavailable:', err.message);
+      }
+
+      // 6. Cryptographic Audit Chain
+      try {
+        const chain = await api.getAuditChain();
+        if (isMounted && Array.isArray(chain)) setAuditLogs(chain);
+      } catch (err) {
+        console.warn('API getAuditChain unavailable:', err.message);
+      }
+
+      // 7. Leaves & Permissions
+      try {
+        const leaveList = await api.getAllLeaves();
+        if (isMounted && Array.isArray(leaveList)) setLeaveRequests(leaveList);
+      } catch (err) {
+        console.warn('API getAllLeaves unavailable:', err.message);
+      }
+
+      // 8. High Risk Students
+      try {
+        const riskList = await api.getHighRiskStudents();
+        if (isMounted && Array.isArray(riskList)) setRiskStudents(riskList);
+      } catch (err) {
+        console.warn('API getHighRiskStudents unavailable:', err.message);
+      }
+
+      // 9. Mark Corrections
+      try {
+        const correctionList = await api.getPendingCorrections();
+        if (isMounted && Array.isArray(correctionList)) setMarkCorrections(correctionList);
+      } catch (err) {
+        console.warn('API getPendingCorrections unavailable:', err.message);
+      }
+    }
+
+    loadBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Modals & Drawers
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
@@ -108,6 +234,30 @@ function MainAppContent() {
       const params = new URLSearchParams(window.location.search);
       setActiveUrlView(params.get('view') || null);
       setActiveUrlToken(params.get('token') || '');
+      let p = window.location.pathname;
+      if (p === '/hod/login') {
+        window.history.replaceState({}, '', '/staff/login?role=HOD');
+        p = '/staff/login';
+      }
+      if (p === '/principal' || p === '/principal/login') {
+        p = '/admin/login';
+      }
+      if (p === '/staff') {
+        p = '/staff/login';
+      }
+      if (p === '/student') {
+        p = '/student/login';
+      }
+      if (p === '/public') {
+        p = '/verify';
+      }
+      setCurrentPath(p);
+
+      if (p === '/admin/login') setCurrentRole('ADMIN');
+      else if (p === '/staff/login') setCurrentRole(getStoredStaffSession()?.user?.role || 'STAFF');
+      else if (p === '/student/login') setCurrentRole('STUDENT');
+      else if (p === '/verify') setCurrentRole('PUBLIC');
+      else if (p === '/') setCurrentRole('LANDING');
     };
 
     window.addEventListener('popstate', handlePopState);
@@ -131,6 +281,35 @@ function MainAppContent() {
       setActiveUrlView(viewName || null);
       setActiveUrlToken(extraParams.token || '');
     }
+  };
+
+  const navigateToPath = (pathname, search = '') => {
+    if (typeof window !== 'undefined') {
+      window.history.pushState({}, '', pathname + (search ? (search.startsWith('?') ? search : `?${search}`) : ''));
+      setCurrentPath(pathname);
+      setActiveUrlView(null);
+    }
+  };
+
+  const handleSelectPortalRole = (roleKey) => {
+    if (roleKey === 'ADMIN') {
+      navigateToPath('/admin/login');
+      setCurrentRole('ADMIN');
+    } else if (roleKey === 'STAFF') {
+      navigateToPath('/staff/login');
+      setCurrentRole(staffSession?.user?.role || 'STAFF');
+    } else if (roleKey === 'STUDENT') {
+      navigateToPath('/student/login');
+      setCurrentRole('STUDENT');
+    } else if (roleKey === 'PUBLIC') {
+      navigateToPath('/verify');
+      setCurrentRole('PUBLIC');
+    }
+  };
+
+  const handleNavigateHome = () => {
+    navigateToPath('/');
+    setCurrentRole('LANDING');
   };
 
   // Synchronize HTML Theme attribute
@@ -161,6 +340,71 @@ function MainAppContent() {
   // Active attendance session
   const activeSession = sessions.find(s => s.status === 'OPEN') || null;
 
+  // Student Notice Feed & Live Read Receipts
+  const [studentNotices, setStudentNotices] = useState(() => INITIAL_NOTICES);
+  const [isLoadingStudentNotices, setIsLoadingStudentNotices] = useState(false);
+  const [studentNoticeError, setStudentNoticeError] = useState(null);
+
+  const getAudienceFilteredNotices = (noticeList, student) => {
+    if (!student) return noticeList;
+    return noticeList.filter(n => {
+      if (n.targetStudentIds && n.targetStudentIds.length > 0) {
+        return n.targetStudentIds.includes(student.id) || n.targetStudentIds.includes(Number(student.id));
+      }
+      const matchDept = !n.targetDepartment || n.targetDepartment === 'All Departments' || n.targetDepartment === student.department;
+      const matchYear = !n.targetYear || n.targetYear === 'All Years' || n.targetYear === student.year;
+      const matchDiv = !n.targetDivision || n.targetDivision === 'All Divisions' || n.targetDivision === student.division;
+      return matchDept && matchYear && matchDiv;
+    });
+  };
+
+  const fetchStudentNotices = async () => {
+    const studentId = currentStudent?.id || (authenticatedUser?.role === 'STUDENT' ? authenticatedUser?.id : null);
+    if (!studentId) {
+      setStudentNotices(notices);
+      return;
+    }
+
+    setIsLoadingStudentNotices(true);
+    setStudentNoticeError(null);
+    try {
+      const feed = await api.getMyNoticeFeed(studentId);
+      if (Array.isArray(feed) && feed.length > 0) {
+        setStudentNotices(feed);
+      } else {
+        setStudentNotices(getAudienceFilteredNotices(notices, currentStudent));
+      }
+    } catch (err) {
+      console.warn('Live notice feed unavailable, falling back to local dataset:', err);
+      setStudentNotices(getAudienceFilteredNotices(notices, currentStudent));
+    } finally {
+      setIsLoadingStudentNotices(false);
+    }
+  };
+
+  useEffect(() => {
+    if (currentRole === 'STUDENT' && (currentStudent?.id || authenticatedUser?.id)) {
+      fetchStudentNotices();
+    } else {
+      setStudentNotices(notices);
+    }
+  }, [currentRole, currentStudent?.id, currentStudent?.department, currentStudent?.year, currentStudent?.division, notices]);
+
+  const handleMarkNoticeRead = async (noticeId) => {
+    const studentId = currentStudent?.id || (authenticatedUser?.role === 'STUDENT' ? authenticatedUser?.id : null);
+    await api.markNoticeRead(noticeId, studentId);
+    setStudentNotices(prev => prev.map(n =>
+      n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
+    ));
+    setNotices(prev => prev.map(n =>
+      n.id === noticeId ? { ...n, read: true, readsCount: (n.readsCount || 0) + 1 } : n
+    ));
+  };
+
+  const unreadNoticeCount = currentRole === 'STUDENT'
+    ? studentNotices.filter(n => !n.read).length
+    : notices.filter(n => !n.read).length;
+
   // Append entry to Cryptographic Hash Chain
   const handleAddAuditLog = async ({ action, entityType, entityId, oldValue, newValue, reason }) => {
     const lastEntry = auditLogs[auditLogs.length - 1];
@@ -168,8 +412,8 @@ function MainAppContent() {
     const createdAt = new Date().toISOString();
     const newId = (lastEntry ? lastEntry.id : 0) + 1;
 
-    const actorName = staffSession?.user?.name || currentUser?.name || 'Authorized User';
-    const actorId = staffSession?.user?.id || currentUser?.id || 1;
+    const actorName = staffSession?.user?.name || currentUser?.name || authenticatedUser?.name || 'Authorized User';
+    const actorId = staffSession?.user?.id || currentUser?.id || authenticatedUser?.id || 1;
 
     const partialEntry = {
       id: newId,
@@ -532,17 +776,35 @@ function MainAppContent() {
   return (
     <div className="app-wrapper">
       {/* Global Navigation Header */}
-      <Navbar 
+      <Navbar
+        currentPath={currentPath}
         currentRole={currentRole}
         setCurrentRole={handleWorkflowRoleChange}
+        onNavigateHome={handleNavigateHome}
         theme={theme}
         setTheme={setTheme}
-        onOpenAudit={() => setIsAuditModalOpen(true)}
-        onOpenChat={() => setIsChatbotOpen(true)}
         activeSession={activeSession}
-        notificationCount={notices.length}
-        currentUser={currentUser}
-        onLogout={logout}
+        staffSession={staffSession}
+        notificationCount={unreadNoticeCount}
+        unreadCount={unreadNoticeCount}
+        notices={currentRole === 'STUDENT' ? studentNotices : notices}
+        isLoadingNotices={isLoadingStudentNotices}
+        noticeError={studentNoticeError}
+        onMarkNoticeRead={handleMarkNoticeRead}
+        onRefreshNotices={fetchStudentNotices}
+        onViewAllNotices={() => {
+          if (currentRole !== 'STUDENT') {
+            handleSelectPortalRole('STUDENT');
+          }
+        }}
+        currentUser={currentStudent || authenticatedUser || currentUser}
+        onLogout={
+          (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN' || ['HOD', 'FACULTY', 'MENTOR'].includes(staffSession?.user?.role))
+            ? handleStaffLogout
+            : (currentStudent || authenticatedUser)
+              ? handleLogout
+              : logout
+        }
       />
 
       {/* Global Auth Status Notification Toast */}
@@ -565,7 +827,7 @@ function MainAppContent() {
           gap: '10px'
         }}>
           <span>{authNotification.message}</span>
-          <button 
+          <button
             onClick={() => setAuthNotification(null)}
             style={{ background: 'transparent', border: 'none', color: '#ffffff', cursor: 'pointer', fontWeight: 'bold' }}
           >
@@ -578,16 +840,19 @@ function MainAppContent() {
       <main className="main-viewport">
         {/* URL-driven Reset Password View (?view=reset-password&token=...) */}
         {activeUrlView === 'reset-password' && (
-          <StaffResetPasswordView 
+          <StaffResetPasswordView
             initialToken={activeUrlToken}
             onNavigate={(targetRole) => {
-              if (targetRole === 'ADMIN' || targetRole === 'HOD') {
+              if (targetRole === 'ADMIN') {
+                handleSelectPortalRole('ADMIN');
+              } else {
+                navigateToPath('/staff/login', `role=${targetRole}`);
                 setCurrentRole(targetRole);
               }
-              navigateToView(null);
             }}
           />
         )}
+
 
         {/* URL-driven Forced Password Change View (?view=change-password) */}
         {activeUrlView === 'change-password' && (
@@ -603,37 +868,56 @@ function MainAppContent() {
           />
         )}
 
-        {/* Regular Role Viewports when not on a specialized ?view= route */}
-        {activeUrlView !== 'reset-password' && activeUrlView !== 'change-password' && (
-          <>
-            {/* Institutional Portal Selection Cards for Faculty & Mentor if not signed in */}
-            {!isAuthenticated && !staffSession && !currentStudent && (
-              <PortalSelectionCards />
-            )}
+        {/* Route /: Role Portal Landing Page */}
+        {currentPath === '/' && activeUrlView !== 'reset-password' && (
+          <RolePortalLanding
+            onSelectRole={handleSelectPortalRole}
+            staffSession={staffSession}
+            currentStudent={currentStudent}
+          />
+        )}
 
-            {(currentRole === 'PRINCIPAL' || currentRole === 'ADMIN') && (
-              (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN') ? (
-                <PrincipalView 
-                  staffSession={staffSession}
-                  onLogout={handleStaffLogout}
-                  onOpenAuditModal={() => setIsAuditModalOpen(true)}
-                  onOpenChatbot={() => setIsChatbotOpen(true)}
-                />
-              ) : (
-                <PrincipalAuthView 
-                  onAuthSuccess={(session) => {
-                    setStaffSession(session);
-                    setCurrentRole('PRINCIPAL');
-                  }}
-                  noticeMessage={staffSession ? "Principal access required" : ""}
-                  onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
-                />
-              )
-            )}
+        {/* Dedicated Route: /admin/login (Principal Portal) */}
+        {currentPath === '/admin/login' && activeUrlView !== 'reset-password' && (
+          (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN') ? (
+            <PrincipalView
+              users={users}
+              setUsers={setUsers}
+              rooms={rooms}
+              setRooms={setRooms}
+              subjects={subjects}
+              setSubjects={setSubjects}
+              notices={notices}
+              setNotices={setNotices}
+              issuedDocuments={issuedDocuments}
+              setIssuedDocuments={setIssuedDocuments}
+              knowledgeDocs={knowledgeDocs}
+              setKnowledgeDocs={setKnowledgeDocs}
+              onAddAuditLog={handleAddAuditLog}
+              staffSession={staffSession}
+              onLogout={handleStaffLogout}
+              onOpenAuditModal={() => setIsAuditModalOpen(true)}
+              onOpenChatbot={() => setIsChatbotOpen(true)}
+            />
+          ) : (
+            <AdminAuthView
+              onAuthSuccess={(session) => {
+                setStaffSession(session);
+                setCurrentRole('PRINCIPAL');
+                navigateToPath('/admin/login');
+              }}
+              noticeMessage={staffSession ? "Principal access required" : ""}
+            />
+          )
+        )}
 
-            {currentRole === 'HOD' && (
-              staffSession?.user?.role === 'HOD' ? (
-                <HodView 
+        {/* Dedicated Route: /staff/login (Staff Portal) */}
+        {currentPath === '/staff/login' && activeUrlView !== 'reset-password' && (
+          (() => {
+            const role = staffSession?.user?.role;
+            if (role === 'HOD') {
+              return (
+                <HodView
                   leaveRequests={leaveRequests}
                   setLeaveRequests={setLeaveRequests}
                   markCorrections={markCorrections}
@@ -644,21 +928,14 @@ function MainAppContent() {
                   onAddAuditLog={handleAddAuditLog}
                   staffSession={staffSession}
                   onLogout={handleStaffLogout}
+                  notices={notices}
+                  setNotices={setNotices}
                 />
-              ) : (
-                <HodAuthView 
-                  onAuthSuccess={(session) => {
-                    setStaffSession(session);
-                  }}
-                  noticeMessage={staffSession ? "HOD access required" : ""}
-                  onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
-                />
-              )
-            )}
-
-            {currentRole === 'FACULTY' && (
-              <RoleRoute requiredRole="FACULTY">
-                <FacultyView 
+              );
+            }
+            if (role === 'FACULTY') {
+              return (
+                <FacultyView
                   sessions={sessions}
                   setSessions={setSessions}
                   subjects={subjects}
@@ -669,63 +946,99 @@ function MainAppContent() {
                   markCorrections={markCorrections}
                   setMarkCorrections={setMarkCorrections}
                   onAddAuditLog={handleAddAuditLog}
-                  currentUser={currentUser}
-                  onLogout={logout}
+                  staffSession={staffSession}
+                  notices={notices}
+                  setNotices={setNotices}
+                  staffSession={staffSession}
+                  onLogout={handleStaffLogout}
                 />
-              </RoleRoute>
-            )}
-
-            {currentRole === 'MENTOR' && (
-              <RoleRoute requiredRole="MENTOR">
-                <MentorView 
+              );
+            }
+            if (role === 'MENTOR') {
+              return (
+                <MentorView
                   riskStudents={riskStudents}
                   setRiskStudents={setRiskStudents}
                   leaveRequests={leaveRequests}
                   setLeaveRequests={setLeaveRequests}
                   users={users}
                   onAddAuditLog={handleAddAuditLog}
-                  currentUser={currentUser}
-                  onLogout={logout}
-                />
-              </RoleRoute>
-            )}
-
-            {currentRole === 'STUDENT' && (
-              currentStudent ? (
-                <StudentView 
-                  currentUser={currentStudent}
-                  activeSession={activeSession}
-                  sessions={sessions}
-                  setSessions={setSessions}
-                  marks={marks}
-                  leaveRequests={leaveRequests}
-                  setLeaveRequests={setLeaveRequests}
                   notices={notices}
-                  issuedDocuments={issuedDocuments}
-                  onOpenChat={() => setIsChatbotOpen(true)}
-                  onAddAuditLog={handleAddAuditLog}
-                  onLogout={handleLogout}
+                  setNotices={setNotices}
+                  staffSession={staffSession}
+                  onLogout={handleStaffLogout}
                 />
-              ) : (
-                <StudentAuthView 
-                  onLoginSuccess={handleLoginSuccess}
-                  onRegisterSuccess={handleRegisterSuccess}
-                />
-              )
-            )}
-
-            {currentRole === 'PUBLIC' && (
-              <PublicVerifierView 
-                issuedDocuments={issuedDocuments}
+              );
+            }
+            return (
+              <StaffAuthView
+                initialRole={new URLSearchParams(window.location.search).get('role') || 'FACULTY'}
+                onAuthSuccess={(session) => {
+                  setStaffSession(session);
+                  setCurrentRole(session.user.role);
+                  navigateToPath('/staff/login');
+                }}
+                noticeMessage=""
               />
-            )}
-          </>
+            );
+          })()
+        )}
+
+        {/* Dedicated Route: /student/login (Student Portal) */}
+        {currentPath === '/student/login' && activeUrlView !== 'reset-password' && (
+          currentStudent ? (
+            <StudentView
+              currentUser={currentStudent}
+              activeSession={activeSession}
+              sessions={sessions}
+              setSessions={setSessions}
+              marks={marks}
+              leaveRequests={leaveRequests}
+              setLeaveRequests={setLeaveRequests}
+              notices={studentNotices}
+              onMarkNoticeRead={handleMarkNoticeRead}
+              onRefreshNotices={fetchStudentNotices}
+              issuedDocuments={issuedDocuments}
+              onOpenChat={() => setIsChatbotOpen(true)}
+              onAddAuditLog={handleAddAuditLog}
+              onLogout={handleLogout}
+            />
+          ) : (
+            <StudentAuthView
+              onLoginSuccess={(authData) => {
+                handleLoginSuccess(authData);
+                navigateToPath('/student/login');
+              }}
+              onRegisterSuccess={handleRegisterSuccess}
+            />
+          )
+        )}
+
+        {/* Dedicated Route: /verify (Public Document Verifier) */}
+        {currentPath === '/verify' && activeUrlView !== 'reset-password' && (
+          <PublicVerifierView
+            issuedDocuments={issuedDocuments}
+          />
+        )}
+
+        {/* Fallback Viewport for non-standard routes */}
+        {currentPath !== '/' &&
+         currentPath !== '/admin/login' &&
+         currentPath !== '/staff/login' &&
+         currentPath !== '/student/login' &&
+         currentPath !== '/verify' &&
+         activeUrlView !== 'reset-password' && (
+          <RolePortalLanding
+            onSelectRole={handleSelectPortalRole}
+            staffSession={staffSession}
+            currentStudent={currentStudent}
+          />
         )}
       </main>
 
       {/* Cryptographic SHA-256 Audit Chain Inspector Modal */}
       {isAuditModalOpen && (
-        <AuditChainModal 
+        <AuditChainModal
           auditLogs={auditLogs}
           setAuditLogs={setAuditLogs}
           onClose={() => setIsAuditModalOpen(false)}

@@ -127,6 +127,7 @@ public class SecurityConfig {
                     "/api/auth/admin/verify-otp",
                     "/api/auth/admin/register",
                     "/api/auth/staff/login",
+                    "/api/auth/staff/register",
                     "/api/auth/student/login",
                     "/api/auth/login",
                     "/api/auth/student/register",
@@ -186,7 +187,11 @@ public class SecurityConfig {
                     "/api/auth/staff/*/approve",
                     "/api/auth/staff/*/reject",
                     "/api/auth/staff/{id}/approve",
-                    "/api/auth/staff/{id}/reject"
+                    "/api/auth/staff/{id}/reject",
+                    "/api/auth/admin/staff",
+                    "/api/auth/admin/staff/**",
+                    "/api/auth/staff/staff",
+                    "/api/auth/staff/staff/**"
                 ).hasRole("PRINCIPAL");
 
                 auth.requestMatchers(
@@ -241,11 +246,16 @@ public class SecurityConfig {
                     "/api/mentor/**"
                 ).hasAnyRole("PRINCIPAL", "HOD", "MENTOR");
 
+                // Attendance: Student attendance history accessible to authenticated users
+                auth.requestMatchers(HttpMethod.GET, "/api/attendance/sessions/records/student/**").authenticated();
+                auth.requestMatchers(HttpMethod.GET, "/api/attendance/sessions/active").authenticated();
+
                 // 5. PRINCIPAL + HOD + FACULTY ENDPOINTS
                 auth.requestMatchers(
                     "/api/faculty/**",
                     "/api/attendance/sessions",
                     "/api/attendance/sessions/**",
+                    "/api/attendance/**",
                     "/api/marks",
                     "/api/marks/corrections",
                     "/api/marks/subject/**"

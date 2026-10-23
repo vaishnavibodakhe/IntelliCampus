@@ -15,8 +15,8 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping({"/api/auth/staff", "/api/auth/hod"})
-@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:3000"})
+@RequestMapping({"/api/auth/staff", "/api/auth/admin", "/api/auth/hod"})
+@CrossOrigin(origins = {"http://localhost:5173", "http://localhost:5174", "http://127.0.0.1:5173", "http://127.0.0.1:5174", "http://localhost:3000", "*"})
 public class StaffAuthController {
 
     private final StaffAuthService staffAuthService;
@@ -25,10 +25,63 @@ public class StaffAuthController {
         this.staffAuthService = staffAuthService;
     }
 
+    @GetMapping("/bootstrap-status")
+    public ResponseEntity<Map<String, Boolean>> getBootstrapStatus() {
+        return ResponseEntity.ok(Map.of("canBootstrap", staffAuthService.canBootstrapPrincipal()));
+    }
+
+    @PostMapping("/register")
+    public ResponseEntity<PendingStaffApprovalDto> register(@Valid @RequestBody StaffRegisterRequestDto req, HttpServletRequest request) {
+        String uri = request != null ? request.getRequestURI() : "";
+        if (req.getRole() == null && (uri.contains("/admin") || uri.contains("/principal"))) {
+            req.setRole(com.intellicampus.user.model.Role.PRINCIPAL);
+        }
+        if (req.getRole() != com.intellicampus.user.model.Role.PRINCIPAL) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+        }
+        PendingStaffApprovalDto response = staffAuthService.registerStaff(req);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/staff")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<PendingStaffApprovalDto> createStaffByAdmin(
+            @Valid @RequestBody AdminCreateStaffRequestDto req,
+            @AuthenticationPrincipal User adminUser) {
+        PendingStaffApprovalDto response = staffAuthService.createStaffByAdmin(req, adminUser);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/staff/{id}/resend-setup")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<Map<String, String>> resendStaffSetupOtp(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User adminUser,
+            HttpServletRequest request) {
+        String clientIp = resolveClientIp(request);
+        staffAuthService.resendStaffSetupOtp(id, adminUser, clientIp);
+        return ResponseEntity.ok(Map.of("message", "Staff account setup instructions and OTP resent successfully"));
+    }
+
+    @PostMapping("/staff/{id}/deactivate")
+    @PreAuthorize("hasRole('PRINCIPAL')")
+    public ResponseEntity<Map<String, String>> deactivateStaff(
+            @PathVariable("id") Long id,
+            @AuthenticationPrincipal User adminUser) {
+        staffAuthService.deactivateStaff(id, adminUser);
+        return ResponseEntity.ok(Map.of("message", "Staff account deactivated successfully"));
+    }
 
     @PostMapping("/login")
-    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto req) {
-        AuthResponseDto response = staffAuthService.loginStaff(req);
+    public ResponseEntity<AuthResponseDto> login(@Valid @RequestBody LoginRequestDto req, HttpServletRequest request) {
+        String uri = request != null ? request.getRequestURI() : "";
+        String endpointRole = (uri.contains("/admin") || uri.contains("/principal")) ? "PRINCIPAL" : "STAFF";
+        AuthResponseDto response;
+        if ("PRINCIPAL".equals(endpointRole)) {
+            response = staffAuthService.loginPrincipal(req);
+        } else {
+            response = staffAuthService.loginStaff(req, endpointRole);
+        }
         return ResponseEntity.ok(response);
     }
 
@@ -89,14 +142,14 @@ public class StaffAuthController {
     }
 
     @GetMapping("/pending")
-    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     public ResponseEntity<List<PendingStaffApprovalDto>> getPendingApprovals() {
         List<PendingStaffApprovalDto> list = staffAuthService.getPendingApprovals();
         return ResponseEntity.ok(list);
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, String>> approveStaff(
             @PathVariable("id") Long id,
             @AuthenticationPrincipal User adminUser) {
@@ -105,12 +158,12 @@ public class StaffAuthController {
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL')")
     public ResponseEntity<Map<String, String>> rejectStaff(
             @PathVariable("id") Long id,
             @RequestBody(required = false) Map<String, String> body,
             @AuthenticationPrincipal User adminUser) {
-        String reason = body != null ? body.get("reason") : "Rejected by Admin";
+        String reason = body != null ? body.get("reason") : "Rejected by Principal";
         staffAuthService.rejectStaff(id, reason, adminUser);
         return ResponseEntity.ok(Map.of("message", "Staff account rejected"));
     }

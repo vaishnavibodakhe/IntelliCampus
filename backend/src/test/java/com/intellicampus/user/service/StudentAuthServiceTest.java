@@ -20,6 +20,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -350,5 +351,40 @@ class StudentAuthServiceTest {
                 contains("aarav@intellicampus.edu"),
                 anyString()
         );
+    }
+
+    @Test
+    @DisplayName("Division Resolution: Registering with 'Year 3' and 'Div A' resolves to existing seeded division (id 3) and does NOT call divisionRepository.save()")
+    void testRegistration_ResolvesExistingSeededDivisionWithoutSaving() {
+        StudentRegisterRequestDto dto = createValidRegistrationDto();
+        dto.setYear("Year 3");
+        dto.setDivision("Div A");
+
+        Division seededDivision = new Division(dept, 3, "Year 3 Div A");
+        ReflectionTestUtils.setField(seededDivision, "id", 3L);
+
+        when(userRepository.existsByEmail(anyString())).thenReturn(false);
+        when(studentProfileRepository.findByRollNo(anyString())).thenReturn(Optional.empty());
+        when(departmentRepository.findByName(anyString())).thenReturn(Optional.of(dept));
+        when(divisionRepository.findByNameAndDepartmentId("Year 3 Div A", 1L)).thenReturn(Optional.of(seededDivision));
+
+        when(userRepository.save(any(User.class))).thenAnswer(inv -> {
+            User u = inv.getArgument(0);
+            ReflectionTestUtils.setField(u, "id", 101L);
+            return u;
+        });
+
+        ArgumentCaptor<StudentProfile> profileCaptor = ArgumentCaptor.forClass(StudentProfile.class);
+        when(studentProfileRepository.save(profileCaptor.capture())).thenAnswer(inv -> inv.getArgument(0));
+
+        AuthResponseDto resp = authService.registerStudent(dto);
+
+        assertNotNull(resp);
+        StudentProfile savedProfile = profileCaptor.getValue();
+        assertNotNull(savedProfile.getDivision());
+        assertEquals(3L, savedProfile.getDivision().getId());
+        assertEquals("Year 3 Div A", savedProfile.getDivision().getName());
+
+        verify(divisionRepository, never()).save(any(Division.class));
     }
 }

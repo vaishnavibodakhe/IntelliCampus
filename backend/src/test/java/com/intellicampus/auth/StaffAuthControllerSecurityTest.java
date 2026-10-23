@@ -147,4 +147,86 @@ class StaffAuthControllerSecurityTest {
                 .content("{\"reason\":\"Incomplete profile\"}"))
                 .andExpect(status().isOk());
     }
+
+    @Test
+    @DisplayName("Unauthenticated request to create staff returns 401 Unauthorized")
+    void testCreateStaffUnauthenticatedReturns401() throws Exception {
+        mockMvc.perform(post("/api/auth/admin/staff")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Dr. Test\",\"email\":\"test@intellicampus.edu\",\"role\":\"FACULTY\"}"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithMockUser(username = "faculty@intellicampus.edu", roles = {"FACULTY"})
+    @DisplayName("Non-Admin request to create staff returns 403 Forbidden")
+    void testCreateStaffNonAdminReturns403() throws Exception {
+        mockMvc.perform(post("/api/auth/admin/staff")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Dr. Test\",\"email\":\"test@intellicampus.edu\",\"role\":\"FACULTY\"}"))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@intellicampus.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Admin request to create staff returns 201 Created")
+    void testCreateStaffAdminReturns201() throws Exception {
+        when(staffAuthService.createStaffByAdmin(any(), any())).thenReturn(
+                new PendingStaffApprovalDto(50L, "FAC-01", "Dr. Test", "test@intellicampus.edu", Role.FACULTY, "CS", UserStatus.ACTIVE, LocalDateTime.now())
+        );
+
+        mockMvc.perform(post("/api/auth/admin/staff")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Dr. Test\",\"email\":\"test@intellicampus.edu\",\"role\":\"FACULTY\"}"))
+                .andExpect(status().isCreated());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@intellicampus.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Admin request to resend setup OTP returns 200 OK")
+    void testResendSetupOtpAdminReturns200() throws Exception {
+        doNothing().when(staffAuthService).resendStaffSetupOtp(eq(20L), any(), any());
+
+        mockMvc.perform(post("/api/auth/admin/staff/20/resend-setup")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(username = "faculty@intellicampus.edu", roles = {"FACULTY"})
+    @DisplayName("Non-Admin request to resend setup OTP returns 403 Forbidden")
+    void testResendSetupOtpNonAdminReturns403() throws Exception {
+        mockMvc.perform(post("/api/auth/admin/staff/20/resend-setup")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @WithMockUser(username = "admin@intellicampus.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Admin request to deactivate staff returns 200 OK")
+    void testDeactivateStaffAdminReturns200() throws Exception {
+        doNothing().when(staffAuthService).deactivateStaff(eq(30L), any());
+
+        mockMvc.perform(post("/api/auth/admin/staff/30/deactivate")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser(username = "faculty@intellicampus.edu", roles = {"FACULTY"})
+    @DisplayName("Non-Admin request to deactivate staff returns 403 Forbidden")
+    void testDeactivateStaffNonAdminReturns403() throws Exception {
+        mockMvc.perform(post("/api/auth/admin/staff/30/deactivate")
+                .contentType(MediaType.APPLICATION_JSON))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    @DisplayName("Public register request for staff role (HOD) returns 403 Forbidden")
+    void testPublicRegisterStaffRoleReturns403() throws Exception {
+        mockMvc.perform(post("/api/auth/staff/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"Dr. Hod\",\"email\":\"hod@intellicampus.edu\",\"password\":\"Pass123!@#\",\"role\":\"HOD\"}"))
+                .andExpect(status().isForbidden());
+    }
 }

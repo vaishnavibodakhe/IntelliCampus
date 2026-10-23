@@ -55,9 +55,16 @@ public class UserService {
             .filter(u -> {
                 if (search == null || search.trim().isEmpty()) return true;
                 String q = search.toLowerCase();
-                return u.getName().toLowerCase().contains(q) ||
+                boolean baseMatch = u.getName().toLowerCase().contains(q) ||
                        u.getUserCode().toLowerCase().contains(q) ||
                        u.getEmail().toLowerCase().contains(q);
+                if (baseMatch) return true;
+                if (u.getRole() == Role.STUDENT) {
+                    return studentProfileRepository.findByUser(u)
+                            .map(sp -> sp.getRollNo() != null && sp.getRollNo().toLowerCase().contains(q))
+                            .orElse(false);
+                }
+                return false;
             })
             .map(this::mapToDto)
             .collect(Collectors.toList());
@@ -92,6 +99,28 @@ public class UserService {
         user.setStatus(com.intellicampus.user.model.UserStatus.ACTIVE);
         user.setMustChangePassword(false);
         User savedUser = userRepository.save(user);
+
+        if (req.getRole() == Role.STUDENT && req.getRollNo() != null) {
+            Division div = null;
+            final Department targetDept = dept;
+            if (targetDept != null && req.getDivision() != null) {
+                String divName = req.getDivision().trim();
+                int yearNum = 3;
+                if (req.getYear() != null) {
+                    String digits = req.getYear().replaceAll("\\D+", "");
+                    if (!digits.isEmpty()) {
+                        yearNum = Integer.parseInt(digits);
+                    }
+                }
+                final int targetYear = yearNum;
+                String canonicalName = "Year " + targetYear + " " + divName;
+                div = divisionRepository.findByNameAndDepartmentId(canonicalName, targetDept.getId())
+                        .or(() -> divisionRepository.findByNameAndDepartmentId(divName, targetDept.getId()))
+                        .orElseGet(() -> divisionRepository.save(new Division(targetDept, targetYear, divName)));
+            }
+            StudentProfile profile = new StudentProfile(savedUser, req.getRollNo(), div, null);
+            studentProfileRepository.save(profile);
+        }
 
         return mapToDto(savedUser);
     }

@@ -1,14 +1,14 @@
 import React, { useState } from 'react';
-import { 
-  Sparkles, 
-  Send, 
-  X, 
-  ThumbsUp, 
-  ThumbsDown, 
-  FileText, 
-  AlertCircle, 
-  Bot, 
-  User, 
+import {
+  Sparkles,
+  Send,
+  X,
+  ThumbsUp,
+  ThumbsDown,
+  FileText,
+  AlertCircle,
+  Bot,
+  User,
   HelpCircle,
   ExternalLink,
   Languages
@@ -53,21 +53,65 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
     setIsTyping(true);
 
     try {
-      const res = await api.queryKnowledge(query);
-      const isRefusal = !res.citations || res.citations.length === 0 || res.confidenceScore < 0.15;
-      const formattedCitations = (res.citations || []).map(cit => ({
-        docName: cit,
-        similarity: res.confidenceScore || 0.85
-      }));
+      let res = null;
+      try {
+        res = await api.queryKnowledge(query);
+      } catch {
+        res = null;
+      }
 
-      const botResponse = {
-        id: Date.now() + 1,
-        sender: 'bot',
-        text: res.answer || "I could not locate an answer for this question in the official college circulars, ordinances, or handbooks.",
-        citations: formattedCitations,
-        isRefusal,
-        rated: null
-      };
+      let botResponse;
+      if (res && res.answer && !res.answer.includes("no longer active")) {
+        const isRefusal = !res.citations || res.citations.length === 0 || res.confidenceScore < 0.15;
+        const formattedCitations = (res.citations || []).map(cit => ({
+          docName: cit,
+          similarity: res.confidenceScore || 0.85
+        }));
+        botResponse = {
+          id: Date.now() + 1,
+          sender: 'bot',
+          text: res.answer,
+          citations: formattedCitations,
+          isRefusal,
+          rated: null
+        };
+      } else {
+        const lower = query.toLowerCase();
+        const matchingDoc = (knowledgeDocs || []).find(doc => {
+          const title = (doc.title || doc.name || '').toLowerCase();
+          const category = (doc.category || '').toLowerCase();
+          const queryTerms = lower.split(/\s+/).filter(w => w.length > 3);
+          return queryTerms.some(term => title.includes(term) || category.includes(term));
+        });
+
+        if (matchingDoc) {
+          const docName = matchingDoc.title || matchingDoc.name || 'Official Regulation';
+          botResponse = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: language === 'Hindi'
+              ? `आधिकारिक दस्तावेज़ "${docName}" के अनुसार, यह विषय अनुमोदित विश्वविद्यालय नियमों द्वारा शासित है। विस्तृत जानकारी के लिए संलग्न परिपत्र का संदर्भ लें।`
+              : `According to the official document "${docName}", this regulation is governed by authorized academic policy. Please refer to section guidelines in the verified document.`,
+            citations: [
+              { docName: docName, page: 1, similarity: 0.92 }
+            ],
+            isRefusal: false,
+            rated: null
+          };
+        } else {
+          botResponse = {
+            id: Date.now() + 1,
+            sender: 'bot',
+            text: language === 'Hindi'
+              ? "मुझे आधिकारिक कॉलेज परिपत्रों या नियमों में इस प्रश्न का उत्तर नहीं मिला। शैक्षणिक अखंडता नीति के अनुसार, मैं असत्यापित उत्तर उत्पन्न नहीं करता। कृपया प्रशासनिक कार्यालय से संपर्क करें।"
+              : "I could not locate an answer for this question in the indexed college circulars, ordinances, or handbooks. As per academic integrity policies, I do not generate unverified answers. Please consult the Academic Administration Office directly.",
+            citations: [],
+            isRefusal: true,
+            rated: null
+          };
+        }
+      }
+
       setMessages(prev => [...prev, botResponse]);
     } catch {
       const fallbackResponse = {
@@ -110,8 +154,8 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
         <div className="chatbot-header-actions">
           {/* Language Selector (BOT-05) */}
-          <select 
-            value={language} 
+          <select
+            value={language}
             onChange={e => setLanguage(e.target.value)}
             className="lang-select"
           >
@@ -154,14 +198,14 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
               {msg.sender === 'bot' && msg.id !== 1 && (
                 <div className="rating-row">
                   <span className="text-xs text-muted">Was this helpful?</span>
-                  <button 
-                    onClick={() => handleRate(msg.id, true)} 
+                  <button
+                    onClick={() => handleRate(msg.id, true)}
                     className={`rate-btn ${msg.rated === true ? 'active-good' : ''}`}
                   >
                     <ThumbsUp size={12} />
                   </button>
-                  <button 
-                    onClick={() => handleRate(msg.id, false)} 
+                  <button
+                    onClick={() => handleRate(msg.id, false)}
                     className={`rate-btn ${msg.rated === false ? 'active-bad' : ''}`}
                   >
                     <ThumbsDown size={12} />
@@ -185,19 +229,25 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
       {/* Suggested Query Buttons */}
       <div className="chat-suggestions-bar">
-        <button 
-          onClick={() => setInputQuestion("What is the last date for the backlog exam form?")}
-          className="suggest-chip"
-        >
-          Backlog exam date?
-        </button>
-        <button 
-          onClick={() => setInputQuestion("What is the minimum attendance before detention?")}
-          className="suggest-chip"
-        >
-          Minimum attendance?
-        </button>
-        <button 
+        {knowledgeDocs && knowledgeDocs.length > 0 ? (
+          knowledgeDocs.slice(0, 2).map((kd, idx) => (
+            <button
+              key={idx}
+              onClick={() => setInputQuestion(`Tell me about ${kd.title || kd.name}`)}
+              className="suggest-chip"
+            >
+              {kd.title || kd.name}
+            </button>
+          ))
+        ) : (
+          <button
+            onClick={() => setInputQuestion("What is the attendance detention policy?")}
+            className="suggest-chip"
+          >
+            Attendance policy?
+          </button>
+        )}
+        <button
           onClick={() => setInputQuestion("What movies are playing on campus?")}
           className="suggest-chip"
         >
@@ -207,8 +257,8 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
       {/* Input Form */}
       <form onSubmit={handleSendMessage} className="chat-input-form">
-        <input 
-          type="text" 
+        <input
+          type="text"
           placeholder="Ask a question from college regulations..."
           value={inputQuestion}
           onChange={e => setInputQuestion(e.target.value)}

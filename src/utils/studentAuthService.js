@@ -4,7 +4,7 @@
 // =====================================================================
 
 const API_BASE = (typeof import.meta !== 'undefined' && import.meta.env?.VITE_API_URL)
-  ? import.meta.env.VITE_API_URL.replace(/\/+$/, '') 
+  ? import.meta.env.VITE_API_URL.replace(/\/+$/, '')
   : (typeof process !== 'undefined' && process.env?.VITE_API_URL)
     ? process.env.VITE_API_URL.replace(/\/+$/, '')
     : '';
@@ -85,7 +85,7 @@ export function validateLoginForm({ email, password }) {
  */
 export async function registerStudentApi({ name, email, password, rollNo, department, year }) {
   const url = `${API_BASE}/api/auth/register`;
-  
+
   const response = await fetch(url, {
     method: 'POST',
     headers: {
