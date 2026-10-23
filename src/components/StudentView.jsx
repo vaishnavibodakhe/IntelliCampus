@@ -15,7 +15,8 @@ import {
   ChevronRight, 
   RefreshCw, 
   Bell,
-  LogOut 
+  LogOut,
+  Check
 } from 'lucide-react';
 import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
 import { api } from '../api/client';
@@ -29,11 +30,13 @@ export default function StudentView({
   marks,
   leaveRequests,
   setLeaveRequests,
-  notices,
+  notices = [],
   issuedDocuments,
   onOpenChat,
   onAddAuditLog,
-  onLogout
+  onLogout,
+  onMarkNoticeRead,
+  onRefreshNotices
 }) {
   const [activeTab, setActiveTab] = useState('dashboard');
 
@@ -252,12 +255,16 @@ export default function StudentView({
   const studentMarks = marks.filter(m => m.rollNo === currentUser.rollNo);
   const myLeaves = leaveRequests.filter(l => l.studentId === currentUser.id);
   const myDocuments = issuedDocuments.filter(d => d.rollNo === currentUser.rollNo);
-  const targetedNotices = notices.filter(n => {
+  const targetedNotices = (notices || []).filter(n => {
+    if (n.targetStudentIds && n.targetStudentIds.length > 0) {
+      return n.targetStudentIds.includes(currentUser.id) || n.targetStudentIds.includes(Number(currentUser.id));
+    }
     const matchDept = !n.targetDepartment || n.targetDepartment === 'All Departments' || n.targetDepartment === currentUser.department;
     const matchYear = !n.targetYear || n.targetYear === 'All Years' || n.targetYear === currentUser.year;
     const matchDiv = !n.targetDivision || n.targetDivision === 'All Divisions' || n.targetDivision === currentUser.division;
     return matchDept && matchYear && matchDiv;
   });
+  const unreadTargetedCount = targetedNotices.filter(n => !n.read).length;
 
   return (
     <div className="student-container animate-fade-in">
@@ -317,7 +324,7 @@ export default function StudentView({
           onClick={() => setActiveTab('notices')} 
           className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
         >
-          <Bell size={16} /> Notices &amp; Circulars ({targetedNotices.length})
+          <Bell size={16} /> Notices &amp; Circulars ({unreadTargetedCount > 0 ? `${unreadTargetedCount} unread` : targetedNotices.length})
         </button>
       </div>
 
@@ -817,7 +824,10 @@ export default function StudentView({
                   <div key={notice.id} className="notice-item-card glass-card" style={{ padding: '16px', border: '1px solid rgba(255,255,255,0.08)', borderRadius: '12px' }}>
                     <div className="notice-item-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '8px' }}>
                       <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 600 }}>{notice.title}</h4>
-                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
+                      <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <span className={`badge-pill ${notice.read ? 'success' : 'accent'}`} style={{ fontSize: '0.7rem' }}>
+                          {notice.read ? 'Read' : 'Unread'}
+                        </span>
                         <span className="badge-pill info">{notice.targetDepartment}</span>
                         {notice.targetYear && notice.targetYear !== 'All Years' && (
                           <span className="badge-pill accent">{notice.targetYear}</span>
@@ -830,17 +840,36 @@ export default function StudentView({
                     <p style={{ color: 'var(--text-secondary, #cbd5e1)', lineHeight: 1.5, margin: '8px 0' }}>
                       {notice.body}
                     </p>
-                    <div className="notice-item-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)' }}>
+                    <div className="notice-item-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px', fontSize: '0.8rem', color: 'rgba(255,255,255,0.5)', flexWrap: 'wrap', gap: '8px' }}>
                       <div>
-                        <span>📢 Issued by <strong>{notice.publisherName || notice.publisherRole || 'Administration'}</strong></span>
+                        <span>📢 Issued by <strong>{notice.publisherName || notice.publisherRole || 'Campus Administration'}</strong></span>
                         <span style={{ margin: '0 8px' }}>•</span>
-                        <span>{new Date(notice.publishedAt).toLocaleDateString()}</span>
+                        <span>{notice.publishedAt ? new Date(notice.publishedAt).toLocaleDateString() : 'Recent'}</span>
                       </div>
-                      {notice.deadline && (
-                        <span className="badge-pill danger">
-                          Deadline: {notice.deadline}
-                        </span>
-                      )}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {notice.deadline && (
+                          <span className="badge-pill danger">
+                            Deadline: {notice.deadline}
+                          </span>
+                        )}
+                        {(!notice.read && onMarkNoticeRead) && (
+                          <button
+                            type="button"
+                            onClick={() => onMarkNoticeRead(notice.id)}
+                            className="btn-secondary btn-sm"
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '4px',
+                              fontSize: '0.75rem',
+                              padding: '3px 8px'
+                            }}
+                            title="Mark notice as read"
+                          >
+                            <Check size={12} /> Mark Read
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
                 ))}

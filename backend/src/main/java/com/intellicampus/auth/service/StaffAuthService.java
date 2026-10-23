@@ -75,16 +75,27 @@ public class StaffAuthService {
         this.emailService = emailService;
     }
 
+    public boolean canBootstrapAdmin() {
+        return userRepository.countByRole(Role.ADMIN) == 0;
+    }
+
     public PendingStaffApprovalDto registerStaff(StaffRegisterRequestDto req) {
         String email = req.getEmail().trim().toLowerCase();
+        Role role = req.getRole();
+
+        // Self-registration is strictly restricted to one-time ADMIN bootstrap
+        if (role != Role.ADMIN) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Public registration is disabled for staff roles. Staff accounts must be created by an Administrator.");
+        }
+
+        if (userRepository.countByRole(Role.ADMIN) > 0) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Admin registration is closed. Additional Admins must be provisioned by an existing Administrator.");
+        }
 
         if (userRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Email is already registered: " + email);
-        }
-
-        Role role = req.getRole();
-        if (role == Role.STUDENT || role == Role.PUBLIC) {
-            throw new IllegalArgumentException("Staff registration only supports administrative and academic roles.");
         }
 
         Department department = null;
@@ -97,7 +108,7 @@ public class StaffAuthService {
                     )));
         }
 
-        String baseCode = (role == Role.ADMIN ? "ADM-" : role == Role.HOD ? "HOD-" : "FAC-")
+        String baseCode = "ADM-"
                 + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty() 
                    ? req.getEmployeeCode().trim().toUpperCase().replaceAll("[^A-Z0-9]", "-")
                    : Math.abs(email.hashCode() % 10000));
@@ -125,7 +136,7 @@ public class StaffAuthService {
                 savedUser.getId().toString(),
                 "{}",
                 "{\"email\":\"" + savedUser.getEmail() + "\",\"role\":\"" + savedUser.getRole() + "\",\"status\":\"ACTIVE\"}",
-                "Staff account registered successfully"
+                "Initial SuperAdmin account bootstrapped successfully"
         );
 
         return new PendingStaffApprovalDto(
@@ -140,34 +151,200 @@ public class StaffAuthService {
         );
     }
 
+    public PendingStaffApprovalDto createStaffByAdmin(AdminCreateStaffRequestDto req, User adminUser) {
+        String email = req.getEmail().trim().toLowerCase();
+
+        if (userRepository.existsByEmail(email)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Email is already registered: " + email);
+        }
+
+        Role role = req.getRole();
+        if (role == Role.STUDENT || role == Role.PUBLIC) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Staff creation only supports administrative and academic roles.");
+        }
+
+        Department department = null;
+        if (req.getDepartment() != null && !req.getDepartment().trim().isEmpty()) {
+            String deptName = req.getDepartment().trim();
+            department = departmentRepository.findByName(deptName)
+                    .orElseGet(() -> departmentRepository.save(new Department(
+                            deptName.toUpperCase().replaceAll("[^A-Z0-9]", "_"),
+                            deptName
+                    )));
+        }
+
+        String baseCode = (role == Role.ADMIN ? "ADM-" : role == Role.HOD ? "HOD-" : role == Role.MENTOR ? "MEN-" : "FAC-")
+                + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty() 
+                   ? req.getEmployeeCode().trim().toUpperCase().replaceAll("[^A-Z0-9]", "-")
+                   : Math.abs(email.hashCode() % 10000));
+        
+        String userCode = baseCode;
+        int suffix = 1;
+        while (userRepository.existsByUserCode(userCode)) {
+            userCode = baseCode + "-" + suffix++;
+        }
+
+        // Random unusable password hash (Admin never enters, sees or types password)
+        String unusablePassword = java.util.UUID.randomUUID().toString() + "-" + System.currentTimeMillis();
+        String passwordHash = passwordEncoder.encode(unusablePassword);
+
+        User user = new User(userCode, role, req.getName().trim(), email, passwordHash, department);
+        user.setStatus(UserStatus.ACTIVE);
+        user.setMustChangePassword(true);
+        user.setFailedAttempts(0);
+        User savedUser = userRepository.save(user);
+
+        // Generate 24-hour setup OTP (000000 - 999999)
+        int otpNum = secureRandom.nextInt(1_000_000);
+        String rawOtp = String.format("%06d", otpNum);
+        String tokenHash = DigestUtils.sha256Hex(rawOtp);
+
+        passwordResetTokenRepository.invalidateAllForUser(savedUser);
+        PasswordResetToken setupToken = new PasswordResetToken(savedUser, tokenHash, LocalDateTime.now().plusHours(24));
+        passwordResetTokenRepository.save(setupToken);
+
+        // Audit Event: Staff Account Created by Admin
+        auditChainService.recordEntry(
+                adminUser.getId(),
+                adminUser.getName(),
+                "STAFF_CREATED_BY_ADMIN",
+                "USER",
+                savedUser.getId().toString(),
+                "{}",
+                "{\"email\":\"" + savedUser.getEmail() + "\",\"role\":\"" + savedUser.getRole() + "\",\"status\":\"ACTIVE\"}",
+                "Staff account created by Admin " + adminUser.getName()
+        );
+
+        // Dispatch invite setup email containing 6-digit OTP (never log OTP)
+        emailService.sendStaffAccountSetupOtp(savedUser.getEmail(), rawOtp, savedUser.getRole());
+
+        return new PendingStaffApprovalDto(
+                savedUser.getId(),
+                savedUser.getUserCode(),
+                savedUser.getName(),
+                savedUser.getEmail(),
+                savedUser.getRole(),
+                department != null ? department.getName() : "General Administration",
+                savedUser.getStatus(),
+                LocalDateTime.now()
+        );
+    }
+
+    public void resendStaffSetupOtp(Long staffId, User adminUser, String clientIp) {
+        User staff = userRepository.findById(staffId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found: " + staffId));
+
+        if (staff.getStatus() != UserStatus.ACTIVE) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cannot send setup invite to an inactive or disabled account.");
+        }
+
+        // Rate limiting check: max 3 requests per hour
+        LocalDateTime oneHourAgo = LocalDateTime.now().minusHours(1);
+        long emailCount = rateLimitRepository.countByEmailAndRequestedAtAfter(staff.getEmail(), oneHourAgo);
+        long ipCount = rateLimitRepository.countByIpAddressAndRequestedAtAfter(clientIp, oneHourAgo);
+        if (emailCount >= 3 || ipCount >= 3) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many setup OTP requests. Maximum 3 requests per hour are allowed.");
+        }
+
+        // Invalidate previous OTPs
+        passwordResetTokenRepository.invalidateAllForUser(staff);
+
+        // Generate fresh 24-hour setup OTP
+        int otpNum = secureRandom.nextInt(1_000_000);
+        String rawOtp = String.format("%06d", otpNum);
+        String tokenHash = DigestUtils.sha256Hex(rawOtp);
+
+        PasswordResetToken setupToken = new PasswordResetToken(staff, tokenHash, LocalDateTime.now().plusHours(24));
+        passwordResetTokenRepository.save(setupToken);
+
+        // Audit Event: Setup OTP Resent
+        auditChainService.recordEntry(
+                adminUser.getId(),
+                adminUser.getName(),
+                "STAFF_SETUP_OTP_RESENT",
+                "USER",
+                staff.getId().toString(),
+                "{}",
+                "{\"email\":\"" + staff.getEmail() + "\"}",
+                "Staff setup OTP resent by Admin " + adminUser.getName()
+        );
+
+        rateLimitRepository.save(new PasswordResetRateLimit(staff.getEmail(), clientIp));
+
+        // Dispatch email (never log OTP)
+        emailService.sendStaffAccountSetupOtp(staff.getEmail(), rawOtp, staff.getRole());
+    }
+
+    public void deactivateStaff(Long staffId, User adminUser) {
+        User staff = userRepository.findById(staffId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff user not found: " + staffId));
+
+        if (staff.getId().equals(adminUser.getId())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Administrators cannot deactivate their own account.");
+        }
+
+        staff.setStatus(UserStatus.DISABLED);
+        userRepository.save(staff);
+
+        // Revoke all refresh tokens
+        refreshTokenRepository.revokeAllForUser(staff);
+
+        // Audit Event: Deactivation
+        auditChainService.recordEntry(
+                adminUser.getId(),
+                adminUser.getName(),
+                "STAFF_DEACTIVATED",
+                "USER",
+                staff.getId().toString(),
+                "{\"status\":\"ACTIVE\"}",
+                "{\"status\":\"DISABLED\"}",
+                "Staff account deactivated by Admin " + adminUser.getName()
+        );
+    }
+
     public AuthResponseDto loginStaff(LoginRequestDto req) {
+        return loginStaff(req, null);
+    }
+
+    public AuthResponseDto loginStaff(LoginRequestDto req, String endpointRole) {
         String email = req.getEmail().trim().toLowerCase();
 
         User user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Invalid email or password"));
 
-        // Check Account Lockout
-        if (user.getLockedUntil() != null) {
-            if (user.getLockedUntil().isAfter(LocalDateTime.now())) {
-                throw new LockedException("Account is temporarily locked due to consecutive failed attempts. Try again later.");
-            } else {
-                user.setLockedUntil(null);
-                user.setFailedAttempts(0);
-                if (user.getStatus() == UserStatus.LOCKED) {
-                    user.setStatus(UserStatus.ACTIVE);
-                }
-            }
+        // Check account status: non-active accounts (DISABLED, LOCKED, etc.) return generic error
+        if (user.getStatus() != UserStatus.ACTIVE) {
+            throw new BadCredentialsException("Invalid email or password");
         }
 
-        // Block accounts according to security rules
-        if (user.getStatus() == UserStatus.PENDING_APPROVAL) {
-            throw new DisabledException("Your staff account is currently pending administrator approval. Please contact the administrator.");
+        // Account lockout check
+        if (user.getLockedUntil() != null && user.getLockedUntil().isAfter(LocalDateTime.now())) {
+            throw new BadCredentialsException("Invalid email or password");
         }
-        if (user.getStatus() == UserStatus.REJECTED) {
-            throw new DisabledException("Your staff registration request has been rejected. Please contact the administrator.");
-        }
-        if (user.getStatus() == UserStatus.DISABLED || user.getStatus() == UserStatus.INACTIVE || user.getStatus() == UserStatus.SUSPENDED) {
-            throw new DisabledException("Account is disabled or suspended. Please contact university administration.");
+
+        // Strict role matching & persona boundaries
+        if ("ADMIN".equalsIgnoreCase(endpointRole)) {
+            if (user.getRole() != Role.ADMIN) {
+                throw new BadCredentialsException("Invalid email or password");
+            }
+        } else if ("STAFF".equalsIgnoreCase(endpointRole)) {
+            // Staff portal: Admin cannot use staff page
+            if (user.getRole() == Role.ADMIN) {
+                throw new BadCredentialsException("Invalid email or password");
+            }
+            // Strict role requested check: HOD cannot log in as Faculty, etc.
+            if (req.getRole() != null && user.getRole() != req.getRole()) {
+                throw new BadCredentialsException("Invalid email or password");
+            }
+            if (user.getRole() != Role.HOD && user.getRole() != Role.FACULTY && user.getRole() != Role.MENTOR) {
+                throw new BadCredentialsException("Invalid email or password");
+            }
+        } else {
+            // General or internal call: match role if specified
+            if (req.getRole() != null && user.getRole() != req.getRole()) {
+                throw new BadCredentialsException("Invalid email or password");
+            }
         }
 
         // Verify BCrypt password
@@ -180,7 +357,6 @@ public class StaffAuthService {
                 user.setLockedUntil(LocalDateTime.now().plusMinutes(15));
                 userRepository.save(user);
 
-                // Audit Event: Lockout
                 auditChainService.recordEntry(
                         user.getId(),
                         user.getName(),
@@ -193,7 +369,6 @@ public class StaffAuthService {
                 );
             } else {
                 userRepository.save(user);
-                // Audit Event: Login Failure
                 auditChainService.recordEntry(
                         user.getId(),
                         user.getName(),
@@ -396,7 +571,6 @@ public class StaffAuthService {
         SecureRandom random = new SecureRandom();
         int otpNum = random.nextInt(1_000_000);
         String rawOtp = String.format("%06d", otpNum);
-        logger.debug("[DEV] Generated OTP for {}: {}", user.getEmail(), rawOtp);
 
         // Store only the SHA-256 hash of the OTP, never plain text
         String tokenHash = DigestUtils.sha256Hex(rawOtp);

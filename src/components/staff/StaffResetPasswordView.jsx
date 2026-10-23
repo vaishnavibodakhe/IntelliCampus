@@ -121,7 +121,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
                 style={{ background: '#6366f1' }}
                 onClick={() => onNavigate && onNavigate('ADMIN')}
               >
-                Go to Admin login
+                Go to Principal login
                 <ArrowRight size={18} />
               </button>
 
@@ -225,7 +225,7 @@ export default function StaffResetPasswordView({ initialToken = '', onNavigate }
             onClick={() => onNavigate && onNavigate('ADMIN')}
           >
             <ArrowLeft size={15} />
-            Admin Login
+            Principal Login
           </button>
           <button 
             type="button" 

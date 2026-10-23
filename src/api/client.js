@@ -284,6 +284,75 @@ export const api = {
     });
     return handleResponse(res);
   },
+
+  async searchStudents(query = '') {
+    const params = new URLSearchParams();
+    params.append('role', 'STUDENT');
+    if (query && query.trim()) {
+      params.append('search', query.trim());
+    }
+    const res = await fetch(`/api/users?${params.toString()}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  // Notices & Circulars
+  async getMyNoticeFeed(userId) {
+    const uid = userId !== undefined && userId !== null ? userId : getStoredUser()?.id;
+    const qs = uid !== undefined && uid !== null ? `?userId=${encodeURIComponent(uid)}` : '';
+    const res = await fetch(`/api/notices/my-feed${qs}`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async publishNotice(noticeData) {
+    const res = await fetch('/api/notices', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(noticeData),
+    });
+    return handleResponse(res);
+  },
+
+  async markNoticeRead(noticeId, userId) {
+    const uid = userId !== undefined && userId !== null ? userId : getStoredUser()?.id;
+    const qs = uid !== undefined && uid !== null ? `?userId=${encodeURIComponent(uid)}` : '';
+    const res = await fetch(`/api/notices/${encodeURIComponent(noticeId)}/read${qs}`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
+
+  async listNotices() {
+    const res = await fetch('/api/notices', {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse(res);
+  },
 };
+
+// Named function exports for flexible imports
+export async function getMyNoticeFeed(userId) {
+  return api.getMyNoticeFeed(userId);
+}
+
+export async function publishNotice(noticeData) {
+  return api.publishNotice(noticeData);
+}
+
+export async function markNoticeRead(noticeId, userId) {
+  return api.markNoticeRead(noticeId, userId);
+}
+
+export async function searchStudents(query) {
+  return api.searchStudents(query);
+}
+
+export async function listNotices() {
+  return api.listNotices();
+}
 
 export default api;

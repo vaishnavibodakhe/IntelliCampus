@@ -14,6 +14,7 @@ public class CreateNoticeRequestDto {
     private Boolean hasAttachment;
     private String fileName;
     private String attachmentUrl;
+    private java.util.List<Long> targetStudentIds;
 
     public CreateNoticeRequestDto() {}
 
@@ -49,4 +50,7 @@ public class CreateNoticeRequestDto {
 
     public String getAttachmentUrl() { return attachmentUrl; }
     public void setAttachmentUrl(String attachmentUrl) { this.attachmentUrl = attachmentUrl; }
+
+    public java.util.List<Long> getTargetStudentIds() { return targetStudentIds; }
+    public void setTargetStudentIds(java.util.List<Long> targetStudentIds) { this.targetStudentIds = targetStudentIds; }
 }

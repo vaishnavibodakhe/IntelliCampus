@@ -15,10 +15,13 @@ import {
   MapPin,
   Sparkles,
   Check,
-  X
+  X,
+  Upload,
+  Bell
 } from 'lucide-react';
 import { calculateHaversineDistance } from '../utils/cryptoAndGeo';
 import { api } from '../api/client';
+import NoticeComposer from './NoticeComposer';
 
 const DEFAULT_DIVISION_ID = 3;
 
@@ -52,7 +55,9 @@ export default function FacultyView({
   markCorrections,
   setMarkCorrections,
   onAddAuditLog,
-  staffSession
+  staffSession,
+  notices = [],
+  setNotices
 }) {
   const [activeTab, setActiveTab] = useState('attendance');
   const [selectedSubjectId, setSelectedSubjectId] = useState(12);
@@ -61,6 +66,20 @@ export default function FacultyView({
     const openSess = (sessions || []).find(s => s.status === 'OPEN' && s.id !== 51);
     return openSess ? normalizeSession(openSess) : null;
   });
+  const [facultyNotices, setFacultyNotices] = useState(notices || []);
+
+  useEffect(() => {
+    if (notices && notices.length > 0) {
+      setFacultyNotices(notices);
+    }
+  }, [notices]);
+
+  const handleNoticePublished = (newNotice) => {
+    setFacultyNotices(prev => [newNotice, ...prev]);
+    if (setNotices) {
+      setNotices([newNotice, ...(notices || [])]);
+    }
+  };
 
   // Live Camera & Recognition state
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -715,6 +734,12 @@ export default function FacultyView({
         >
           <Edit3 size={16} /> Enter &amp; Publish Marks
         </button>
+        <button 
+          onClick={() => setActiveTab('notices')} 
+          className={`tab-btn ${activeTab === 'notices' ? 'active' : ''}`}
+        >
+          <Bell size={16} /> Send Notice
+        </button>
       </div>
 
       {/* TAB 1: ATTENDANCE WORKFLOW */}
@@ -1226,6 +1251,78 @@ export default function FacultyView({
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 3: SEND NOTICE */}
+      {activeTab === 'notices' && (
+        <div className="tab-pane animate-fade-in">
+          <div className="grid-two-col" style={{ display: 'grid', gridTemplateColumns: 'minmax(350px, 1.2fr) minmax(300px, 1fr)', gap: '20px' }}>
+            <NoticeComposer 
+              publisherRole="FACULTY"
+              publisherName="Prof. Vikram Verma"
+              publisherId={3}
+              defaultDepartment="Computer Science"
+              onNoticePublished={handleNoticePublished}
+              onAddAuditLog={onAddAuditLog}
+              initialStudents={users?.filter(u => u.role === 'STUDENT')}
+              cardTitle="Send Notice / Class Circular"
+              cardDescription="Broadcast announcements to your department classes or specific students."
+            />
+
+            <div className="glass-card" style={{ padding: '24px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, fontSize: '1.15rem' }}>Recent Faculty Circulars</h3>
+                <span className="badge-pill info">{facultyNotices.length} Notices</span>
+              </div>
+              
+              {facultyNotices.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '32px 16px', color: 'var(--text-muted)' }}>
+                  <Bell size={36} style={{ margin: '0 auto 12px', display: 'block', opacity: 0.4 }} />
+                  <p>No circulars published yet. Use the composer on the left to broadcast an announcement.</p>
+                </div>
+              ) : (
+                <div className="notices-stream" style={{ display: 'flex', flexDirection: 'column', gap: '14px', maxHeight: '560px', overflowY: 'auto' }}>
+                  {facultyNotices.map((n) => (
+                    <div 
+                      key={n.id} 
+                      className="notice-item-card" 
+                      style={{ 
+                        padding: '14px', 
+                        background: 'var(--bg-surface)', 
+                        borderRadius: '10px', 
+                        border: '1px solid var(--border-subtle)' 
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '6px' }}>
+                        <h4 style={{ margin: 0, fontSize: '0.98rem', fontWeight: 600 }}>{n.title}</h4>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <span className="badge-pill info" style={{ fontSize: '0.7rem' }}>{n.targetDepartment}</span>
+                          {n.targetYear && n.targetYear !== 'All Years' && (
+                            <span className="badge-pill accent" style={{ fontSize: '0.7rem' }}>{n.targetYear}</span>
+                          )}
+                          {n.targetDivision && n.targetDivision !== 'All Divisions' && (
+                            <span className="badge-pill warning" style={{ fontSize: '0.7rem' }}>{n.targetDivision}</span>
+                          )}
+                        </div>
+                      </div>
+                      <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', margin: '6px 0', lineHeight: 1.4 }}>
+                        {n.body}
+                      </p>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '8px' }}>
+                        <span>Published: {new Date(n.publishedAt || Date.now()).toLocaleDateString()}</span>
+                        {n.deadline && (
+                          <span className="badge-pill danger" style={{ fontSize: '0.7rem' }}>
+                            Due: {n.deadline}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

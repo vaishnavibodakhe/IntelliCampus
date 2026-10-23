@@ -25,6 +25,12 @@ import {
 import { api } from '../api/client';
 import StaffPendingApprovalsView from './staff/StaffPendingApprovalsView';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
+import { 
+  adminCreateStaffApi, 
+  resendStaffSetupOtpApi, 
+  deactivateStaffApi 
+} from '../utils/staffAuthService';
+import NoticeComposer from './NoticeComposer';
 
 export default function AdminView({
   users,
@@ -97,16 +103,6 @@ export default function AdminView({
     capacity: 60
   });
 
-  // Notice state
-  const [newNotice, setNewNotice] = useState({
-    title: '',
-    body: '',
-    targetDepartment: 'All Departments',
-    targetYear: 'All Years',
-    targetDivision: 'All Divisions',
-    deadline: ''
-  });
-
   // Document state
   const [newDoc, setNewDoc] = useState({
     type: 'Provisional Degree Certificate',
@@ -147,6 +143,25 @@ export default function AdminView({
       }
     }
 
+    // Backend integration for staff creation (Admin creates staff without entering password)
+    if (newUser.role !== 'STUDENT') {
+      try {
+        if (staffSession?.accessToken) {
+          await adminCreateStaffApi({
+            name: newUser.name,
+            email: newUser.email,
+            role: newUser.role,
+            department: newUser.department,
+            employeeCode: newUser.userCode
+          }, staffSession.accessToken);
+        }
+        alert(`Staff account for ${newUser.name} created successfully! An onboarding email with a 24-hour setup OTP has been dispatched to ${newUser.email}.`);
+      } catch (err) {
+        alert(err.message || 'Failed to provision staff account on the backend server.');
+        return;
+      }
+    }
+
     const created = {
       id: newId,
       ...newUser,
@@ -184,6 +199,39 @@ export default function AdminView({
       biometricConsent: false,
       consentVersion: '1.0'
     });
+  };
+
+  const handleResendSetupOtp = async (user) => {
+    if (!confirm(`Resend onboarding 24-hour setup OTP to ${user.name} (${user.email})?`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await resendStaffSetupOtpApi(user.id, staffSession.accessToken);
+      }
+      alert(`Account setup instructions and a fresh 24-hour OTP have been dispatched to ${user.email}.`);
+    } catch (err) {
+      alert(err.message || 'Failed to resend setup OTP.');
+    }
+  };
+
+  const handleDeactivateStaff = async (user) => {
+    if (!confirm(`Are you sure you want to deactivate staff account for ${user.name}? This will immediately invalidate their active sessions and block logins.`)) return;
+    try {
+      if (staffSession?.accessToken) {
+        await deactivateStaffApi(user.id, staffSession.accessToken);
+      }
+      setUsers(users.map(u => u.id === user.id ? { ...u, status: 'DISABLED' } : u));
+      onAddAuditLog({
+        action: 'DEACTIVATE',
+        entityType: 'USER',
+        entityId: String(user.id),
+        oldValue: JSON.stringify({ status: user.status }),
+        newValue: JSON.stringify({ status: 'DISABLED' }),
+        reason: `Staff account deactivated by Admin`
+      });
+      alert(`Staff account ${user.name} (${user.email}) has been deactivated.`);
+    } catch (err) {
+      alert(err.message || 'Failed to deactivate staff account.');
+    }
   };
 
   // Open Re-enroll Face Photo Modal
@@ -411,43 +459,6 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     setRoomModal({ ...roomModal, open: false });
   };
 
-  // Handle Publish Notice
-  const handlePublishNotice = (e) => {
-    e.preventDefault();
-    if (!newNotice.title || !newNotice.body) return;
-
-    const noticeItem = {
-      id: Date.now(),
-      ...newNotice,
-      publisherRole: 'Administrator',
-      publisherName: 'Rajesh Patel',
-      publishedAt: new Date().toISOString(),
-      readsCount: 0,
-      totalTargeted: 65,
-      hasAttachment: false
-    };
-
-    setNotices([noticeItem, ...notices]);
-    onAddAuditLog({
-      action: 'PUBLISH',
-      entityType: 'NOTICE',
-      entityId: String(noticeItem.id),
-      oldValue: '{}',
-      newValue: JSON.stringify({ title: noticeItem.title, target: noticeItem.targetDepartment }),
-      reason: `Administrative official broadcast published for ${noticeItem.targetDepartment}`
-    });
-
-    setNewNotice({
-      title: '',
-      body: '',
-      targetDepartment: 'All Departments',
-      targetYear: 'All Years',
-      targetDivision: 'All Divisions',
-      deadline: ''
-    });
-    alert('Notice published and targeted students notified.');
-  };
-
   // Handle Issue Verifiable Document
   const handleIssueDocument = (e) => {
     e.preventDefault();
@@ -551,21 +562,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     <div className="admin-container animate-fade-in">
       <div className="section-header">
         <div>
-          <h1 className="page-title">Admin Operations Console</h1>
+          <h1 className="page-title">Principal Operations Console</h1>
           <p className="page-desc">
-            Centralized governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
+            Centralized institutional governance for user provisioning, academic layout, verifiable certificates, and RAG knowledge base.
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as System Administrator'}
+            <span className="dot online" /> {staffSession?.user ? `Connected: ${staffSession.user.name}` : 'Connected as Principal'}
           </div>
           <button
             type="button"
             onClick={() => setShowChangePasswordModal(true)}
             className="action-icon-btn"
             style={{ padding: '6px 12px', fontSize: '0.82rem', display: 'flex', alignItems: 'center', gap: '5px' }}
-            title="Change Admin Password"
+            title="Change Principal Password"
           >
             <KeyRound size={15} />
             <span>Change Password</span>
@@ -576,7 +587,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               onClick={onLogout}
               className="action-icon-btn"
               style={{ padding: '6px 12px', fontSize: '0.82rem', color: '#ef4444', borderColor: 'rgba(239, 68, 68, 0.4)', display: 'flex', alignItems: 'center', gap: '5px' }}
-              title="Sign Out of Admin Console"
+              title="Sign Out of Principal Console"
             >
               <LogOut size={15} />
               <span>Logout</span>
@@ -650,7 +661,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <option value="FACULTY">Faculty</option>
                 <option value="HOD">HOD</option>
                 <option value="MENTOR">Mentor</option>
-                <option value="ADMIN">Admin</option>
+                <option value="ADMIN">Principal</option>
               </select>
 
               <select 
@@ -740,13 +751,39 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                             <Camera size={15} />
                           </button>
                         )}
-                        <button 
-                          className="table-action-btn"
-                          onClick={() => alert(`Reset password token sent to ${u.email}`)}
-                          title="Reset initial password"
-                        >
-                          <KeyRound size={15} />
-                        </button>
+                        {u.role !== 'STUDENT' && (
+                          <>
+                            <button 
+                              type="button"
+                              className="table-action-btn"
+                              onClick={() => handleResendSetupOtp(u)}
+                              title="Resend 24-hour setup OTP to staff email"
+                              style={{ color: '#38bdf8' }}
+                            >
+                              <KeyRound size={15} />
+                            </button>
+                            {u.status === 'ACTIVE' && staffSession?.user?.email !== u.email && (
+                              <button 
+                                type="button"
+                                className="table-action-btn"
+                                onClick={() => handleDeactivateStaff(u)}
+                                title="Deactivate staff account"
+                                style={{ color: '#ef4444' }}
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            )}
+                          </>
+                        )}
+                        {u.role === 'STUDENT' && (
+                          <button 
+                            className="table-action-btn"
+                            onClick={() => alert(`Password reset instructions for student sent to ${u.email}`)}
+                            title="Reset student password"
+                          >
+                            <KeyRound size={15} />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -826,75 +863,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       {activeTab === 'notices' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-two-col">
-            <div className="glass-card">
-              <h3>Publish Official Circular</h3>
-              <p className="card-desc">Broadcast circulars filtered by department, academic year, and division (`NTC-01`).</p>
-              
-              <form onSubmit={handlePublishNotice} className="form-stack">
-                <div className="form-group">
-                  <label>Circular Title</label>
-                  <input 
-                    type="text" 
-                    placeholder="e.g. Schedule for Mid-Term Make-Up Submissions"
-                    value={newNotice.title}
-                    onChange={e => setNewNotice({...newNotice, title: e.target.value})}
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Audience Targeting (Scope Filter: Dept, Year, Div)</label>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
-                    <select 
-                      value={newNotice.targetDepartment}
-                      onChange={e => setNewNotice({...newNotice, targetDepartment: e.target.value})}
-                    >
-                      <option value="All Departments">All Departments</option>
-                      <option value="Computer Science">Computer Science</option>
-                      <option value="Information Technology">Information Technology</option>
-                    </select>
-                    <select 
-                      value={newNotice.targetYear}
-                      onChange={e => setNewNotice({...newNotice, targetYear: e.target.value})}
-                    >
-                      <option value="All Years">All Years</option>
-                      <option value="Year 1">Year 1</option>
-                      <option value="Year 2">Year 2</option>
-                      <option value="Year 3">Year 3</option>
-                      <option value="Year 4">Year 4</option>
-                    </select>
-                    <select 
-                      value={newNotice.targetDivision}
-                      onChange={e => setNewNotice({...newNotice, targetDivision: e.target.value})}
-                    >
-                      <option value="All Divisions">All Divisions</option>
-                      <option value="Div A">Div A Only</option>
-                      <option value="Div B">Div B Only</option>
-                    </select>
-                  </div>
-                </div>
-                <div className="form-group">
-                  <label>Deadline (Optional)</label>
-                  <input 
-                    type="date"
-                    value={newNotice.deadline}
-                    onChange={e => setNewNotice({...newNotice, deadline: e.target.value})}
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Notice Content</label>
-                  <textarea 
-                    rows={4}
-                    placeholder="Provide full text of the circular..."
-                    value={newNotice.body}
-                    onChange={e => setNewNotice({...newNotice, body: e.target.value})}
-                    required
-                  />
-                </div>
-                <button type="submit" className="btn-primary w-full">
-                  <Bell size={15} /> Publish &amp; Push Notification
-                </button>
-              </form>
-            </div>
+            <NoticeComposer 
+              publisherRole="ADMIN"
+              publisherName={staffSession?.user?.name || "Rajesh Patel"}
+              publisherId={staffSession?.user?.id || 1}
+              defaultDepartment="All Departments"
+              onNoticePublished={(newNoticeItem) => {
+                if (setNotices) {
+                  setNotices([newNoticeItem, ...(notices || [])]);
+                }
+              }}
+              onAddAuditLog={onAddAuditLog}
+              initialStudents={users?.filter(u => u.role === 'STUDENT')}
+              cardTitle="Publish Official Circular"
+              cardDescription="Broadcast circulars filtered by department, academic year, and division (`NTC-01`)."
+            />
 
             <div className="glass-card">
               <h3>Active Circulars &amp; Read Analytics</h3>
@@ -913,10 +896,10 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                         )}
                       </div>
                     </div>
-                    <p className="notice-item-body">{n.body}</p>
+                    <p className="notice-item-body">{n.body || n.message}</p>
                     <div className="notice-item-footer">
                       <span className="notice-reads">
-                        Read by {n.readsCount} / {n.totalTargeted} targeted students
+                        Read by {n.readsCount || 0} / {n.totalTargeted || 65} targeted students
                       </span>
                       {n.deadline && (
                         <span className="badge-pill warning">Deadline: {n.deadline}</span>
@@ -1120,11 +1103,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                     <option value="FACULTY">Faculty</option>
                     <option value="MENTOR">Mentor</option>
                     <option value="HOD">HOD</option>
+                    <option value="ADMIN">Principal</option>
                   </select>
                 </div>
               </div>
               <div className="form-group">
-                <label>Email Address</label>
+                <label>Institutional Email Address</label>
                 <input 
                   type="email"
                   placeholder="s.roy@intellicampus.edu"
@@ -1133,6 +1117,12 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                   required
                 />
               </div>
+
+              {newUser.role !== 'STUDENT' && (
+                <div style={{ background: 'rgba(56, 189, 248, 0.08)', padding: '10px 12px', borderRadius: '8px', border: '1px solid rgba(56, 189, 248, 0.25)', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+                  <strong>Secure First-Time Password Flow:</strong> Principals never enter or see staff passwords. An unusable random hash is assigned, and a 24-hour setup OTP will be emailed to <em>{newUser.email || 'the user'}</em> to set their password on the Staff portal.
+                </div>
+              )}
               {newUser.role === 'STUDENT' && (
                 <>
                   <div className="grid-two-col-compact">

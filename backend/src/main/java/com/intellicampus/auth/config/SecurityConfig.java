@@ -56,14 +56,18 @@ public class SecurityConfig {
                 })
             )
             .authorizeHttpRequests(auth -> auth
-                // ADMIN only endpoints for staff approvals (evaluated before public /api/auth/**)
+                // ADMIN only endpoints for staff management & approvals (evaluated before public /api/auth/**)
                 .requestMatchers(
                     "/api/auth/staff/pending",
                     "/api/auth/staff/pending/**",
                     "/api/auth/staff/*/approve",
                     "/api/auth/staff/*/reject",
                     "/api/auth/staff/{id}/approve",
-                    "/api/auth/staff/{id}/reject"
+                    "/api/auth/staff/{id}/reject",
+                    "/api/auth/admin/staff",
+                    "/api/auth/admin/staff/**",
+                    "/api/auth/staff/staff",
+                    "/api/auth/staff/staff/**"
                 ).hasRole("ADMIN")
                 // Authenticated staff endpoints (staff only: ADMIN, HOD, FACULTY, MENTOR)
                 .requestMatchers("/api/auth/staff/me", "/api/auth/staff/change-password").hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR")
