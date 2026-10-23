@@ -37,6 +37,17 @@ export default function Navbar({
   const isStudentPortal = currentPath === '/student/login' || currentRole === 'STUDENT';
   const isPublicPortal = currentPath === '/verify' || currentRole === 'PUBLIC';
 
+  // Determine if currently viewing an unauthenticated auth / login view
+  const isAuthView = 
+    (currentPath === '/staff/login' && !staffSession?.user) ||
+    (currentPath === '/admin/login' && staffSession?.user?.role !== 'ADMIN') ||
+    (currentPath === '/student/login' && !currentUser) ||
+    (!staffSession?.user && !currentUser && currentPath !== '/' && currentPath !== '/verify');
+
+  // Authenticated user checks
+  const isAuthenticatedStaff = Boolean(isStaffPortal && staffSession?.user && ['HOD', 'FACULTY', 'MENTOR'].includes(staffSession?.user?.role));
+  const isAuthenticatedStudent = Boolean(isStudentPortal && currentUser);
+
   const staffRole = staffSession?.user?.role;
   const staffName = staffSession?.user?.name;
   const studentName = currentUser?.name;
@@ -102,16 +113,16 @@ export default function Navbar({
 
       {/* Action shortcuts */}
       <div className="navbar-actions">
-        {/* Active Class Live Indicator (only for Staff and Students) */}
-        {(isStaffPortal || isStudentPortal) && activeSession && activeSession.status === 'OPEN' && (
+        {/* Active Class Live Indicator (only for authenticated Staff and Students, hidden on auth/login views) */}
+        {!isAuthView && (isAuthenticatedStaff || isAuthenticatedStudent) && activeSession && activeSession.status === 'OPEN' && (
           <div className="live-session-badge animate-pulse-glow" title="Active attendance session ongoing">
             <span className="live-dot" />
             <span>Live: {activeSession.challengeCode}</span>
           </div>
         )}
 
-        {/* Notice Broadcast Alerts Indicator & Dropdown (only for Staff and Students) */}
-        {(isStaffPortal || isStudentPortal) && (
+        {/* Notice Broadcast Alerts Indicator & Dropdown (only for authenticated Staff and Students, hidden on auth/login views) */}
+        {!isAuthView && (isAuthenticatedStaff || isAuthenticatedStudent) && (
           <NotificationBell 
             notices={notices}
             unreadCount={unreadCount !== undefined ? unreadCount : notificationCount}
