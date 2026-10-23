@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import StaffChangePasswordView from './staff/StaffChangePasswordView';
 import NoticeComposer from './NoticeComposer';
+import api from '../api/client';
 
 export default function HodView({
   leaveRequests,
@@ -45,7 +46,16 @@ export default function HodView({
   };
 
   // HOD Approve Leave
-  const handleApproveLeave = (id) => {
+  const handleApproveLeave = async (id) => {
+    try {
+      await api.hodReviewLeave(id, {
+        decision: 'APPROVE',
+        remarks: 'HOD approved leave'
+      });
+    } catch (err) {
+      console.warn('Backend HOD review API call failed, updating local state:', err);
+    }
+
     setLeaveRequests(leaveRequests.map(req => {
       if (req.id === id) {
         return {
@@ -76,7 +86,7 @@ export default function HodView({
   };
 
   // Submit Rejection with mandatory reason
-  const handleSubmitRejection = (e) => {
+  const handleSubmitRejection = async (e) => {
     e.preventDefault();
     if (!rejectReasonText || rejectReasonText.trim().length < 10) {
       alert('A written reason of at least 10 characters is required for rejection.');
@@ -85,6 +95,15 @@ export default function HodView({
 
     if (rejectReasonModal.type === 'leave') {
       const id = rejectReasonModal.id;
+      try {
+        await api.hodReviewLeave(id, {
+          decision: 'REJECT',
+          remarks: rejectReasonText
+        });
+      } catch (err) {
+        console.warn('Backend HOD reject leave API failed, updating local state:', err);
+      }
+
       setLeaveRequests(leaveRequests.map(req => {
         if (req.id === id) {
           return {
@@ -108,6 +127,15 @@ export default function HodView({
       alert(`Leave Request #${id} REJECTED with logged reason.`);
     } else if (rejectReasonModal.type === 'mark') {
       const id = rejectReasonModal.id;
+      try {
+        await api.decideCorrection(id, {
+          decision: 'REJECT',
+          remarks: rejectReasonText
+        });
+      } catch (err) {
+        console.warn('Backend mark reject API failed, updating local state:', err);
+      }
+
       setMarkCorrections(markCorrections.map(cor => {
         if (cor.id === id) {
           return {
@@ -134,7 +162,16 @@ export default function HodView({
   };
 
   // HOD Approve Mark Correction
-  const handleApproveMarkCorrection = (cor) => {
+  const handleApproveMarkCorrection = async (cor) => {
+    try {
+      await api.decideCorrection(cor.id, {
+        decision: 'APPROVE',
+        remarks: 'Approved upon verification of evaluator records.'
+      });
+    } catch (err) {
+      console.warn('Backend mark approve API failed, updating local state:', err);
+    }
+
     // 1. Update mark entry
     setMarks(marks.map(m => {
       if (m.id === cor.markId) {
@@ -175,10 +212,14 @@ export default function HodView({
 
   // Export CSV
   const handleExportReport = () => {
+    if (students.length === 0) {
+      alert('No student records available to export.');
+      return;
+    }
     const csvContent = "data:text/csv;charset=utf-8," + 
       "Roll No,Student Name,Department,Division,Attendance Rate,Defaulter Status,Fees Due\n" +
       users.filter(u => u.role === 'STUDENT').map(s => 
-        `${s.rollNo},"${s.name}",${s.department},${s.division},${s.attendanceRate}%,${s.attendanceRate < 75 ? 'DEFAULTER' : 'COMPLIANT'},${s.feeStatus}`
+        `${s.rollNo || ''},"${s.name || ''}",${s.department || ''},${s.division || ''},${s.attendanceRate || 0}%,${(s.attendanceRate || 0) < 75 ? 'DEFAULTER' : 'COMPLIANT'},${s.feeStatus || ''}`
       ).join("\n");
     
     const encodedUri = encodeURI(csvContent);
@@ -191,7 +232,7 @@ export default function HodView({
   };
 
   const students = users.filter(u => u.role === 'STUDENT');
-  const defaulterStudents = students.filter(s => s.attendanceRate < 75);
+  const defaulterStudents = students.filter(s => (s.attendanceRate || 0) < 75);
   const pendingLeaves = leaveRequests.filter(l => 
     (l.hodStatus === 'PENDING' || l.finalStatus === 'SUBMITTED' || l.finalStatus === 'RECOMMENDED') &&
     l.finalStatus !== 'APPROVED' &&
@@ -210,7 +251,7 @@ export default function HodView({
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
           <div className="header-meta-badge">
-            <span className="dot online" /> {staffSession?.user ? `${staffSession.user.name} (${staffSession.user.department || 'HOD'})` : 'Dr. Ananya Sharma (Computer Science & Eng)'}
+            <span className="dot online" /> {staffSession?.user ? `${staffSession.user.name} (${staffSession.user.department || 'HOD'})` : 'HOD Office'}
           </div>
           <button
             type="button"
@@ -431,7 +472,7 @@ export default function HodView({
             <div className="kpi-card">
               <span className="kpi-label">Total Enrolled Students</span>
               <span className="kpi-val">{students.length}</span>
-              <span className="kpi-sub">Third Year - Div A</span>
+              <span className="kpi-sub">Enrolled Students</span>
             </div>
             <div className="kpi-card warning">
               <span className="kpi-label">Defaulters (&lt; 75% Attendance)</span>
@@ -441,7 +482,9 @@ export default function HodView({
             <div className="kpi-card success">
               <span className="kpi-label">Average Department Attendance</span>
               <span className="kpi-val text-success">
-                {(students.reduce((acc, s) => acc + s.attendanceRate, 0) / students.length).toFixed(1)}%
+                {students.length > 0
+                  ? (students.reduce((acc, s) => acc + (s.attendanceRate || 0), 0) / students.length).toFixed(1)
+                  : '0.0'}%
               </span>
               <span className="kpi-sub">Target: &gt; 80%</span>
             </div>
@@ -461,36 +504,44 @@ export default function HodView({
                 </tr>
               </thead>
               <tbody>
-                {students.map(s => {
-                  const isDefaulter = s.attendanceRate < 75;
-                  return (
-                    <tr key={s.id} className={isDefaulter ? 'row-defaulter' : ''}>
-                      <td className="font-mono">{s.rollNo}</td>
-                      <td><strong>{s.name}</strong></td>
-                      <td>{s.division}</td>
-                      <td>
-                        <span className={isDefaulter ? 'text-danger font-bold' : 'text-success'}>
-                          {s.attendanceRate}%
-                        </span>
-                      </td>
-                      <td>
-                        {isDefaulter ? (
-                          <span className="badge-pill danger">
-                            <AlertTriangle size={12} /> Defaulter Notice
+                {students.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted, #94a3b8)' }}>
+                      No student records found in the database.
+                    </td>
+                  </tr>
+                ) : (
+                  students.map(s => {
+                    const isDefaulter = (s.attendanceRate || 0) < 75;
+                    return (
+                      <tr key={s.id} className={isDefaulter ? 'row-defaulter' : ''}>
+                        <td className="font-mono">{s.rollNo || 'N/A'}</td>
+                        <td><strong>{s.name}</strong></td>
+                        <td>{s.division || '—'}</td>
+                        <td>
+                          <span className={isDefaulter ? 'text-danger font-bold' : 'text-success'}>
+                            {s.attendanceRate != null ? `${s.attendanceRate}%` : 'N/A'}
                           </span>
-                        ) : (
-                          <span className="badge-pill success">Compliant</span>
-                        )}
-                      </td>
-                      <td>{s.backlogs > 0 ? <span className="text-warning font-bold">{s.backlogs} Backlogs</span> : '0'}</td>
-                      <td>
-                        <span className={`badge-pill ${s.feeStatus === 'PAID' ? 'success' : 'warning'}`}>
-                          {s.feeStatus}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
+                        </td>
+                        <td>
+                          {isDefaulter ? (
+                            <span className="badge-pill danger">
+                              <AlertTriangle size={12} /> Defaulter Notice
+                            </span>
+                          ) : (
+                            <span className="badge-pill success">Compliant</span>
+                          )}
+                        </td>
+                        <td>{(s.backlogs || 0) > 0 ? <span className="text-warning font-bold">{s.backlogs} Backlogs</span> : '0'}</td>
+                        <td>
+                          <span className={`badge-pill ${s.feeStatus === 'PAID' ? 'success' : 'warning'}`}>
+                            {s.feeStatus || 'PENDING'}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
@@ -502,9 +553,9 @@ export default function HodView({
         <div className="tab-pane animate-fade-in">
           <NoticeComposer 
             publisherRole="HOD"
-            publisherName={staffSession?.user?.name || "Dr. Ananya Sharma"}
-            publisherId={staffSession?.user?.id || 2}
-            defaultDepartment={staffSession?.user?.department || "Computer Science"}
+            publisherName={staffSession?.user?.name || "HOD"}
+            publisherId={staffSession?.user?.id || 1}
+            defaultDepartment={staffSession?.user?.department || ""}
             onNoticePublished={handleNoticePublished}
             onAddAuditLog={onAddAuditLog}
             initialStudents={users?.filter(u => u.role === 'STUDENT')}

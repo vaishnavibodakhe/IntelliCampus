@@ -19,6 +19,7 @@ import {
   Check
 } from 'lucide-react';
 import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
+import api from '../api/client';
 
 export default function StudentView({
   currentUser,
@@ -29,7 +30,7 @@ export default function StudentView({
   leaveRequests,
   setLeaveRequests,
   notices = [],
-  issuedDocuments,
+  issuedDocuments = [],
   onOpenChat,
   onAddAuditLog,
   onLogout,
@@ -43,7 +44,7 @@ export default function StudentView({
     fromDate: '',
     toDate: '',
     reason: '',
-    attachmentName: 'medical_certificate.pdf'
+    attachmentName: ''
   });
 
   // Dispute attendance modal state
@@ -111,12 +112,8 @@ export default function StudentView({
     }
   };
 
-  // Handle Confirm Attendance (ATT-07) with Present / Matched / Geo-out-of-range statuses
-  // Student attendance is automated via faculty classroom photo recognition (ATT-03).
-  // StudentView remains read-only for session verification.
-
   // Submit Leave Request (LVE-01)
-  const handleApplyLeave = (e) => {
+  const handleApplyLeave = async (e) => {
     e.preventDefault();
     if (!leaveForm.fromDate || !leaveForm.toDate || !leaveForm.reason) return;
 
@@ -128,6 +125,19 @@ export default function StudentView({
     }
 
     const diffDays = Math.ceil((end - start) / (1000 * 60 * 60 * 24)) + 1;
+
+    try {
+      await api.submitLeave({
+        studentId: currentUser.id,
+        startDate: leaveForm.fromDate,
+        endDate: leaveForm.toDate,
+        reason: leaveForm.reason,
+        attachmentName: leaveForm.attachmentName || null,
+        daysCount: diffDays
+      });
+    } catch (err) {
+      console.warn('Backend submitLeave API call failed, updating local state:', err);
+    }
 
     const newReq = {
       id: Date.now(),
@@ -156,8 +166,8 @@ export default function StudentView({
       reason: `Student ${currentUser.name} submitted official leave application for ${diffDays} days (LVE-01)`
     });
 
-    setLeaveForm({ fromDate: '', toDate: '', reason: '', attachmentName: 'medical_certificate.pdf' });
-    alert('Leave application submitted to your mentor Dr. Sunita Mehta for review.');
+    setLeaveForm({ fromDate: '', toDate: '', reason: '', attachmentName: '' });
+    alert('Leave application submitted to your faculty mentor for review.');
   };
 
   // Dispute attendance
@@ -179,12 +189,29 @@ export default function StudentView({
 
     setDisputeModal({ open: false, sessionId: null });
     setDisputeComment('');
-    alert('Dispute logged and forwarded to course faculty Prof. Vikram Verma.');
+    alert('Dispute logged and forwarded to course faculty.');
   };
 
   const studentMarks = marks.filter(m => m.rollNo === currentUser.rollNo);
   const myLeaves = leaveRequests.filter(l => l.studentId === currentUser.id);
-  const myDocuments = issuedDocuments.filter(d => d.rollNo === currentUser.rollNo);
+  const myDocuments = (issuedDocuments || []).filter(d => d.rollNo === currentUser.rollNo);
+
+  const studentSubjectStats = {};
+  (sessions || []).forEach(sess => {
+    const rec = sess.attendanceRecords?.find(r => r.studentId === currentUser.id || r.rollNo === currentUser.rollNo);
+    if (rec) {
+      const sub = sess.subjectName || sess.subjectCode || 'General Class';
+      if (!studentSubjectStats[sub]) {
+        studentSubjectStats[sub] = { attended: 0, total: 0 };
+      }
+      studentSubjectStats[sub].total += 1;
+      if (rec.finalStatus === 'PRESENT') {
+        studentSubjectStats[sub].attended += 1;
+      }
+    }
+  });
+  const subjectEntries = Object.entries(studentSubjectStats);
+
   const targetedNotices = (notices || []).filter(n => {
     if (n.targetStudentIds && n.targetStudentIds.length > 0) {
       return n.targetStudentIds.includes(currentUser.id) || n.targetStudentIds.includes(Number(currentUser.id));
@@ -295,20 +322,6 @@ export default function StudentView({
               >
                 <RefreshCw size={11} className={isLocating ? 'animate-spin' : ''} /> {isLocating ? 'Acquiring GPS...' : 'Acquire Live GPS'}
               </button>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation(12)} 
-                className="btn-secondary btn-xs"
-              >
-                Test 12m (Inside)
-              </button>
-              <button 
-                type="button" 
-                onClick={() => requestDeviceLocation(85)} 
-                className="btn-secondary btn-xs"
-              >
-                Test 85m (Outside)
-              </button>
             </div>
           </div>
 
@@ -344,17 +357,17 @@ export default function StudentView({
       {activeTab === 'dashboard' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-summary-kpis">
-            <div className={`kpi-card ${currentUser.attendanceRate < 75 ? 'warning' : 'success'}`}>
+            <div className={`kpi-card ${(currentUser.attendanceRate || 0) < 75 ? 'warning' : 'success'}`}>
               <span className="kpi-label">Overall Attendance Percentage</span>
-              <span className="kpi-val">{currentUser.attendanceRate}%</span>
+              <span className="kpi-val">{currentUser.attendanceRate != null ? currentUser.attendanceRate : 0}%</span>
               <span className="kpi-sub">
-                {currentUser.attendanceRate < 75 ? '⚠️ Defaulter risk - Below 75% minimum' : '✓ Compliant with university norms'}
+                {(currentUser.attendanceRate || 0) < 75 ? '⚠️ Defaulter risk - Below 75% minimum' : '✓ Compliant with university norms'}
               </span>
             </div>
 
             <div className="kpi-card">
               <span className="kpi-label">Assigned Faculty Mentor</span>
-              <span className="kpi-val text-sm">{currentUser.mentorName}</span>
+              <span className="kpi-val text-sm">{currentUser.mentorName || 'Faculty Advisor'}</span>
               <span className="kpi-sub">Advisory &amp; Leave Counselor</span>
             </div>
 
@@ -362,11 +375,11 @@ export default function StudentView({
               <span className="kpi-label">Tuition Fee Clearance</span>
               <span className="kpi-val text-sm">
                 <span className={`badge-pill ${currentUser.feeStatus === 'PAID' ? 'success' : 'warning'}`}>
-                  {currentUser.feeStatus}
+                  {currentUser.feeStatus || 'PENDING'}
                 </span>
               </span>
               <span className="kpi-sub">
-                {currentUser.feeStatus === 'PAID' ? 'Zero outstanding dues' : `Due: $ ${currentUser.dueAmount}`}
+                {currentUser.feeStatus === 'PAID' ? 'Zero outstanding dues' : (currentUser.dueAmount ? `Due: $ ${currentUser.dueAmount}` : 'Tuition clearance pending')}
               </span>
             </div>
           </div>
@@ -376,33 +389,33 @@ export default function StudentView({
             <div className="glass-card">
               <div className="card-header-flex">
                 <h3>Subject-Wise Attendance</h3>
-                <span className="badge-pill info">Semester 5</span>
+                <span className="badge-pill info">{currentUser.semester || 'Current Semester'}</span>
               </div>
               
               <div className="subject-progress-list">
-                <div className="subject-progress-item">
-                  <div className="subject-header">
-                    <span>CS-302 Machine Learning &amp; AI</span>
-                    <strong className="text-success font-mono">87.5% (28/32)</strong>
+                {subjectEntries.length === 0 ? (
+                  <div className="empty-state-box" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
+                    <p style={{ margin: 0, fontSize: '0.88rem' }}>No individual class session records recorded yet.</p>
                   </div>
-                  <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: '87.5%' }} /></div>
-                </div>
-
-                <div className="subject-progress-item">
-                  <div className="subject-header">
-                    <span>CS-301 Database Systems</span>
-                    <strong className="text-success font-mono">83.3% (25/30)</strong>
-                  </div>
-                  <div className="progress-bar-bg"><div className="progress-bar-fill" style={{ width: '83.3%' }} /></div>
-                </div>
-
-                <div className="subject-progress-item">
-                  <div className="subject-header">
-                    <span>CS-303 Distributed Cloud</span>
-                    <strong className="text-warning font-mono">72.0% (18/25) ⚠️</strong>
-                  </div>
-                  <div className="progress-bar-bg"><div className="progress-bar-fill bg-warning" style={{ width: '72%' }} /></div>
-                </div>
+                ) : (
+                  subjectEntries.map(([subName, stats]) => {
+                    const pct = stats.total > 0 ? ((stats.attended / stats.total) * 100).toFixed(1) : '0.0';
+                    const isWarning = Number(pct) < 75;
+                    return (
+                      <div key={subName} className="subject-progress-item">
+                        <div className="subject-header">
+                          <span>{subName}</span>
+                          <strong className={isWarning ? 'text-warning font-mono' : 'text-success font-mono'}>
+                            {pct}% ({stats.attended}/{stats.total}) {isWarning ? '⚠️' : ''}
+                          </strong>
+                        </div>
+                        <div className="progress-bar-bg">
+                          <div className={`progress-bar-fill ${isWarning ? 'bg-warning' : ''}`} style={{ width: `${Math.min(100, Number(pct))}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             </div>
 
@@ -448,20 +461,28 @@ export default function StudentView({
                 </tr>
               </thead>
               <tbody>
-                {studentMarks.map(m => (
-                  <tr key={m.id}>
-                    <td><strong>{m.subjectCode}</strong></td>
-                    <td>{m.exam}</td>
-                    <td className="font-mono font-bold text-primary">{m.marks}</td>
-                    <td className="font-mono">{m.maxMarks}</td>
-                    <td className="font-mono">{((m.marks / m.maxMarks) * 100).toFixed(1)}%</td>
-                    <td>
-                      <span className="badge-pill success">
-                        🔒 Verified &amp; Published
-                      </span>
+                {studentMarks.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted, #94a3b8)' }}>
+                      No published examination marks available for your account.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  studentMarks.map(m => (
+                    <tr key={m.id}>
+                      <td><strong>{m.subjectCode}</strong></td>
+                      <td>{m.exam}</td>
+                      <td className="font-mono font-bold text-primary">{m.marks}</td>
+                      <td className="font-mono">{m.maxMarks}</td>
+                      <td className="font-mono">{m.maxMarks > 0 ? ((m.marks / m.maxMarks) * 100).toFixed(1) : 0}%</td>
+                      <td>
+                        <span className="badge-pill success">
+                          🔒 Verified &amp; Published
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -532,9 +553,13 @@ export default function StudentView({
                     >
                       <FileText size={14} /> Select Proof File...
                     </label>
-                    <div className="attachment-chip font-mono text-xs">
-                      <FileText size={14} /> <span>{leaveForm.attachmentName}</span>
-                    </div>
+                    {leaveForm.attachmentName ? (
+                      <div className="attachment-chip font-mono text-xs">
+                        <FileText size={14} /> <span>{leaveForm.attachmentName}</span>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted">No proof document selected</span>
+                    )}
                   </div>
                 </div>
 
@@ -547,34 +572,40 @@ export default function StudentView({
             <div className="glass-card">
               <h3>My Leave Applications &amp; Tracking</h3>
               <div className="leave-status-list">
-                {myLeaves.map(leave => (
-                  <div key={leave.id} className="leave-item-card">
-                    <div className="leave-item-header">
-                      <div>
-                        <strong>{leave.fromDate} &rarr; {leave.toDate}</strong>
-                        <span className="days-badge">({leave.daysCount} Days)</span>
-                      </div>
-                      <span className={`badge-pill ${
-                        leave.finalStatus === 'APPROVED' ? 'success' :
-                        leave.finalStatus === 'REJECTED' ? 'danger' : 'warning'
-                      }`}>
-                        {leave.finalStatus}
-                      </span>
-                    </div>
-
-                    <p className="leave-reason-text">"{leave.reason}"</p>
-
-                    <div className="workflow-stepper">
-                      <div className={`step-dot ${leave.mentorStatus !== 'PENDING' ? 'done' : 'active'}`}>
-                        1. Mentor Review
-                      </div>
-                      <ChevronRight size={14} className="text-muted" />
-                      <div className={`step-dot ${leave.hodStatus === 'APPROVED' ? 'done' : leave.hodStatus === 'REJECTED' ? 'rejected' : 'active'}`}>
-                        2. HOD Final Decision
-                      </div>
-                    </div>
+                {myLeaves.length === 0 ? (
+                  <div className="empty-state-box" style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
+                    <p style={{ margin: 0 }}>No leave applications submitted yet.</p>
                   </div>
-                ))}
+                ) : (
+                  myLeaves.map(leave => (
+                    <div key={leave.id} className="leave-item-card">
+                      <div className="leave-item-header">
+                        <div>
+                          <strong>{leave.fromDate} &rarr; {leave.toDate}</strong>
+                          <span className="days-badge">({leave.daysCount} Days)</span>
+                        </div>
+                        <span className={`badge-pill ${
+                          leave.finalStatus === 'APPROVED' ? 'success' :
+                          leave.finalStatus === 'REJECTED' ? 'danger' : 'warning'
+                        }`}>
+                          {leave.finalStatus}
+                        </span>
+                      </div>
+
+                      <p className="leave-reason-text">"{leave.reason}"</p>
+
+                      <div className="workflow-stepper">
+                        <div className={`step-dot ${leave.mentorStatus !== 'PENDING' ? 'done' : 'active'}`}>
+                          1. Mentor Review
+                        </div>
+                        <ChevronRight size={14} className="text-muted" />
+                        <div className={`step-dot ${leave.hodStatus === 'APPROVED' ? 'done' : leave.hodStatus === 'REJECTED' ? 'rejected' : 'active'}`}>
+                          2. HOD Final Decision
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -591,38 +622,46 @@ export default function StudentView({
             </p>
 
             <div className="doc-cards-grid mt-4">
-              {myDocuments.map(doc => (
-                <div key={doc.code} className="credential-certificate-card">
-                  <div className="cert-top">
-                    <div className="cert-seal">🎓</div>
-                    <div>
-                      <h4 className="cert-title">{doc.type}</h4>
-                      <span className="cert-code font-mono">{doc.code}</span>
+              {myDocuments.length === 0 ? (
+                <div className="glass-card" style={{ padding: '2.5rem', textAlign: 'center', gridColumn: '1 / -1', color: 'var(--text-muted, #94a3b8)' }}>
+                  <ShieldCheck size={38} className="text-muted" style={{ margin: '0 auto 0.75rem auto', opacity: 0.5 }} />
+                  <h4 style={{ color: 'var(--text-main, #f8fafc)', marginBottom: '0.25rem' }}>No Documents Issued</h4>
+                  <p style={{ fontSize: '0.88rem' }}>No official certificates or credentials have been issued for your roll number.</p>
+                </div>
+              ) : (
+                myDocuments.map(doc => (
+                  <div key={doc.code} className="credential-certificate-card">
+                    <div className="cert-top">
+                      <div className="cert-seal">🎓</div>
+                      <div>
+                        <h4 className="cert-title">{doc.type}</h4>
+                        <span className="cert-code font-mono">{doc.code}</span>
+                      </div>
+                    </div>
+
+                    <div className="cert-body">
+                      <p>Issued to: <strong>{doc.studentName}</strong> ({doc.rollNo})</p>
+                      <p>Department: {doc.department}</p>
+                      <p>Status: <span className="text-success font-bold">● {doc.status}</span></p>
+                      <p className="text-xs text-muted font-mono truncate">Hash: {doc.fileHash}</p>
+                    </div>
+
+                    <div className="cert-footer">
+                      <span className="text-xs text-muted">Issued: {doc.issueDate}</span>
+                      <a 
+                        href={`#`} 
+                        onClick={(e) => {
+                          e.preventDefault();
+                          alert(`Public verification link: /verify/${doc.code}`);
+                        }}
+                        className="btn-secondary btn-xs"
+                      >
+                        <ExternalLink size={12} /> Public Verification Link
+                      </a>
                     </div>
                   </div>
-
-                  <div className="cert-body">
-                    <p>Issued to: <strong>{doc.studentName}</strong> ({doc.rollNo})</p>
-                    <p>Department: {doc.department}</p>
-                    <p>Status: <span className="text-success font-bold">● {doc.status}</span></p>
-                    <p className="text-xs text-muted font-mono truncate">Hash: {doc.fileHash}</p>
-                  </div>
-
-                  <div className="cert-footer">
-                    <span className="text-xs text-muted">Issued: {doc.issueDate}</span>
-                    <a 
-                      href={`#`} 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        alert(`Public verification link: /verify/${doc.code}`);
-                      }}
-                      className="btn-secondary btn-xs"
-                    >
-                      <ExternalLink size={12} /> Public Verification Link
-                    </a>
-                  </div>
-                </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         </div>

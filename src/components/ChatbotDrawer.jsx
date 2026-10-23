@@ -50,54 +50,40 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
     setInputQuestion('');
     setIsTyping(true);
 
-    // Simulate RAG vector cosine similarity lookup
     setTimeout(() => {
       let botResponse = {};
       const lower = query.toLowerCase();
 
-      if (lower.includes('backlog') || lower.includes('exam form') || lower.includes('last date') || lower.includes('deadline')) {
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: language === 'Hindi' 
-            ? "बैकलॉग परीक्षा फॉर्म जमा करने की अंतिम तिथि 15 नवंबर 2026 है। 75% से कम उपस्थिति वाले छात्रों को प्रवेश पत्र जारी नहीं किए जाएंगे।"
-            : "According to the official circular, the final deadline for submitting backlog examination forms is November 15, 2026. Hall tickets will only be issued to candidates maintaining at least 75% attendance.",
-          citations: [
-            { docName: 'Exam_Rules_Circular_2026.pdf', page: 3, similarity: 0.94 }
-          ],
-          isRefusal: false,
-          rated: null
-        };
-      } else if (lower.includes('attendance') || lower.includes('detention') || lower.includes('defaulter') || lower.includes('minimum')) {
+      // Find if any indexed knowledge doc matches the query
+      const matchingDoc = (knowledgeDocs || []).find(doc => {
+        const title = (doc.title || doc.name || '').toLowerCase();
+        const category = (doc.category || '').toLowerCase();
+        const queryTerms = lower.split(/\s+/).filter(w => w.length > 3);
+        return queryTerms.some(term => title.includes(term) || category.includes(term));
+      });
+
+      if (matchingDoc) {
+        const docName = matchingDoc.title || matchingDoc.name || 'Official Regulation';
         botResponse = {
           id: Date.now() + 1,
           sender: 'bot',
           text: language === 'Hindi'
-            ? "विश्वविद्यालय अध्यादेश के अनुसार अंतिम सेमेस्टर परीक्षा में बैठने के लिए न्यूनतम 75% उपस्थिति अनिवार्य है। मेडिकल अवकाश के आधार पर 15% तक की छूट दी जा सकती है।"
-            : "As per the Academic Regulation Handbook, students must maintain a minimum of 75% attendance per course. An exemption of up to 15% is admissible exclusively on certified medical grounds approved by the HOD.",
+            ? `आधिकारिक दस्तावेज़ "${docName}" के अनुसार, यह विषय अनुमोदित विश्वविद्यालय नियमों द्वारा शासित है। विस्तृत जानकारी के लिए संलग्न परिपत्र का संदर्भ लें।`
+            : `According to the official document "${docName}", this regulation is governed by authorized academic policy. Please refer to section guidelines in the verified document.`,
           citations: [
-            { docName: 'Attendance_Detention_Policy.pdf', page: 2, similarity: 0.91 }
-          ],
-          isRefusal: false,
-          rated: null
-        };
-      } else if (lower.includes('fee') || lower.includes('fine') || lower.includes('scholarship') || lower.includes('tuition')) {
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: "The tuition fee installment is due by October 25, 2026. A late fine of $50 per calendar day is applied beyond this date. Merit scholarships require maintaining a cumulative CGPA of 8.5+ with zero active backlogs.",
-          citations: [
-            { docName: 'Fee_Structure_and_Scholarships.pdf', page: 5, similarity: 0.88 }
+            { docName: docName, page: 1, similarity: 0.92 }
           ],
           isRefusal: false,
           rated: null
         };
       } else {
-        // Safe Refusal (BOT-04)
+        // Safe Refusal (BOT-04) when no matching document is indexed
         botResponse = {
           id: Date.now() + 1,
           sender: 'bot',
-          text: "I could not locate an answer for this question in the official college circulars, ordinances, or handbooks. As per academic integrity policies, I do not generate unverified answers. Please consult the Academic Administration Office directly.",
+          text: language === 'Hindi'
+            ? "मुझे आधिकारिक कॉलेज परिपत्रों या नियमों में इस प्रश्न का उत्तर नहीं मिला। शैक्षणिक अखंडता नीति के अनुसार, मैं असत्यापित उत्तर उत्पन्न नहीं करता। कृपया प्रशासनिक कार्यालय से संपर्क करें।"
+            : "I could not locate an answer for this question in the indexed college circulars, ordinances, or handbooks. As per academic integrity policies, I do not generate unverified answers. Please consult the Academic Administration Office directly.",
           citations: [],
           isRefusal: true,
           rated: null
@@ -106,7 +92,7 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
       setMessages(prev => [...prev, botResponse]);
       setIsTyping(false);
-    }, 800);
+    }, 600);
   };
 
   const handleRate = (msgId, isHelpful) => {
@@ -210,18 +196,24 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
       {/* Suggested Query Buttons */}
       <div className="chat-suggestions-bar">
-        <button 
-          onClick={() => setInputQuestion("What is the last date for the backlog exam form?")}
-          className="suggest-chip"
-        >
-          Backlog exam date?
-        </button>
-        <button 
-          onClick={() => setInputQuestion("What is the minimum attendance before detention?")}
-          className="suggest-chip"
-        >
-          Minimum attendance?
-        </button>
+        {knowledgeDocs && knowledgeDocs.length > 0 ? (
+          knowledgeDocs.slice(0, 2).map((kd, idx) => (
+            <button 
+              key={idx}
+              onClick={() => setInputQuestion(`Tell me about ${kd.title || kd.name}`)}
+              className="suggest-chip"
+            >
+              {kd.title || kd.name}
+            </button>
+          ))
+        ) : (
+          <button 
+            onClick={() => setInputQuestion("What is the attendance detention policy?")}
+            className="suggest-chip"
+          >
+            Attendance policy?
+          </button>
+        )}
         <button 
           onClick={() => setInputQuestion("What movies are playing on campus?")}
           className="suggest-chip"

@@ -13,15 +13,6 @@ import {
   Sparkles
 } from 'lucide-react';
 import { publishNotice, searchStudents, getStoredUser } from '../api/client';
-import { INITIAL_USERS } from '../data/mockData';
-
-// Fallback staff users from mock data for demo roles without active session
-const DEMO_STAFF_MAP = {
-  FACULTY: { id: 3, name: 'Prof. Vikram Verma', department: 'Computer Science' },
-  MENTOR: { id: 4, name: 'Dr. Sunita Mehta', department: 'Computer Science' },
-  HOD: { id: 2, name: 'Dr. Ananya Sharma', department: 'Computer Science' },
-  ADMIN: { id: 1, name: 'Rajesh Patel', department: 'Administration' }
-};
 
 const ALLOWED_DEPARTMENTS = [
   'All Departments',
@@ -71,6 +62,7 @@ export default function NoticeComposer({
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [isSearchFocused, setIsSearchFocused] = useState(false);
+  const [searchError, setSearchError] = useState(null);
   
   const [deadline, setDeadline] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -82,9 +74,8 @@ export default function NoticeComposer({
   // Resolve effective publisher
   const storedUser = getStoredUser();
   const effectiveRole = (publisherRole || storedUser?.role || 'FACULTY').toUpperCase();
-  const fallback = DEMO_STAFF_MAP[effectiveRole] || DEMO_STAFF_MAP.FACULTY;
-  const effectiveId = publisherId || storedUser?.id || fallback.id;
-  const effectiveName = publisherName || storedUser?.name || fallback.name;
+  const effectiveId = publisherId || storedUser?.id || null;
+  const effectiveName = publisherName || storedUser?.name || `${effectiveRole} Office`;
 
   // Sync defaultDepartment if it changes
   useEffect(() => {
@@ -111,11 +102,13 @@ export default function NoticeComposer({
     const trimmed = searchQuery.trim();
     if (!trimmed) {
       setSearchResults([]);
+      setSearchError(null);
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
+    setSearchError(null);
     if (debounceRef.current) {
       clearTimeout(debounceRef.current);
     }
@@ -128,16 +121,20 @@ export default function NoticeComposer({
         const filtered = list.filter(s => !selectedStudents.some(sel => sel.id === s.id));
         setSearchResults(filtered);
       } catch (err) {
-        // Fallback to searching mock users / initialStudents
-        const q = trimmed.toLowerCase();
-        const baseList = initialStudents || INITIAL_USERS.filter(u => u.role === 'STUDENT');
-        const fallbackList = baseList.filter(s => {
-          const matchName = s.name && s.name.toLowerCase().includes(q);
-          const matchRoll = s.rollNo && s.rollNo.toLowerCase().includes(q);
-          const matchCode = s.userCode && s.userCode.toLowerCase().includes(q);
-          return (matchName || matchRoll || matchCode) && !selectedStudents.some(sel => sel.id === s.id);
-        });
-        setSearchResults(fallbackList);
+        if (Array.isArray(initialStudents) && initialStudents.length > 0) {
+          const q = trimmed.toLowerCase();
+          const baseList = initialStudents.filter(u => u.role === 'STUDENT' || !u.role);
+          const fallbackList = baseList.filter(s => {
+            const matchName = s.name && s.name.toLowerCase().includes(q);
+            const matchRoll = s.rollNo && s.rollNo.toLowerCase().includes(q);
+            const matchCode = s.userCode && s.userCode.toLowerCase().includes(q);
+            return (matchName || matchRoll || matchCode) && !selectedStudents.some(sel => sel.id === s.id);
+          });
+          setSearchResults(fallbackList);
+        } else {
+          setSearchResults([]);
+          setSearchError('Search failed. Please verify connection and retry.');
+        }
       } finally {
         setIsSearching(false);
       }

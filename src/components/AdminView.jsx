@@ -101,10 +101,10 @@ export default function AdminView({
   // Document state
   const [newDoc, setNewDoc] = useState({
     type: 'Provisional Degree Certificate',
-    studentName: 'Aarav Shah',
-    rollNo: 'CS-104',
+    studentName: '',
+    rollNo: '',
     department: 'Computer Science',
-    gpa: '8.92'
+    gpa: ''
   });
 
   // Knowledge doc state
@@ -334,11 +334,11 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       open: true,
       isEditing: false,
       id: null,
-      name: 'Classroom 305',
-      latitude: 18.52045,
-      longitude: 73.85680,
+      name: '',
+      latitude: 18.52043,
+      longitude: 73.85674,
       radiusM: 50,
-      capacity: 65
+      capacity: 60
     });
   };
 
@@ -355,14 +355,14 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     });
   };
 
-  const handleSaveRoom = (e) => {
+  const handleSaveRoom = async (e) => {
     e.preventDefault();
-    if (!roomModal.name) return;
+    if (!roomModal.name || !roomModal.name.trim()) return;
 
     if (roomModal.isEditing) {
       const updated = rooms.map(r => r.id === roomModal.id ? {
         ...r,
-        name: roomModal.name,
+        name: roomModal.name.trim(),
         latitude: parseFloat(roomModal.latitude),
         longitude: parseFloat(roomModal.longitude),
         radiusM: parseInt(roomModal.radiusM, 10),
@@ -379,9 +379,23 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       });
       alert(`Geofence coordinates updated for ${roomModal.name}.`);
     } else {
-      const newRoom = {
+      let createdRoom = null;
+      try {
+        const saved = await api.createRoom({
+          name: roomModal.name.trim(),
+          latitude: parseFloat(roomModal.latitude),
+          longitude: parseFloat(roomModal.longitude),
+          radiusM: parseInt(roomModal.radiusM, 10),
+          capacity: parseInt(roomModal.capacity, 10)
+        });
+        if (saved && saved.id) createdRoom = saved;
+      } catch (err) {
+        console.warn('API createRoom:', err.message);
+      }
+
+      const newRoom = createdRoom || {
         id: Date.now(),
-        name: roomModal.name,
+        name: roomModal.name.trim(),
         latitude: parseFloat(roomModal.latitude),
         longitude: parseFloat(roomModal.longitude),
         radiusM: parseInt(roomModal.radiusM, 10),
@@ -403,21 +417,42 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
   };
 
   // Handle Issue Verifiable Document
-  const handleIssueDocument = (e) => {
+  const handleIssueDocument = async (e) => {
     e.preventDefault();
-    const docCode = `DOC-2026-CS-${Math.floor(1000 + Math.random() * 9000)}`;
-    const doc = {
+    if (!newDoc.studentName || !newDoc.rollNo) {
+      alert('Student name and roll number are required to issue a verifiable document.');
+      return;
+    }
+
+    let issued = null;
+    try {
+      issued = await api.issueDocument({
+        type: newDoc.type,
+        studentName: newDoc.studentName.trim(),
+        rollNo: newDoc.rollNo.trim(),
+        department: newDoc.department,
+        gpa: newDoc.gpa ? `${newDoc.gpa} / 10.0` : null,
+        authorizedSignatory: 'Registrar & Senate Board',
+        issuerName: staffSession?.user?.name || 'Administrator',
+        issuerId: staffSession?.user?.id || 1
+      });
+    } catch (err) {
+      console.warn('Backend issueDocument API call failed, generating cryptographic block:', err);
+    }
+
+    const docCode = issued?.code || `DOC-${new Date().getFullYear()}-${newDoc.rollNo.replace(/[^A-Za-z0-9]/g, '')}-${Date.now().toString().slice(-4)}`;
+    const doc = issued || {
       code: docCode,
       type: newDoc.type,
-      studentName: newDoc.studentName,
-      maskedStudentName: newDoc.studentName.slice(0, 2) + '*** ' + newDoc.studentName.split(' ')[1]?.slice(0, 2) + '***',
-      rollNo: newDoc.rollNo,
+      studentName: newDoc.studentName.trim(),
+      maskedStudentName: newDoc.studentName.slice(0, 2) + '***',
+      rollNo: newDoc.rollNo.trim(),
       department: newDoc.department,
       issueDate: new Date().toISOString().split('T')[0],
       status: 'VALID',
       revokedReason: null,
-      fileHash: 'sha256_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15),
-      gpa: newDoc.gpa + ' / 10.0',
+      fileHash: '',
+      gpa: newDoc.gpa ? newDoc.gpa + ' / 10.0' : '',
       authorizedSignatory: 'Registrar & Senate Board'
     };
 
@@ -425,25 +460,38 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
     onAddAuditLog({
       action: 'ISSUE',
       entityType: 'VERIFIABLE_DOCUMENT',
-      entityId: docCode,
+      entityId: doc.code,
       oldValue: '{}',
-      newValue: JSON.stringify({ code: docCode, status: 'VALID' }),
+      newValue: JSON.stringify({ code: doc.code, status: 'VALID' }),
       reason: `Official ${doc.type} issued with QR verification link (DOC-01)`
     });
-    alert(`Document Issued! Public verification code: ${docCode}`);
+    alert(`Document Issued! Public verification code: ${doc.code}`);
+    setNewDoc({
+      type: 'Provisional Degree Certificate',
+      studentName: '',
+      rollNo: '',
+      department: 'Computer Science',
+      gpa: ''
+    });
   };
 
   // Revoke Document
-  const handleRevokeDocument = (code) => {
+  const handleRevokeDocument = async (code) => {
     const reason = prompt('Enter mandatory reason for revoking this document (min 10 characters):');
     if (!reason || reason.trim().length < 10) {
       alert('Revocation aborted. A reason of at least 10 characters is mandatory.');
       return;
     }
 
+    try {
+      await api.revokeDocument(code, { revokedReason: reason.trim() });
+    } catch (err) {
+      console.warn('API revokeDocument call:', err);
+    }
+
     setIssuedDocuments(issuedDocuments.map(d => {
       if (d.code === code) {
-        return { ...d, status: 'REVOKED', revokedReason: reason };
+        return { ...d, status: 'REVOKED', revokedReason: reason.trim() };
       }
       return d;
     }));
@@ -453,8 +501,8 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
       entityType: 'VERIFIABLE_DOCUMENT',
       entityId: code,
       oldValue: '{"status":"VALID"}',
-      newValue: JSON.stringify({ status: 'REVOKED', reason }),
-      reason: `Document revoked by Admin: ${reason}`
+      newValue: JSON.stringify({ status: 'REVOKED', reason: reason.trim() }),
+      reason: `Document revoked by Admin: ${reason.trim()}`
     });
     alert(`Document ${code} status marked as REVOKED.`);
   };
@@ -462,16 +510,16 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
   // Add Knowledge Circular
   const handleAddKnowledgeDoc = (e) => {
     e.preventDefault();
-    if (!newKnowledgeTitle) return;
+    if (!newKnowledgeTitle || !newKnowledgeTitle.trim()) return;
 
     const doc = {
       id: Date.now(),
-      title: newKnowledgeTitle,
-      filename: newKnowledgeTitle.replace(/\s+/g, '_') + '.pdf',
-      uploadedBy: 'Admin Office',
+      title: newKnowledgeTitle.trim(),
+      filename: newKnowledgeTitle.trim().replace(/\s+/g, '_') + '.pdf',
+      uploadedBy: staffSession?.user?.name || 'Admin Office',
       uploadDate: new Date().toISOString().split('T')[0],
-      pages: Math.floor(5 + Math.random() * 15),
-      chunksIndexed: Math.floor(20 + Math.random() * 40),
+      pages: 1,
+      chunksIndexed: 1,
       status: 'INDEXED',
       summary: 'Official college ordinance and policies indexed for RAG vector search.'
     };
@@ -642,69 +690,77 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map(u => (
-                  <tr key={u.id}>
-                    <td>
-                      <div className="user-cell">
-                        <div className="avatar-circle">{u.name.charAt(0)}</div>
-                        <div>
-                          <div className="user-name">{u.name}</div>
-                          <div className="user-sub">{u.userCode} {u.rollNo && `• ${u.rollNo}`}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`badge-role ${u.role.toLowerCase()}`}>
-                        {u.role}
-                      </span>
-                    </td>
-                    <td>{u.department}</td>
-                    <td>
-                      {u.role === 'STUDENT' ? (
-                        u.faceEnrolled ? (
-                          <span className="badge-pill success"><CheckCircle2 size={12} /> Enrolled (512-d)</span>
-                        ) : (
-                          <span className="badge-pill warning"><AlertCircle size={12} /> Pending</span>
-                        )
-                      ) : (
-                        <span className="badge-pill muted">N/A</span>
-                      )}
-                    </td>
-                    <td>
-                      {u.role === 'STUDENT' ? (
-                        <span className={u.attendanceRate < 75 ? 'text-danger font-bold' : 'text-success'}>
-                          {u.attendanceRate}% {u.attendanceRate < 75 && '(Defaulter)'}
-                        </span>
-                      ) : '-'}
-                    </td>
-                    <td>
-                      <span className={`status-dot ${u.status === 'ACTIVE' ? 'active' : 'disabled'}`}>
-                        {u.status}
-                      </span>
-                    </td>
-                    <td>
-                      <div style={{ display: 'flex', gap: '6px' }}>
-                        {u.role === 'STUDENT' && (
-                          <button 
-                            className="table-action-btn"
-                            onClick={() => handleOpenEnrollModal(u)}
-                            title={u.faceEnrolled ? "Re-enroll Face Photo" : "Enroll Face Photo"}
-                            style={{ color: u.faceEnrolled ? '#10b981' : '#f59e0b' }}
-                          >
-                            <Camera size={15} />
-                          </button>
-                        )}
-                        <button 
-                          className="table-action-btn"
-                          onClick={() => alert(`Reset password token sent to ${u.email}`)}
-                          title="Reset initial password"
-                        >
-                          <KeyRound size={15} />
-                        </button>
-                      </div>
+                {filteredUsers.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" style={{ textAlign: 'center', padding: '2.5rem', color: 'var(--text-muted)' }}>
+                      No user accounts found matching current filters.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  filteredUsers.map(u => (
+                    <tr key={u.id}>
+                      <td>
+                        <div className="user-cell">
+                          <div className="avatar-circle">{u.name.charAt(0)}</div>
+                          <div>
+                            <div className="user-name">{u.name}</div>
+                            <div className="user-sub">{u.userCode} {u.rollNo && `• ${u.rollNo}`}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`badge-role ${u.role.toLowerCase()}`}>
+                          {u.role}
+                        </span>
+                      </td>
+                      <td>{u.department}</td>
+                      <td>
+                        {u.role === 'STUDENT' ? (
+                          u.faceEnrolled ? (
+                            <span className="badge-pill success"><CheckCircle2 size={12} /> Enrolled (512-d)</span>
+                          ) : (
+                            <span className="badge-pill warning"><AlertCircle size={12} /> Pending</span>
+                          )
+                        ) : (
+                          <span className="badge-pill muted">N/A</span>
+                        )}
+                      </td>
+                      <td>
+                        {u.role === 'STUDENT' ? (
+                          <span className={u.attendanceRate < 75 ? 'text-danger font-bold' : 'text-success'}>
+                            {u.attendanceRate}% {u.attendanceRate < 75 && '(Defaulter)'}
+                          </span>
+                        ) : '-'}
+                      </td>
+                      <td>
+                        <span className={`status-dot ${u.status === 'ACTIVE' ? 'active' : 'disabled'}`}>
+                          {u.status}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '6px' }}>
+                          {u.role === 'STUDENT' && (
+                            <button 
+                              className="table-action-btn"
+                              onClick={() => handleOpenEnrollModal(u)}
+                              title={u.faceEnrolled ? "Re-enroll Face Photo" : "Enroll Face Photo"}
+                              style={{ color: u.faceEnrolled ? '#10b981' : '#f59e0b' }}
+                            >
+                              <Camera size={15} />
+                            </button>
+                          )}
+                          <button 
+                            className="table-action-btn"
+                            onClick={() => alert(`Reset password token sent to ${u.email}`)}
+                            title="Reset initial password"
+                          >
+                            <KeyRound size={15} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
@@ -730,28 +786,34 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
               </p>
 
               <div className="room-list">
-                {rooms.map(room => (
-                  <div key={room.id} className="room-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div className="room-info">
-                      <div className="room-title">{room.name}</div>
-                      <div className="room-meta">
-                        Lat: <code>{room.latitude}</code>, Lng: <code>{room.longitude}</code>
+                {rooms.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No geofenced classrooms configured yet.
+                  </div>
+                ) : (
+                  rooms.map(room => (
+                    <div key={room.id} className="room-card" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div className="room-info">
+                        <div className="room-title">{room.name}</div>
+                        <div className="room-meta">
+                          Lat: <code>{room.latitude}</code>, Lng: <code>{room.longitude}</code>
+                        </div>
+                      </div>
+                      <div className="room-badge-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className="badge-pill success">Radius: {room.radiusM}m</span>
+                        <span className="badge-pill muted">{room.capacity} seats</span>
+                        <button 
+                          type="button" 
+                          onClick={() => handleOpenEditRoom(room)} 
+                          className="btn-secondary btn-xs"
+                          title="Configure room coordinates & geofence perimeter"
+                        >
+                          <Edit3 size={12} /> Edit GPS
+                        </button>
                       </div>
                     </div>
-                    <div className="room-badge-wrap" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span className="badge-pill success">Radius: {room.radiusM}m</span>
-                      <span className="badge-pill muted">{room.capacity} seats</span>
-                      <button 
-                        type="button" 
-                        onClick={() => handleOpenEditRoom(room)} 
-                        className="btn-secondary btn-xs"
-                        title="Configure room coordinates & geofence perimeter"
-                      >
-                        <Edit3 size={12} /> Edit GPS
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
 
@@ -761,15 +823,21 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
                 <span className="badge-pill info">{subjects.length} Courses</span>
               </div>
               <div className="room-list">
-                {subjects.map(s => (
-                  <div key={s.id} className="room-card">
-                    <div className="room-info">
-                      <div className="room-title">{s.code} - {s.name}</div>
-                      <div className="room-meta">Faculty In-Charge: <strong>{s.facultyName}</strong></div>
-                    </div>
-                    <span className="badge-pill accent">{s.credits} Credits</span>
+                {subjects.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No active academic courses registered yet.
                   </div>
-                ))}
+                ) : (
+                  subjects.map(s => (
+                    <div key={s.id} className="room-card">
+                      <div className="room-info">
+                        <div className="room-title">{s.code} - {s.name}</div>
+                        <div className="room-meta">Faculty In-Charge: <strong>{s.facultyName || 'Staff'}</strong></div>
+                      </div>
+                      <span className="badge-pill accent">{s.credits} Credits</span>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -782,7 +850,7 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
           <div className="grid-two-col">
             <NoticeComposer 
               publisherRole="ADMIN"
-              publisherName={staffSession?.user?.name || "Rajesh Patel"}
+              publisherName={staffSession?.user?.name || "Admin Office"}
               publisherId={staffSession?.user?.id || 1}
               defaultDepartment="All Departments"
               onNoticePublished={(newNoticeItem) => {
@@ -799,31 +867,37 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Active Circulars &amp; Read Analytics</h3>
               <div className="notices-stream">
-                {notices.map(n => (
-                  <div key={n.id} className="notice-item-card">
-                    <div className="notice-item-header">
-                      <h4>{n.title}</h4>
-                      <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
-                        <span className="badge-pill info">{n.targetDepartment}</span>
-                        {n.targetYear && n.targetYear !== 'All Years' && (
-                          <span className="badge-pill accent">{n.targetYear}</span>
-                        )}
-                        {n.targetDivision && n.targetDivision !== 'All Divisions' && (
-                          <span className="badge-pill warning">{n.targetDivision}</span>
+                {notices.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No active circulars published yet.
+                  </div>
+                ) : (
+                  notices.map(n => (
+                    <div key={n.id} className="notice-item-card">
+                      <div className="notice-item-header">
+                        <h4>{n.title}</h4>
+                        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                          <span className="badge-pill info">{n.targetDepartment}</span>
+                          {n.targetYear && n.targetYear !== 'All Years' && (
+                            <span className="badge-pill accent">{n.targetYear}</span>
+                          )}
+                          {n.targetDivision && n.targetDivision !== 'All Divisions' && (
+                            <span className="badge-pill warning">{n.targetDivision}</span>
+                          )}
+                        </div>
+                      </div>
+                      <p className="notice-item-body">{n.body || n.message}</p>
+                      <div className="notice-item-footer">
+                        <span className="notice-reads">
+                          Read by {n.readsCount || 0} / {n.totalTargeted || 0} targeted students
+                        </span>
+                        {n.deadline && (
+                          <span className="badge-pill warning">Deadline: {n.deadline}</span>
                         )}
                       </div>
                     </div>
-                    <p className="notice-item-body">{n.body || n.message}</p>
-                    <div className="notice-item-footer">
-                      <span className="notice-reads">
-                        Read by {n.readsCount || 0} / {n.totalTargeted || 65} targeted students
-                      </span>
-                      {n.deadline && (
-                        <span className="badge-pill warning">Deadline: {n.deadline}</span>
-                      )}
-                    </div>
-                  </div>
-                ))}
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -887,31 +961,37 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Issued Documents Registry</h3>
               <div className="doc-registry-list">
-                {issuedDocuments.map(doc => (
-                  <div key={doc.code} className="registry-card">
-                    <div className="registry-main">
-                      <div className="registry-code font-mono">{doc.code}</div>
-                      <div className="registry-type">{doc.type}</div>
-                      <div className="registry-student">{doc.studentName} ({doc.rollNo})</div>
-                    </div>
-                    <div className="registry-actions">
-                      <span className={`badge-pill ${doc.status === 'VALID' ? 'success' : 'danger'}`}>
-                        {doc.status}
-                      </span>
-                      {doc.status === 'VALID' ? (
-                        <button 
-                          onClick={() => handleRevokeDocument(doc.code)}
-                          className="btn-danger-outline btn-xs"
-                          title="Revoke certificate"
-                        >
-                          Revoke
-                        </button>
-                      ) : (
-                        <span className="text-danger text-xs">{doc.revokedReason}</span>
-                      )}
-                    </div>
+                {issuedDocuments.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No verifiable credentials issued yet.
                   </div>
-                ))}
+                ) : (
+                  issuedDocuments.map(doc => (
+                    <div key={doc.code} className="registry-card">
+                      <div className="registry-main">
+                        <div className="registry-code font-mono">{doc.code}</div>
+                        <div className="registry-type">{doc.type}</div>
+                        <div className="registry-student">{doc.studentName} ({doc.rollNo})</div>
+                      </div>
+                      <div className="registry-actions">
+                        <span className={`badge-pill ${doc.status === 'VALID' ? 'success' : 'danger'}`}>
+                          {doc.status}
+                        </span>
+                        {doc.status === 'VALID' ? (
+                          <button 
+                            onClick={() => handleRevokeDocument(doc.code)}
+                            className="btn-danger-outline btn-xs"
+                            title="Revoke certificate"
+                          >
+                            Revoke
+                          </button>
+                        ) : (
+                          <span className="text-danger text-xs">{doc.revokedReason}</span>
+                        )}
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>
@@ -953,20 +1033,26 @@ student.pranav,Pranav Shinde,pranav.it@intellicampus.edu,STUDENT,IT-204,Div A,Ye
             <div className="glass-card">
               <h3>Vectorized Knowledge Catalog</h3>
               <div className="knowledge-catalog-list">
-                {knowledgeDocs.map(doc => (
-                  <div key={doc.id} className="knowledge-card">
-                    <div className="knowledge-header">
-                      <h4>{doc.title}</h4>
-                      <span className="badge-pill success">{doc.status}</span>
-                    </div>
-                    <p className="knowledge-desc">{doc.summary}</p>
-                    <div className="knowledge-meta">
-                      <span>📄 {doc.pages} pages</span>
-                      <span>🧩 {doc.chunksIndexed} chunks embedded</span>
-                      <span>📅 {doc.uploadDate}</span>
-                    </div>
+                {knowledgeDocs.length === 0 ? (
+                  <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--text-muted)' }}>
+                    No knowledge base documents indexed yet.
                   </div>
-                ))}
+                ) : (
+                  knowledgeDocs.map(doc => (
+                    <div key={doc.id} className="knowledge-card">
+                      <div className="knowledge-header">
+                        <h4>{doc.title}</h4>
+                        <span className="badge-pill success">{doc.status}</span>
+                      </div>
+                      <p className="knowledge-desc">{doc.summary}</p>
+                      <div className="knowledge-meta">
+                        <span>📄 {doc.pages} pages</span>
+                        <span>🧩 {doc.chunksIndexed} chunks embedded</span>
+                        <span>📅 {doc.uploadDate}</span>
+                      </div>
+                    </div>
+                  ))
+                )}
               </div>
             </div>
           </div>

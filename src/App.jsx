@@ -61,6 +61,91 @@ export default function App() {
   const [knowledgeDocs, setKnowledgeDocs] = useState(INITIAL_KNOWLEDGE_DOCS);
   const [riskStudents, setRiskStudents] = useState(INITIAL_RISK_STUDENTS);
 
+  // Load real records from backend database on initial mount
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadBackendData() {
+      // 1. Users
+      try {
+        const userList = await api.getUsers();
+        if (isMounted && Array.isArray(userList)) setUsers(userList);
+      } catch (err) {
+        console.warn('API getUsers unavailable:', err.message);
+      }
+
+      // 2. Academic Rooms
+      try {
+        const roomList = await api.getRooms();
+        if (isMounted && Array.isArray(roomList)) setRooms(roomList);
+      } catch (err) {
+        console.warn('API getRooms unavailable:', err.message);
+      }
+
+      // 3. Academic Subjects
+      try {
+        const subjectList = await api.getSubjects();
+        if (isMounted && Array.isArray(subjectList)) setSubjects(subjectList);
+      } catch (err) {
+        console.warn('API getSubjects unavailable:', err.message);
+      }
+
+      // 4. Circulars & Notices
+      try {
+        const noticeList = await api.listNotices();
+        if (isMounted && Array.isArray(noticeList)) setNotices(noticeList);
+      } catch (err) {
+        console.warn('API listNotices unavailable:', err.message);
+      }
+
+      // 5. Verifiable Documents
+      try {
+        const docList = await api.getAllDocuments();
+        if (isMounted && Array.isArray(docList)) setIssuedDocuments(docList);
+      } catch (err) {
+        console.warn('API getAllDocuments unavailable:', err.message);
+      }
+
+      // 6. Cryptographic Audit Chain
+      try {
+        const chain = await api.getAuditChain();
+        if (isMounted && Array.isArray(chain)) setAuditLogs(chain);
+      } catch (err) {
+        console.warn('API getAuditChain unavailable:', err.message);
+      }
+
+      // 7. Leaves & Permissions
+      try {
+        const leaveList = await api.getAllLeaves();
+        if (isMounted && Array.isArray(leaveList)) setLeaveRequests(leaveList);
+      } catch (err) {
+        console.warn('API getAllLeaves unavailable:', err.message);
+      }
+
+      // 8. High Risk Students
+      try {
+        const riskList = await api.getHighRiskStudents();
+        if (isMounted && Array.isArray(riskList)) setRiskStudents(riskList);
+      } catch (err) {
+        console.warn('API getHighRiskStudents unavailable:', err.message);
+      }
+
+      // 9. Mark Corrections
+      try {
+        const correctionList = await api.getPendingCorrections();
+        if (isMounted && Array.isArray(correctionList)) setMarkCorrections(correctionList);
+      } catch (err) {
+        console.warn('API getPendingCorrections unavailable:', err.message);
+      }
+    }
+
+    loadBackendData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
   // Modals & Drawers
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
   const [isChatbotOpen, setIsChatbotOpen] = useState(false);
@@ -209,8 +294,8 @@ export default function App() {
     const createdAt = new Date().toISOString();
     const newId = (lastEntry ? lastEntry.id : 0) + 1;
 
-    const actorName = staffSession?.user?.name || 'Prof. Vikram Verma';
-    const actorId = staffSession?.user?.id || 3;
+    const actorName = staffSession?.user?.name || authenticatedUser?.name || 'Authorized Staff';
+    const actorId = staffSession?.user?.id || authenticatedUser?.id || 1;
 
     const partialEntry = {
       id: newId,
@@ -455,6 +540,7 @@ export default function App() {
                 onAddAuditLog={handleAddAuditLog}
                 notices={notices}
                 setNotices={setNotices}
+                staffSession={staffSession}
               />
             )}
 
@@ -468,6 +554,7 @@ export default function App() {
                 onAddAuditLog={handleAddAuditLog}
                 notices={notices}
                 setNotices={setNotices}
+                staffSession={staffSession}
               />
             )}
 
