@@ -75,6 +75,8 @@ public class AttendanceSession {
         this.startedAt = LocalDateTime.now();
         int window = photoWindowMinutes != null ? photoWindowMinutes : 10;
         this.photoWindowEndsAt = this.startedAt.plusMinutes(window);
+        this.expiresAt = this.photoWindowEndsAt;
+        this.photoCount = 0;
         this.createdAt = LocalDateTime.now();
     }
 

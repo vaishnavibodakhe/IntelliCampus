@@ -17,7 +17,7 @@ spring:
       - optional:file:../.env[.properties]
       - optional:file:.env[.properties]
   datasource:
-    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3306}/${DB_NAME:intellicampus_db}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
+    url: jdbc:mysql://${DB_HOST:localhost}:${DB_PORT:3307}/${DB_NAME:intellicampus_db}?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true
     username: ${DB_USER:campus_admin}
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -68,8 +68,9 @@ app:
     confirm-timeout-seconds: 120
     geofence-default-radius-m: 50
     geofence-max-accuracy-m: 100
-    face-match-threshold: 0.45
-    face-match-margin: 0.05
+    face-match-threshold: 0.50
+    face-review-threshold: 0.20
+    face-match-margin: 0.0
     spoof-min-score: 0.60
     phash-max-distance: 8
     defaulter-threshold-percent: 75

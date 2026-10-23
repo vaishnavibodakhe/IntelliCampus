@@ -246,17 +246,22 @@ async def recognize_classroom_faces(
         })
 
     if num_faces > 0 and num_candidates > 0:
-        # Prepare candidate embeddings
+        # Prepare candidate embeddings (deduplicated by studentId)
         cand_ids = []
         cand_vecs = []
+        seen_cand_ids = set()
         for c in candidate_list:
+            sid = c.get("studentId")
+            if sid is None or sid in seen_cand_ids:
+                continue
             emb = c.get("embedding")
             if emb and len(emb) == 512:
                 vec = np.array(emb, dtype=np.float32)
                 norm = np.linalg.norm(vec)
-                if norm > 1e-6:
+                if norm > 1e-6 and not np.isnan(vec).any():
                     vec = vec / norm
-                    cand_ids.append(c.get("studentId"))
+                    seen_cand_ids.add(sid)
+                    cand_ids.append(sid)
                     cand_vecs.append(vec)
 
         if cand_vecs:
@@ -272,7 +277,8 @@ async def recognize_classroom_faces(
 
             similarity_matrix = np.dot(face_matrix, cand_matrix.T)  # Shape: (M, N)
 
-            # Greedy 1-to-1 bipartite matching by highest similarity
+            # Greedy 1-to-1 bipartite matching by highest similarity with strict 0.20 threshold
+            MIN_MATCH_THRESHOLD = 0.20
             all_pairs = []
             for i in range(num_faces):
                 for j in range(len(cand_ids)):
@@ -284,18 +290,36 @@ async def recognize_classroom_faces(
             assigned_students = set()
 
             for sim, f_idx, c_idx in all_pairs:
+                # Rule: Similarity < 20% is strictly UNMATCHED; never assign an arbitrary student
+                if sim < MIN_MATCH_THRESHOLD:
+                    break
+
                 if f_idx not in assigned_faces and c_idx not in assigned_students:
+                    # Residual conflict protection:
+                    # If this face's top similarity was to a different candidate who was already assigned
+                    # to another face, and this match is below high-confidence (0.50), this face is an
+                    # ambiguous/imposter face and must NOT be falsely paired with a leftover candidate.
+                    best_cand_for_face = int(np.argmax(similarity_matrix[f_idx]))
+                    best_sim_for_face = float(similarity_matrix[f_idx, best_cand_for_face])
+                    if best_cand_for_face != c_idx and best_sim_for_face > sim and sim < 0.50:
+                        continue
+
                     assigned_faces.add(f_idx)
                     assigned_students.add(c_idx)
                     face_results[f_idx]["matchedStudentId"] = cand_ids[c_idx]
                     face_results[f_idx]["similarity"] = float(round(sim, 4))
 
-            # Compute second similarity for each face (for margin checks in backend)
+            # Compute second similarity for each face (runner-up competitor candidate similarity)
             for f_idx in range(num_faces):
-                sims = sorted([float(similarity_matrix[f_idx, j]) for j in range(len(cand_ids))], reverse=True)
-                if len(sims) > 1:
-                    face_results[f_idx]["secondSimilarity"] = float(round(sims[1], 4))
-                elif len(sims) == 1:
+                matched_cid = face_results[f_idx]["matchedStudentId"]
+                if matched_cid is not None and len(cand_ids) > 1:
+                    matched_c_idx = cand_ids.index(matched_cid)
+                    other_sims = [float(similarity_matrix[f_idx, j]) for j in range(len(cand_ids)) if j != matched_c_idx]
+                    face_results[f_idx]["secondSimilarity"] = float(round(max(other_sims), 4)) if other_sims else 0.0
+                elif len(cand_ids) > 1:
+                    sims = sorted([float(similarity_matrix[f_idx, j]) for j in range(len(cand_ids))], reverse=True)
+                    face_results[f_idx]["secondSimilarity"] = float(round(sims[1], 4)) if len(sims) > 1 else 0.0
+                else:
                     face_results[f_idx]["secondSimilarity"] = 0.0
 
     matched_count = sum(1 for f in face_results if f["matchedStudentId"] is not None)

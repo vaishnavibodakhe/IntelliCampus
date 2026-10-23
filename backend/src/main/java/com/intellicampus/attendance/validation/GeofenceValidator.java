@@ -32,8 +32,14 @@ public class GeofenceValidator {
         if (studentLat == null || studentLng == null) {
             throw new GeofenceValidationException("Student latitude and longitude are mandatory for geofence confirmation.");
         }
+        if (studentLat < -90.0 || studentLat > 90.0 || studentLng < -180.0 || studentLng > 180.0) {
+            throw new GeofenceValidationException("Geographical coordinates are out of valid range [-90, 90] and [-180, 180].");
+        }
         if (roomLat == null || roomLng == null) {
             throw new GeofenceValidationException("Classroom geofence center coordinates are not configured.");
+        }
+        if (roomLat < -90.0 || roomLat > 90.0 || roomLng < -180.0 || roomLng > 180.0) {
+            throw new GeofenceValidationException("Classroom coordinates are out of valid geographical range.");
         }
 
         // Criterion 2: Reject check-ins where GPS accuracy is greater than 100 meters
