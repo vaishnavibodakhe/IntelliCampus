@@ -65,6 +65,17 @@ export default function StaffAuthView({
   useEffect(() => {
     if (initialRole && ['HOD', 'FACULTY', 'MENTOR'].includes(initialRole)) {
       setSelectedRole(initialRole);
+      setLoginForm({ email: '', password: '' });
+      setShowPassword(false);
+      setForgotStep('email');
+      setForgotEmail('');
+      setOtp('');
+      setOtpNewPassword('');
+      setOtpConfirmPassword('');
+      setShowOtpPassword(false);
+      setApiError('');
+      setApiSuccess('');
+      setErrors({});
     }
   }, [initialRole]);
 
@@ -83,9 +94,23 @@ export default function StaffAuthView({
 
   const handleRoleSelect = (roleKey) => {
     setSelectedRole(roleKey);
+    // Reset login form inputs and password visibility
+    setLoginForm({ email: '', password: '' });
+    setShowPassword(false);
+
+    // Reset forgot password / OTP sub-form inputs and step
+    setForgotStep('email');
+    setForgotEmail('');
+    setOtp('');
+    setOtpNewPassword('');
+    setOtpConfirmPassword('');
+    setShowOtpPassword(false);
+
+    // Reset errors and API alerts
     setApiError('');
     setApiSuccess('');
     setErrors({});
+
     if (onRoleChange) {
       onRoleChange(roleKey);
     }
@@ -218,17 +243,17 @@ export default function StaffAuthView({
       <div className="staff-auth-card">
         {/* Header */}
         <div className="staff-auth-header">
-          <div className="staff-brand-badge" style={{ borderColor: roleMeta[selectedRole]?.accent }}>
-            <CurrentRoleIcon size={28} color={roleMeta[selectedRole]?.accent} />
+          <div className="staff-brand-badge">
+            <CurrentRoleIcon size={28} />
           </div>
-          <h2>IntelliCampus Staff Portal</h2>
+          <h2 className="staff-auth-title">IntelliCampus Staff Portal</h2>
           <p className="staff-auth-subtitle">
-            Secure institutional access for <strong>{roleMeta[selectedRole]?.label}</strong>
+            Secure institutional access for <strong>{roleMeta[selectedRole]?.label || selectedRole}</strong>
           </p>
         </div>
 
         {/* Institutional Role Selector Tabs */}
-        <div className="role-selector-bar" style={{ display: 'flex', gap: '8px', marginBottom: '20px', padding: '4px', background: 'rgba(255,255,255,0.05)', borderRadius: '12px' }}>
+        <div className="staff-role-selector">
           {(['HOD', 'FACULTY', 'MENTOR']).map((rKey) => {
             const isSelected = selectedRole === rKey;
             const meta = roleMeta[rKey];
@@ -237,25 +262,10 @@ export default function StaffAuthView({
               <button
                 key={rKey}
                 type="button"
+                className={`staff-role-pill ${isSelected ? 'active' : ''}`}
                 onClick={() => handleRoleSelect(rKey)}
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: '6px',
-                  padding: '10px 12px',
-                  borderRadius: '8px',
-                  border: isSelected ? `1px solid ${meta.accent}` : '1px solid transparent',
-                  background: isSelected ? 'rgba(255,255,255,0.1)' : 'transparent',
-                  color: isSelected ? '#ffffff' : '#94a3b8',
-                  fontWeight: isSelected ? 600 : 500,
-                  fontSize: '0.85rem',
-                  cursor: 'pointer',
-                  transition: 'all 0.2s ease'
-                }}
               >
-                <IconComp size={16} color={isSelected ? meta.accent : '#94a3b8'} />
+                <IconComp size={16} className="staff-role-icon" />
                 <span>{rKey === 'HOD' ? 'HOD' : rKey === 'FACULTY' ? 'Faculty' : 'Mentor'}</span>
               </button>
             );
@@ -283,7 +293,7 @@ export default function StaffAuthView({
           </div>
         )}
 
-        {/* Tab Switcher: Login and Forgot/Set Password Only (No Registration) */}
+        {/* Segmented Auth Mode Tabs: Sign In vs Forgot / Set Password */}
         <div className="staff-tabs">
           <button
             type="button"
@@ -313,7 +323,8 @@ export default function StaffAuthView({
                 <input
                   id="staff-login-email"
                   type="email"
-                  placeholder={`name@intellicampus.edu`}
+                  className={errors.email ? 'has-error' : ''}
+                  placeholder="name@intellicampus.edu"
                   value={loginForm.email}
                   onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
                   autoComplete="email"
@@ -329,6 +340,7 @@ export default function StaffAuthView({
                 <input
                   id="staff-login-password"
                   type={showPassword ? 'text' : 'password'}
+                  className={errors.password ? 'has-error' : ''}
                   placeholder="Enter your password"
                   value={loginForm.password}
                   onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
@@ -338,6 +350,7 @@ export default function StaffAuthView({
                   type="button"
                   className="eye-toggle"
                   onClick={() => setShowPassword(!showPassword)}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
                   {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                 </button>
@@ -345,11 +358,11 @@ export default function StaffAuthView({
               {errors.password && <span className="field-error">{errors.password}</span>}
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '-4px' }}>
+            <div className="staff-forgot-link-wrap">
               <button
                 type="button"
+                className="staff-forgot-link"
                 onClick={() => handleTabSwitch('forgot')}
-                style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer', textDecoration: 'underline' }}
               >
                 Forgot or need to set password?
               </button>
@@ -359,7 +372,6 @@ export default function StaffAuthView({
               type="submit"
               className="submit-btn"
               disabled={loading}
-              style={{ background: roleMeta[selectedRole]?.accent }}
             >
               {loading ? (
                 <>
@@ -379,7 +391,7 @@ export default function StaffAuthView({
         {/* Forgot / First-Time Set Password Flow */}
         {activeTab === 'forgot' && (
           <div className="forgot-flow">
-            <div style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '12px 14px', marginBottom: '16px', fontSize: '0.82rem', color: '#cbd5e1', lineHeight: '1.4' }}>
+            <div className="staff-auth-infobox">
               <strong>First time logging in?</strong> When your account was provisioned by the Principal, a 6-digit setup OTP was emailed to you (valid for 24 hours). Enter your email below to verify your OTP and set your password.
             </div>
 
@@ -392,6 +404,7 @@ export default function StaffAuthView({
                     <input
                       id="staff-forgot-email"
                       type="email"
+                      className={errors.email ? 'has-error' : ''}
                       placeholder="name@intellicampus.edu"
                       value={forgotEmail}
                       onChange={(e) => setForgotEmail(e.target.value)}
@@ -405,7 +418,6 @@ export default function StaffAuthView({
                   type="submit"
                   className="submit-btn"
                   disabled={loading}
-                  style={{ background: roleMeta[selectedRole]?.accent }}
                 >
                   {loading ? (
                     <>
@@ -429,6 +441,7 @@ export default function StaffAuthView({
                     <input
                       id="staff-otp"
                       type="text"
+                      className={errors.otp ? 'has-error' : ''}
                       maxLength={6}
                       placeholder="e.g. 123456"
                       value={otp}
@@ -445,6 +458,7 @@ export default function StaffAuthView({
                     <input
                       id="staff-new-password"
                       type={showOtpPassword ? 'text' : 'password'}
+                      className={errors.newPassword ? 'has-error' : ''}
                       placeholder="Minimum 8 characters"
                       value={otpNewPassword}
                       onChange={(e) => setOtpNewPassword(e.target.value)}
@@ -453,6 +467,7 @@ export default function StaffAuthView({
                       type="button"
                       className="eye-toggle"
                       onClick={() => setShowOtpPassword(!showOtpPassword)}
+                      aria-label={showOtpPassword ? 'Hide password' : 'Show password'}
                     >
                       {showOtpPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                     </button>
@@ -467,6 +482,7 @@ export default function StaffAuthView({
                     <input
                       id="staff-confirm-password"
                       type={showOtpPassword ? 'text' : 'password'}
+                      className={errors.confirmPassword ? 'has-error' : ''}
                       placeholder="Re-enter new password"
                       value={otpConfirmPassword}
                       onChange={(e) => setOtpConfirmPassword(e.target.value)}
@@ -479,7 +495,6 @@ export default function StaffAuthView({
                   type="submit"
                   className="submit-btn"
                   disabled={loading}
-                  style={{ background: roleMeta[selectedRole]?.accent }}
                 >
                   {loading ? (
                     <>
@@ -494,11 +509,11 @@ export default function StaffAuthView({
                   )}
                 </button>
 
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '12px' }}>
+                <div className="staff-otp-sub-actions">
                   <button
                     type="button"
+                    className="staff-text-link"
                     onClick={() => setForgotStep('email')}
-                    style={{ background: 'transparent', border: 'none', color: '#94a3b8', fontSize: '0.8rem', cursor: 'pointer' }}
                   >
                     ← Change Email
                   </button>
@@ -506,7 +521,8 @@ export default function StaffAuthView({
                     type="button"
                     disabled={resendCooldown > 0 || loading}
                     onClick={handleRequestOtp}
-                    style={{ background: 'transparent', border: 'none', color: resendCooldown > 0 ? '#64748b' : '#38bdf8', fontSize: '0.8rem', cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer' }}
+                    className="staff-text-link"
+                    style={{ color: resendCooldown > 0 ? '#64748b' : '#818cf8', cursor: resendCooldown > 0 ? 'not-allowed' : 'pointer' }}
                   >
                     {resendCooldown > 0 ? `Resend OTP in ${resendCooldown}s` : 'Resend OTP'}
                   </button>

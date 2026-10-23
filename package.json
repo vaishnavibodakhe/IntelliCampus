@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "server": "cd backend && .\\mvnw.cmd spring-boot:run",
+    "dev:server": "cd backend && .\\mvnw.cmd spring-boot:run",
     "build": "vite build",
     "lint": "oxlint",
     "test": "node --test src/**/__tests__/*.test.js",
