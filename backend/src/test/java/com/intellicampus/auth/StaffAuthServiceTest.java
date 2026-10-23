@@ -126,7 +126,7 @@ class StaffAuthServiceTest {
                     "Duplicate User",
                     "existing@intellicampus.edu",
                     "Pass123!",
-                    Role.ADMIN,
+                    Role.PRINCIPAL,
                     null,
                     null
             );
@@ -215,7 +215,7 @@ class StaffAuthServiceTest {
         @Test
         @DisplayName("Successful login resets failed attempts and issues JWT and refresh tokens")
         void testSuccessfulLogin() {
-            User user = new User("ADM-01", Role.ADMIN, "Admin Jane", "admin.jane@intellicampus.edu", "hash", null);
+            User user = new User("ADM-01", Role.PRINCIPAL, "Admin Jane", "admin.jane@intellicampus.edu", "hash", null);
             user.setId(1L);
             user.setStatus(UserStatus.ACTIVE);
             user.setFailedAttempts(2);
@@ -310,7 +310,7 @@ class StaffAuthServiceTest {
             when(rateLimitRepository.countByIpAddressAndRequestedAtAfter(anyString(), any(LocalDateTime.class))).thenReturn(0L);
             when(userRepository.findByEmail("unknown@intellicampus.edu")).thenReturn(Optional.empty());
 
-            String message = staffAuthService.forgotPassword("unknown@intellicampus.edu", Role.ADMIN, "127.0.0.1");
+            String message = staffAuthService.forgotPassword("unknown@intellicampus.edu", Role.PRINCIPAL, "127.0.0.1");
             assertEquals("If the account exists, a 6-digit password reset OTP has been sent to your registered email.", message);
             verify(emailService, never()).sendPasswordResetOtp(anyString(), anyString());
             verify(passwordResetTokenRepository, never()).save(any(PasswordResetToken.class));
@@ -319,7 +319,7 @@ class StaffAuthServiceTest {
             User hodUser = new User("HOD-09", Role.HOD, "Prof HOD", "hod@intellicampus.edu", "hash", csDept);
             when(userRepository.findByEmail("hod@intellicampus.edu")).thenReturn(Optional.of(hodUser));
 
-            String messageMismatch = staffAuthService.forgotPassword("hod@intellicampus.edu", Role.ADMIN, "127.0.0.1");
+            String messageMismatch = staffAuthService.forgotPassword("hod@intellicampus.edu", Role.PRINCIPAL, "127.0.0.1");
             assertEquals("If the account exists, a 6-digit password reset OTP has been sent to your registered email.", messageMismatch);
             verify(emailService, never()).sendPasswordResetOtp(eq("hod@intellicampus.edu"), anyString());
         }
@@ -459,7 +459,7 @@ class StaffAuthServiceTest {
             pendingStaff.setId(99L);
             pendingStaff.setStatus(UserStatus.PENDING_APPROVAL);
 
-            User adminUser = new User("ADM-01", Role.ADMIN, "Super Admin", "admin@intellicampus.edu", "hash", null);
+            User adminUser = new User("ADM-01", Role.PRINCIPAL, "Super Admin", "admin@intellicampus.edu", "hash", null);
             adminUser.setId(1L);
 
             when(userRepository.findById(99L)).thenReturn(Optional.of(pendingStaff));
@@ -487,7 +487,7 @@ class StaffAuthServiceTest {
             pendingStaff.setId(98L);
             pendingStaff.setStatus(UserStatus.PENDING_APPROVAL);
 
-            User adminUser = new User("ADM-01", Role.ADMIN, "Super Admin", "admin@intellicampus.edu", "hash", null);
+            User adminUser = new User("ADM-01", Role.PRINCIPAL, "Super Admin", "admin@intellicampus.edu", "hash", null);
             adminUser.setId(1L);
 
             when(userRepository.findById(98L)).thenReturn(Optional.of(pendingStaff));

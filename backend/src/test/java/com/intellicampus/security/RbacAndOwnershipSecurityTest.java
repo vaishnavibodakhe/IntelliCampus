@@ -159,8 +159,8 @@ public class RbacAndOwnershipSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@intellicampus.edu", roles = {"ADMIN"})
-        @DisplayName("ADMIN role accessing /api/users returns 200 OK")
+        @WithMockUser(username = "principal@college.edu", roles = {"PRINCIPAL"})
+        @DisplayName("PRINCIPAL role accessing /api/users returns 200 OK")
         void testAdminCanAccessUsers() throws Exception {
             when(userService.getAllUsers(any(), any())).thenReturn(Collections.emptyList());
             mockMvc.perform(get("/api/users"))
@@ -168,8 +168,8 @@ public class RbacAndOwnershipSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@intellicampus.edu", roles = {"ADMIN"})
-        @DisplayName("ADMIN role accessing /api/audit/chain returns 200 OK")
+        @WithMockUser(username = "principal@college.edu", roles = {"PRINCIPAL"})
+        @DisplayName("PRINCIPAL role accessing /api/audit/chain returns 200 OK")
         void testAdminCanAccessAuditChain() throws Exception {
             when(auditChainService.getChainEntries()).thenReturn(Collections.emptyList());
             mockMvc.perform(get("/api/audit/chain"))

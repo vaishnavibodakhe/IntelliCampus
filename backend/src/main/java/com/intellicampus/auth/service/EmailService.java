@@ -85,6 +85,34 @@ public class EmailService {
     /**
      * Dispatches a 6-digit OTP to the registered user's email address via SMTP.
      */
+    public void sendPrincipalRegistrationOtp(String toEmail, String otp) {
+        if (!isMailConfigured()) {
+            logger.warn("========================================================================");
+            logger.warn("[DEV MODE OTP] SMTP is not configured! Principal registration OTP for '{}': {}", toEmail, otp);
+            logger.warn("Use this 6-digit OTP to complete your first-run Principal setup.");
+            logger.warn("========================================================================");
+            return;
+        }
+
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setFrom(fromEmail);
+            message.setTo(toEmail);
+            message.setSubject("IntelliCampus: Principal Account Activation OTP");
+            message.setText("Dear Principal,\n\nYour IntelliCampus account registration OTP is: " + otp
+                    + "\n\nThis verification code will expire in 15 minutes. Please enter it in the setup screen to activate your administrator console.\n\nRegards,\nIntelliCampus Governance System");
+            mailSender.send(message);
+            logger.info("Principal registration OTP email successfully sent to '{}'", toEmail);
+        } catch (Exception e) {
+            logger.warn("========================================================================");
+            logger.warn("[FALLBACK OTP] SMTP send failed ({}). Registration OTP for '{}': {}", e.getMessage(), toEmail, otp);
+            logger.warn("========================================================================");
+        }
+    }
+
+    /**
+     * Dispatches a 6-digit OTP to the registered user's email address via SMTP.
+     */
     public void sendPasswordResetOtp(String toEmail, String otp) {
         if (!isMailConfigured()) {
             logger.error("SMTP service is not configured. Cannot send password reset OTP to {}", toEmail);

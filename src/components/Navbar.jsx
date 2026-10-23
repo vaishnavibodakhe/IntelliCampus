@@ -26,14 +26,18 @@ export default function Navbar({
   currentUser = null,
   onLogout = null
 }) {
-  const roles = [
-    { id: 'ADMIN', label: 'Admin', icon: ShieldCheck, color: '#6366f1' },
-    { id: 'HOD', label: 'HOD', icon: BookOpen, color: '#8b5cf6' },
-    { id: 'FACULTY', label: 'Faculty', icon: UserCheck, color: '#06b6d4' },
-    { id: 'MENTOR', label: 'Mentor', icon: Users, color: '#10b981' },
-    { id: 'STUDENT', label: 'Student', icon: GraduationCap, color: '#f59e0b' },
-    { id: 'PUBLIC', label: 'Public Verifier', icon: QrCode, color: '#ec4899' }
-  ];
+  const roleConfig = {
+    PRINCIPAL: { label: 'Principal Operations Console', icon: ShieldCheck, color: '#6366f1' },
+    ADMIN: { label: 'Principal Operations Console', icon: ShieldCheck, color: '#6366f1' },
+    HOD: { label: 'HOD Academic Console', icon: BookOpen, color: '#8b5cf6' },
+    FACULTY: { label: 'Faculty Management Portal', icon: UserCheck, color: '#06b6d4' },
+    MENTOR: { label: 'Mentor Advisory Workspace', icon: Users, color: '#10b981' },
+    STUDENT: { label: 'Student Campus Portal', icon: GraduationCap, color: '#f59e0b' },
+    PUBLIC: { label: 'Public Credential Verifier', icon: QrCode, color: '#ec4899' }
+  };
+
+  const activePortal = roleConfig[currentRole] || roleConfig.STUDENT;
+  const PortalIcon = activePortal.icon;
 
   return (
     <header className="navbar-container">
@@ -60,28 +64,12 @@ export default function Navbar({
         </div>
       </div>
 
-      {/* Role Workflow Switcher */}
-      <div className="role-switcher-container">
-        <span className="role-switcher-label">Select Active Workflow:</span>
-        <div className="role-pill-group">
-          {roles.map(r => {
-            const Icon = r.icon;
-            const isActive = currentRole === r.id;
-            return (
-              <button
-                key={r.id}
-                onClick={() => setCurrentRole(r.id)}
-                className={`role-pill-btn ${isActive ? 'active' : ''}`}
-                style={{
-                  '--accent': r.color
-                }}
-              >
-                <Icon size={15} />
-                <span>{r.label}</span>
-              </button>
-            );
-          })}
-        </div>
+      {/* Authenticated Workspace Portal Indicator (Role Switcher Removed) */}
+      <div className="active-portal-badge-container" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(255, 255, 255, 0.04)', padding: '6px 14px', borderRadius: '20px', border: `1px solid ${activePortal.color}40` }}>
+        <PortalIcon size={16} color={activePortal.color} />
+        <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+          {activePortal.label}
+        </span>
       </div>
 
       {/* Action shortcuts */}

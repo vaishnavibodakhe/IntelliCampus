@@ -17,8 +17,8 @@ import java.util.List;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/admin/staff")
-@PreAuthorize("hasRole('ADMIN')")
+@RequestMapping({"/api/principal/staff", "/api/admin/staff"})
+@PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
 @CrossOrigin(origins = "*")
 public class AdminStaffController {
 
@@ -74,9 +74,14 @@ public class AdminStaffController {
     }
 
     @PostMapping("/{id}/reset-password")
-    public ResponseEntity<AdminStaffResponseDto> resetStaffPassword(@PathVariable Long id) {
+    public ResponseEntity<AdminStaffResponseDto> resetStaffPassword(
+            @PathVariable Long id,
+            @RequestBody(required = false) AdminStaffResetPasswordDto req) {
         User adminUser = getAuthenticatedAdmin();
-        AdminStaffResponseDto result = adminStaffService.resetStaffPassword(id, adminUser);
+        String newPw = req != null ? req.getNewPassword() : null;
+        AdminStaffResponseDto result = (newPw != null && !newPw.isBlank())
+                ? adminStaffService.resetStaffPassword(id, newPw, adminUser)
+                : adminStaffService.resetStaffPassword(id, adminUser);
         return ResponseEntity.ok(result);
     }
 

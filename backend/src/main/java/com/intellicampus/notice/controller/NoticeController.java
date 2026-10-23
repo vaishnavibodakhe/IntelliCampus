@@ -34,10 +34,24 @@ public class NoticeController {
     }
 
     @PostMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY')")
     public ResponseEntity<NoticeDto> publishNotice(@RequestBody CreateNoticeRequestDto req) {
         NoticeDto created = noticeService.createNotice(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    }
+
+    @PutMapping("/{id}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY')")
+    public ResponseEntity<NoticeDto> updateNotice(@PathVariable Long id, @RequestBody CreateNoticeRequestDto req) {
+        NoticeDto updated = noticeService.updateNotice(id, req);
+        return ResponseEntity.ok(updated);
+    }
+
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
+    public ResponseEntity<Void> deleteNotice(@PathVariable Long id) {
+        noticeService.deleteNotice(id);
+        return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/{id}/read")

@@ -82,8 +82,12 @@ public class SecurityUtils {
         return getCurrentUser().map(User::getRole).orElseGet(() -> resolveRoleFromAuthorities(getAuthentication()));
     }
 
+    public boolean isPrincipal() {
+        return hasRole("ROLE_PRINCIPAL") || hasRole("ROLE_ADMIN") || getCurrentRole() == Role.PRINCIPAL;
+    }
+
     public boolean isAdmin() {
-        return hasRole("ROLE_ADMIN") || getCurrentRole() == Role.ADMIN;
+        return isPrincipal();
     }
 
     public boolean isHod() {
@@ -121,7 +125,7 @@ public class SecurityUtils {
 
     /**
      * IDOR check: Verifies if current authenticated principal can access target student data.
-     * ADMIN: allowed for all.
+     * PRINCIPAL: allowed for all.
      * HOD: allowed for students in HOD's department.
      * MENTOR: allowed for assigned mentees.
      * FACULTY: allowed for students within taught divisions / department.
@@ -129,7 +133,7 @@ public class SecurityUtils {
      */
     public boolean canAccessStudent(StudentProfile targetStudent) {
         if (targetStudent == null) return false;
-        if (isAdmin()) return true;
+        if (isPrincipal()) return true;
 
         User currentUser = getCurrentUser().orElse(null);
         if (currentUser == null) return false;
@@ -175,7 +179,7 @@ public class SecurityUtils {
         if (auth == null) return Role.STUDENT;
         for (GrantedAuthority ga : auth.getAuthorities()) {
             String a = ga.getAuthority().toUpperCase();
-            if (a.contains("ADMIN")) return Role.ADMIN;
+            if (a.contains("PRINCIPAL") || a.contains("ADMIN")) return Role.PRINCIPAL;
             if (a.contains("HOD")) return Role.HOD;
             if (a.contains("FACULTY")) return Role.FACULTY;
             if (a.contains("MENTOR")) return Role.MENTOR;

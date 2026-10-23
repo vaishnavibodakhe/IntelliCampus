@@ -89,14 +89,14 @@ public class StaffAuthController {
     }
 
     @GetMapping("/pending")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
     public ResponseEntity<List<PendingStaffApprovalDto>> getPendingApprovals() {
         List<PendingStaffApprovalDto> list = staffAuthService.getPendingApprovals();
         return ResponseEntity.ok(list);
     }
 
     @PostMapping("/{id}/approve")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> approveStaff(
             @PathVariable("id") Long id,
             @AuthenticationPrincipal User adminUser) {
@@ -105,7 +105,7 @@ public class StaffAuthController {
     }
 
     @PostMapping("/{id}/reject")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasRole('PRINCIPAL') or hasRole('ADMIN')")
     public ResponseEntity<Map<String, String>> rejectStaff(
             @PathVariable("id") Long id,
             @RequestBody(required = false) Map<String, String> body,

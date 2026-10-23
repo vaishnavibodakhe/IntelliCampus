@@ -106,7 +106,7 @@ public class LeaveService {
                     throw new org.springframework.security.access.AccessDeniedException("Mentors may only review leave requests for their assigned mentees");
                 }
                 mentor = current;
-            } else if (current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+            } else if (current.getRole() == com.intellicampus.user.model.Role.PRINCIPAL) {
                 mentor = current;
             }
         }
@@ -149,7 +149,7 @@ public class LeaveService {
                     }
                 }
                 hod = current;
-            } else if (current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+            } else if (current.getRole() == com.intellicampus.user.model.Role.PRINCIPAL) {
                 hod = current;
             }
         }

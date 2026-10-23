@@ -43,17 +43,17 @@ describe('Staff Authentication - Strong Password Policy Rules', () => {
     assert.deepStrictEqual(result.errors, {});
   });
 
-  it('validates correct Admin registration payload without department', () => {
-    const validAdminData = {
+  it('validates correct Faculty/Staff registration payload without department', () => {
+    const validStaffData = {
       name: 'Grace Hopper',
       email: 'grace@intellicampus.edu',
-      password: 'AdminPassword2026!',
-      confirmPassword: 'AdminPassword2026!',
-      role: 'ADMIN',
+      password: 'StaffPassword2026!',
+      confirmPassword: 'StaffPassword2026!',
+      role: 'FACULTY',
       department: null
     };
 
-    const result = validateStaffRegisterForm(validAdminData);
+    const result = validateStaffRegisterForm(validStaffData);
     assert.strictEqual(result.isValid, true);
     assert.deepStrictEqual(result.errors, {});
   });
@@ -79,7 +79,7 @@ describe('Staff Authentication - Strong Password Policy Rules', () => {
       email: 'john@intellicampus.edu',
       password: 'SecurePassword123!',
       confirmPassword: 'DifferentPassword123!',
-      role: 'ADMIN',
+      role: 'FACULTY',
       department: null
     };
 
@@ -94,7 +94,7 @@ describe('Staff Authentication - Strong Password Policy Rules', () => {
       email: 'weak@intellicampus.edu',
       password: 'weak',
       confirmPassword: 'weak',
-      role: 'ADMIN',
+      role: 'FACULTY',
       department: null
     };
 
@@ -187,24 +187,24 @@ describe('Staff Authentication - Role Gating & Session Lifecycle', () => {
       if (returnedRole !== expectedRole) {
         return {
           allowed: false,
-          error: expectedRole === 'ADMIN'
-            ? 'This account is not an Admin account'
+          error: expectedRole === 'PRINCIPAL'
+            ? 'This account is not a Principal account'
             : 'This account is not an HOD account'
         };
       }
       return { allowed: true };
     };
 
-    const hodOnAdmin = verifyRoleMatch('HOD', 'ADMIN');
-    assert.strictEqual(hodOnAdmin.allowed, false);
-    assert.strictEqual(hodOnAdmin.error, 'This account is not an Admin account');
+    const hodOnPrincipal = verifyRoleMatch('HOD', 'PRINCIPAL');
+    assert.strictEqual(hodOnPrincipal.allowed, false);
+    assert.strictEqual(hodOnPrincipal.error, 'This account is not a Principal account');
 
-    const adminOnHod = verifyRoleMatch('ADMIN', 'HOD');
-    assert.strictEqual(adminOnHod.allowed, false);
-    assert.strictEqual(adminOnHod.error, 'This account is not an HOD account');
+    const principalOnHod = verifyRoleMatch('PRINCIPAL', 'HOD');
+    assert.strictEqual(principalOnHod.allowed, false);
+    assert.strictEqual(principalOnHod.error, 'This account is not an HOD account');
 
-    const adminOnAdmin = verifyRoleMatch('ADMIN', 'ADMIN');
-    assert.strictEqual(adminOnAdmin.allowed, true);
+    const principalOnPrincipal = verifyRoleMatch('PRINCIPAL', 'PRINCIPAL');
+    assert.strictEqual(principalOnPrincipal.allowed, true);
   });
 
   it('throws descriptive error on rejected login due to PENDING_APPROVAL', async () => {
@@ -258,25 +258,25 @@ describe('Staff Authentication - Role Gating & Session Lifecycle', () => {
     saveStaffSession(hodSession);
     assert.strictEqual(getStoredStaffSession().user.role, 'HOD');
 
-    // Mismatched role on Admin screen: session must NOT be updated
+    // Mismatched role on Principal screen: session must NOT be updated
     const incomingMismatch = { role: 'HOD' };
-    const targetScreen = 'ADMIN';
+    const targetScreen = 'PRINCIPAL';
     if (incomingMismatch.role === targetScreen) {
       saveStaffSession({ accessToken: 'fail', user: incomingMismatch });
     }
     // Existing session remains untouched
     assert.strictEqual(getStoredStaffSession().user.role, 'HOD');
 
-    // Matching Admin login replaces session
-    const adminSession = {
-      accessToken: 'sample_admin_jwt',
-      refreshToken: 'sample_admin_refresh',
-      user: { id: 1, name: 'System Admin', role: 'ADMIN' }
+    // Matching Principal login replaces session
+    const principalSession = {
+      accessToken: 'sample_principal_jwt',
+      refreshToken: 'sample_principal_refresh',
+      user: { id: 1, name: 'College Principal', role: 'PRINCIPAL' }
     };
-    if (adminSession.user.role === 'ADMIN') {
-      saveStaffSession(adminSession);
+    if (principalSession.user.role === 'PRINCIPAL') {
+      saveStaffSession(principalSession);
     }
-    assert.strictEqual(getStoredStaffSession().user.role, 'ADMIN');
+    assert.strictEqual(getStoredStaffSession().user.role, 'PRINCIPAL');
 
     clearStaffSession();
     assert.strictEqual(getStoredStaffSession(), null);

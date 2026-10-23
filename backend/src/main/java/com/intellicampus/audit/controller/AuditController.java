@@ -11,7 +11,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/audit")
-@PreAuthorize("hasRole('ADMIN')")
+@PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
 @CrossOrigin(origins = "*")
 public class AuditController {
 
@@ -21,7 +21,7 @@ public class AuditController {
         this.auditChainService = auditChainService;
     }
 
-    @GetMapping("/chain")
+    @GetMapping({"/chain", "/logs"})
     public ResponseEntity<List<AuditLogResponseDto>> getAuditChain() {
         return ResponseEntity.ok(auditChainService.getChainEntries());
     }

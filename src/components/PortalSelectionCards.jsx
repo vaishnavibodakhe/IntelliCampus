@@ -40,12 +40,82 @@ export default function PortalSelectionCards() {
         className="portal-cards-grid"
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-          gap: '1.5rem',
-          maxWidth: '850px',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: '1.25rem',
+          maxWidth: '1200px',
           margin: '0 auto',
         }}
       >
+        {/* Principal Operations Portal Card */}
+        <div
+          className="portal-card principal"
+          style={{
+            background: 'var(--bg-glass-card)',
+            border: '1px solid rgba(99, 102, 241, 0.35)',
+            borderRadius: 'var(--radius-xl)',
+            padding: '1.75rem',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            position: 'relative',
+            overflow: 'hidden',
+            boxShadow: '0 10px 25px -5px rgba(99, 102, 241, 0.1)',
+            transition: 'transform 0.2s ease, border-color 0.2s ease',
+          }}
+        >
+          <div>
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.3rem 0.75rem',
+                borderRadius: '9999px',
+                fontSize: '0.72rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                color: '#818cf8',
+                background: 'rgba(99, 102, 241, 0.12)',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                marginBottom: '1rem',
+              }}
+            >
+              <Shield size={13} />
+              <span>PRINCIPAL OPERATIONS</span>
+            </div>
+
+            <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-primary)', marginBottom: '0.5rem' }}>
+              Institutional Governance
+            </h3>
+
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', lineHeight: 1.55, marginBottom: '1.25rem' }}>
+              Centralized governance for user provisioning, academic room geofences, circular broadcasts, verifiable document issuance, and staff approvals.
+            </p>
+
+            <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1.5rem', fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                <span style={{ color: '#818cf8' }}>✓</span> User Management & Bulk CSV
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                <span style={{ color: '#818cf8' }}>✓</span> Verifiable Certificates & QR Codes
+              </li>
+              <li style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ color: '#818cf8' }}>✓</span> Live AI Institutional Assistant
+              </li>
+            </ul>
+          </div>
+
+          <button
+            type="button"
+            id="landing-principal-portal-btn"
+            className="auth-submit-btn"
+            style={{ width: '100%', justifyContent: 'center', background: '#6366f1', color: '#fff', border: 'none', padding: '10px', borderRadius: '8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px', cursor: 'pointer' }}
+            onClick={() => navigate('/principal/login')}
+          >
+            <span>Sign In as Principal</span>
+            <ArrowRight size={16} />
+          </button>
+        </div>
         {/* Faculty Portal Card */}
         <div
           className="portal-card faculty"

@@ -60,6 +60,9 @@ public class AdminStaffService {
         }
 
         Role role = req.getRole();
+        if (role == Role.STUDENT || role == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Creation of " + role + " accounts via staff endpoint is strictly prohibited. Role must be HOD, FACULTY, or MENTOR.");
+        }
         if (role != Role.HOD && role != Role.FACULTY && role != Role.MENTOR) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be HOD, FACULTY, or MENTOR.");
         }
@@ -73,14 +76,14 @@ public class AdminStaffService {
         }
 
         String employeeCode = req.getEmployeeCode() != null ? req.getEmployeeCode().trim() : "";
-        if (employeeCode.isEmpty()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Employee code is required.");
-        }
-        if (userRepository.existsByUserCode(employeeCode)) {
+        if (!employeeCode.isEmpty() && userRepository.existsByUserCode(employeeCode)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Employee code is already registered: " + employeeCode);
         }
 
         Department department = resolveDepartment(req.getDepartment());
+        if (employeeCode.isEmpty()) {
+            employeeCode = generateUniqueUserCode(department);
+        }
 
         // Enforce one HOD per department
         if (role == Role.HOD) {
@@ -91,8 +94,31 @@ public class AdminStaffService {
             }
         }
 
-        String tempPassword = generateSecureTemporaryPassword(16);
-        String passwordHash = passwordEncoder.encode(tempPassword);
+        String rawPassword = req.getPassword() != null ? req.getPassword().trim() : "";
+        String passwordHash;
+        String returnPassword = null;
+        boolean mustChangePassword = false;
+
+        if (!rawPassword.isEmpty()) {
+            validateStaffPassword(rawPassword);
+            passwordHash = passwordEncoder.encode(rawPassword);
+            mustChangePassword = false;
+        } else {
+            String tempPassword = generateSecureTemporaryPassword(16);
+            passwordHash = passwordEncoder.encode(tempPassword);
+            mustChangePassword = true;
+
+            boolean emailDispatched = false;
+            if (emailService != null && emailService.isMailConfigured()) {
+                try {
+                    emailService.sendStaffWelcomeEmail(email, req.getName().trim(), tempPassword);
+                    emailDispatched = true;
+                } catch (Exception ignored) {}
+            }
+            if (!emailDispatched) {
+                returnPassword = tempPassword;
+            }
+        }
 
         User staff = new User();
         staff.setUserCode(employeeCode);
@@ -102,29 +128,16 @@ public class AdminStaffService {
         staff.setDepartment(department);
         staff.setPasswordHash(passwordHash);
         staff.setStatus(UserStatus.ACTIVE);
-        staff.setMustChangePassword(true);
+        staff.setMustChangePassword(mustChangePassword);
         staff.setFailedAttempts(0);
 
         User saved = userRepository.save(staff);
 
-        boolean emailDispatched = false;
-        if (emailService != null && emailService.isMailConfigured()) {
-            try {
-                emailService.sendStaffWelcomeEmail(saved.getEmail(), saved.getName(), tempPassword);
-                emailDispatched = true;
-            } catch (Exception ex) {
-                // Email failure logged inside EmailService without logging password
-            }
-        }
-
-        // Return temporary password ONCE if email was not dispatched/configured
-        String returnPassword = emailDispatched ? null : tempPassword;
-
-        // Record SHA-256 Audit Log
+        // Record SHA-256 Audit Log without password
         if (auditChainService != null) {
             auditChainService.recordEntry(
                     adminUser != null ? adminUser.getId() : 1L,
-                    adminUser != null ? adminUser.getName() : "System Admin",
+                    adminUser != null ? adminUser.getName() : "Principal",
                     "STAFF_CREATED",
                     "USER",
                     saved.getId().toString(),
@@ -132,11 +145,46 @@ public class AdminStaffService {
                     "{\"email\":\"" + saved.getEmail() + "\",\"role\":\"" + saved.getRole()
                             + "\",\"employeeCode\":\"" + saved.getUserCode()
                             + "\",\"department\":\"" + department.getName() + "\"}",
-                    "Staff account created by admin"
+                    "Staff account created by Principal"
             );
         }
 
         return toDto(saved, returnPassword);
+    }
+
+    private synchronized String generateUniqueUserCode(Department department) {
+        String deptPrefix = "STF";
+        if (department != null && department.getCode() != null && !department.getCode().isBlank()) {
+            deptPrefix = department.getCode().trim().toUpperCase();
+        } else if (department != null && department.getName() != null && !department.getName().isBlank()) {
+            String name = department.getName().trim().toUpperCase();
+            deptPrefix = name.length() <= 4 ? name : name.substring(0, 3);
+        }
+        int year = java.time.Year.now().getValue();
+        String base = deptPrefix + "-" + year + "-";
+        int seq = 1;
+        while (userRepository.existsByUserCode(String.format("%s%03d", base, seq))) {
+            seq++;
+        }
+        return String.format("%s%03d", base, seq);
+    }
+
+    private void validateStaffPassword(String password) {
+        if (password == null || password.length() < 8) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 8 characters long.");
+        }
+        if (!password.matches(".*[A-Z].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least one uppercase letter.");
+        }
+        if (!password.matches(".*[a-z].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least one lowercase letter.");
+        }
+        if (!password.matches(".*[0-9].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least one number.");
+        }
+        if (!password.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must contain at least one special character.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -173,8 +221,8 @@ public class AdminStaffService {
     public AdminStaffResponseDto updateStaff(Long id, AdminStaffUpdateDto req, User adminUser) {
         User staff = findStaffUserOrThrow(id);
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot modify ADMIN account via staff API.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot modify PRINCIPAL account via staff API.");
         }
 
         String oldEmail = staff.getEmail();
@@ -249,8 +297,8 @@ public class AdminStaffService {
     public AdminStaffResponseDto updateStaffStatus(Long id, AdminStaffStatusDto req, User adminUser) {
         User staff = findStaffUserOrThrow(id);
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot alter ADMIN account status.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot alter PRINCIPAL account status.");
         }
 
         UserStatus newStatus = req != null ? req.getStatus() : null;
@@ -283,13 +331,13 @@ public class AdminStaffService {
         if (auditChainService != null) {
             auditChainService.recordEntry(
                     adminUser != null ? adminUser.getId() : 1L,
-                    adminUser != null ? adminUser.getName() : "System Admin",
+                    adminUser != null ? adminUser.getName() : "Principal",
                     action,
                     "USER",
                     updated.getId().toString(),
                     "{\"status\":\"" + oldStatus + "\"}",
                     "{\"status\":\"" + newStatus + "\"}",
-                    "Staff status changed by admin"
+                    "Staff status changed by Principal"
             );
         }
 
@@ -297,17 +345,41 @@ public class AdminStaffService {
     }
 
     public AdminStaffResponseDto resetStaffPassword(Long id, User adminUser) {
+        return resetStaffPassword(id, null, adminUser);
+    }
+
+    public AdminStaffResponseDto resetStaffPassword(Long id, String explicitNewPassword, User adminUser) {
         User staff = findStaffUserOrThrow(id);
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot reset ADMIN password via staff API.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot reset PRINCIPAL password via staff API.");
         }
 
-        String tempPassword = generateSecureTemporaryPassword(16);
-        String passwordHash = passwordEncoder.encode(tempPassword);
+        String newPasswordHash;
+        String returnPassword = null;
 
-        staff.setPasswordHash(passwordHash);
-        staff.setMustChangePassword(true);
+        if (explicitNewPassword != null && !explicitNewPassword.isBlank()) {
+            validateStaffPassword(explicitNewPassword.trim());
+            newPasswordHash = passwordEncoder.encode(explicitNewPassword.trim());
+            staff.setMustChangePassword(false);
+        } else {
+            String tempPassword = generateSecureTemporaryPassword(16);
+            newPasswordHash = passwordEncoder.encode(tempPassword);
+            staff.setMustChangePassword(true);
+
+            boolean emailDispatched = false;
+            if (emailService != null && emailService.isMailConfigured()) {
+                try {
+                    emailService.sendStaffPasswordResetEmail(staff.getEmail(), staff.getName(), tempPassword);
+                    emailDispatched = true;
+                } catch (Exception ignored) {}
+            }
+            if (!emailDispatched) {
+                returnPassword = tempPassword;
+            }
+        }
+
+        staff.setPasswordHash(newPasswordHash);
         staff.setFailedAttempts(0);
         staff.setLockedUntil(null);
 
@@ -317,28 +389,16 @@ public class AdminStaffService {
 
         User updated = userRepository.save(staff);
 
-        boolean emailDispatched = false;
-        if (emailService != null && emailService.isMailConfigured()) {
-            try {
-                emailService.sendStaffPasswordResetEmail(updated.getEmail(), updated.getName(), tempPassword);
-                emailDispatched = true;
-            } catch (Exception ex) {
-                // Email failure logged inside EmailService without logging password
-            }
-        }
-
-        String returnPassword = emailDispatched ? null : tempPassword;
-
         if (auditChainService != null) {
             auditChainService.recordEntry(
                     adminUser != null ? adminUser.getId() : 1L,
-                    adminUser != null ? adminUser.getName() : "System Admin",
+                    adminUser != null ? adminUser.getName() : "Principal",
                     "PASSWORD_RESET_BY_ADMIN",
                     "USER",
                     updated.getId().toString(),
                     "{}",
-                    "{\"email\":\"" + updated.getEmail() + "\",\"mustChangePassword\":true}",
-                    "Temporary password generated by admin"
+                    "{\"email\":\"" + updated.getEmail() + "\",\"role\":\"" + updated.getRole() + "\"}",
+                    "Staff password reset by Principal"
             );
         }
 
@@ -348,8 +408,8 @@ public class AdminStaffService {
     public void deleteStaff(Long id, User adminUser) {
         User staff = findStaffUserOrThrow(id);
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete ADMIN account.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot delete PRINCIPAL account.");
         }
 
         // Soft delete: set status to DISABLED and revoke tokens
@@ -362,13 +422,13 @@ public class AdminStaffService {
         if (auditChainService != null) {
             auditChainService.recordEntry(
                     adminUser != null ? adminUser.getId() : 1L,
-                    adminUser != null ? adminUser.getName() : "System Admin",
+                    adminUser != null ? adminUser.getName() : "Principal",
                     "STAFF_DELETED",
                     "USER",
                     staff.getId().toString(),
                     "{\"status\":\"ACTIVE\"}",
                     "{\"status\":\"DISABLED\"}",
-                    "Staff account soft-deleted by admin"
+                    "Staff account soft-deleted by Principal"
             );
         }
     }
@@ -377,6 +437,12 @@ public class AdminStaffService {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Staff member not found with ID: " + id));
 
+        if (user.getRole() == Role.STUDENT) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Principals cannot modify student accounts. Students manage their own registration and profile.");
+        }
+        if (user.getRole() == Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Cannot modify PRINCIPAL account via staff API.");
+        }
         if (user.getRole() != Role.HOD && user.getRole() != Role.FACULTY && user.getRole() != Role.MENTOR) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "User is not a staff member.");
         }

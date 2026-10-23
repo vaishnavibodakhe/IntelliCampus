@@ -11,34 +11,73 @@ import {
   Lock
 } from 'lucide-react';
 
-export default function PublicVerifierView({ issuedDocuments }) {
+import { api } from '../api/client';
+
+export default function PublicVerifierView({ issuedDocuments = [] }) {
   const [searchMode, setSearchMode] = useState('CODE'); // 'CODE', 'HASH', 'QR'
-  const [searchCode, setSearchCode] = useState('DOC-2026-CS-8921');
-  const [searchedDoc, setSearchedDoc] = useState(issuedDocuments.find(d => d.code === 'DOC-2026-CS-8921') || null);
-  const [hasSearched, setHasSearched] = useState(true);
+  const [searchCode, setSearchCode] = useState(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      return params.get('code') || '';
+    }
+    return '';
+  });
+  const [searchedDoc, setSearchedDoc] = useState(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [isScanningQr, setIsScanningQr] = useState(false);
+
+  // Auto-verify if code passed in URL
+  React.useEffect(() => {
+    if (searchCode.trim()) {
+      executeVerification(searchCode.trim());
+    }
+  }, []);
+
+  const executeVerification = async (codeOrHash) => {
+    if (!codeOrHash || !codeOrHash.trim()) return;
+    setLoading(true);
+    setHasSearched(true);
+    try {
+      const data = await api.verifyCredential(codeOrHash.trim());
+      if (data && data.code) {
+        setSearchedDoc({
+          code: data.code,
+          type: (data.credentialType || 'DEGREE').replace(/_/g, ' '),
+          maskedStudentName: data.maskedStudentName || data.studentName || 'Confidential Student',
+          department: data.department || 'General Academic',
+          issueDate: data.issueDate || data.issuedAt || 'Official Record',
+          authorizedSignatory: data.authorizedSignatory || 'Office of the Principal',
+          status: data.revoked ? 'REVOKED' : (data.status || 'VALID'),
+          revokedReason: data.revocationReason || data.revokedReason || 'Document recalled by Principal',
+          fileHash: data.documentHash || data.fileHash || 'SHA-256 Validated'
+        });
+      } else {
+        setSearchedDoc(null);
+      }
+    } catch {
+      // Check local issued documents as fallback if offline
+      const found = (issuedDocuments || []).find(d => 
+        (d.code && d.code.toUpperCase() === codeOrHash.toUpperCase()) ||
+        (d.fileHash && d.fileHash.toLowerCase() === codeOrHash.toLowerCase())
+      );
+      setSearchedDoc(found || null);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleVerify = (e) => {
     if (e) e.preventDefault();
     if (!searchCode.trim()) return;
-
-    const trimmed = searchCode.trim();
-    const found = issuedDocuments.find(d => 
-      d.code.toUpperCase() === trimmed.toUpperCase() ||
-      d.fileHash.toLowerCase() === trimmed.toLowerCase() ||
-      d.fileHash.replace(/^sha256_/, '').toLowerCase() === trimmed.toLowerCase() ||
-      trimmed.toLowerCase().includes(d.code.toLowerCase())
-    );
-    setSearchedDoc(found || null);
-    setHasSearched(true);
+    executeVerification(searchCode.trim());
   };
 
   const handleSimulateQrScan = (doc) => {
     setIsScanningQr(true);
     setTimeout(() => {
-      setSearchCode(doc.code);
-      setSearchedDoc(doc);
-      setHasSearched(true);
+      setSearchCode(doc.code || doc.verificationCode);
+      executeVerification(doc.code || doc.verificationCode);
       setIsScanningQr(false);
     }, 700);
   };

@@ -88,7 +88,8 @@ public class StudentController {
 
         boolean isStaff = authentication.getAuthorities().stream()
                 .map(GrantedAuthority::getAuthority)
-                .anyMatch(role -> role.equals("ROLE_ADMIN")
+                .anyMatch(role -> role.equals("ROLE_PRINCIPAL")
+                               || role.equals("ROLE_ADMIN")
                                || role.equals("ROLE_HOD")
                                || role.equals("ROLE_FACULTY")
                                || role.equals("ROLE_MENTOR"));
@@ -103,7 +104,7 @@ public class StudentController {
     }
 
     @GetMapping("/division/{divisionId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY', 'MENTOR')")
     public ResponseEntity<List<Map<String, Object>>> getStudentsByDivision(@PathVariable Long divisionId) {
         List<StudentProfile> students = studentProfileRepository.findByDivisionId(divisionId);
         List<Map<String, Object>> result = students.stream()

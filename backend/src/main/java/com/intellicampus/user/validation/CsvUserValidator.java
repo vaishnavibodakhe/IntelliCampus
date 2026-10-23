@@ -4,16 +4,17 @@ import com.intellicampus.user.dto.CreateUserRequestDto;
 import com.intellicampus.user.model.Role;
 import org.springframework.stereotype.Component;
 
+import java.time.Year;
 import java.util.*;
 
 /**
- * Validates bulk CSV student uploads, enforcing mandatory headers and duplicate record detection.
- * Compliant with IC-SRS-1.0 Section 8.5 (ADM-01) and Test Case TC-09.
+ * Validates bulk CSV user uploads, enforcing mandatory headers, strong password policies,
+ * role gating, and duplicate record detection.
  */
 @Component
 public class CsvUserValidator {
 
-    public static final List<String> REQUIRED_HEADERS = List.of(
+    public static final List<String> LEGACY_REQUIRED_HEADERS = List.of(
             "usercode", "name", "email", "department", "rollno"
     );
 
@@ -69,23 +70,54 @@ public class CsvUserValidator {
             return new CsvValidationResult(validRows, errors);
         }
 
-        // Criterion 1: CSV parser validates required headers: userCode, name, email, department, rollNo
-        List<String> missingHeaders = new ArrayList<>();
-        for (String req : REQUIRED_HEADERS) {
-            if (!headerMap.containsKey(req)) {
-                missingHeaders.add(req);
+        // Determine format: Staff format vs Legacy student format
+        boolean hasFullName = headerMap.containsKey("full_name") || headerMap.containsKey("fullname");
+        boolean hasName = headerMap.containsKey("name");
+        boolean hasPassword = headerMap.containsKey("password");
+        boolean hasRollNo = headerMap.containsKey("rollno") || headerMap.containsKey("roll_no");
+
+        boolean isStaffFormat = hasPassword || hasFullName || !hasRollNo;
+
+        if (isStaffFormat) {
+            if (!hasFullName && !hasName) {
+                errors.add("Missing required CSV header: full_name (or name). Expected headers: full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
+            }
+            if (!headerMap.containsKey("email")) {
+                errors.add("Missing required CSV header: email. Expected headers: full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
+            }
+            if (!headerMap.containsKey("department")) {
+                errors.add("Missing required CSV header: department. Expected headers: full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
+            }
+            if (!headerMap.containsKey("password")) {
+                errors.add("Missing required CSV header: password. Expected headers: full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
+            }
+            if (!headerMap.containsKey("role")) {
+                errors.add("Missing required CSV header: role. Expected headers: full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
+            }
+        } else {
+            // Legacy format check
+            List<String> missingHeaders = new ArrayList<>();
+            for (String req : LEGACY_REQUIRED_HEADERS) {
+                if (!headerMap.containsKey(req)) {
+                    missingHeaders.add(req);
+                }
+            }
+            if (!missingHeaders.isEmpty()) {
+                errors.add("Missing required CSV header: " + String.join(", ", missingHeaders) +
+                        ". Expected headers: userCode, name, email, department, rollNo, [role, division] or full_name, email, password, role, department.");
+                return new CsvValidationResult(validRows, errors);
             }
         }
 
-        if (!missingHeaders.isEmpty()) {
-            errors.add("Missing required CSV header: " + String.join(", ", missingHeaders) +
-                    ". Expected headers: userCode, name, email, department, rollNo, [role, division].");
-            return new CsvValidationResult(validRows, errors);
-        }
-
-        // Criterion 2: Duplicate email or userCode entries are rejected with specific line numbers in error report
         Map<String, Integer> seenUserCodes = new HashMap<>();
         Map<String, Integer> seenEmails = new HashMap<>();
+        int autoSeq = 1;
+        int currentYear = Year.now().getValue();
 
         for (int i = headerIndex + 1; i < csvLines.size(); i++) {
             int lineNum = i + 1;
@@ -93,40 +125,47 @@ public class CsvUserValidator {
             if (line.isEmpty() || line.startsWith("#")) continue;
 
             String[] cols = line.split(",");
-            int userCodeCol = headerMap.get("usercode");
-            int nameCol = headerMap.get("name");
-            int emailCol = headerMap.get("email");
-            int deptCol = headerMap.get("department");
-            int rollNoCol = headerMap.get("rollno");
 
-            if (cols.length <= Math.max(userCodeCol, Math.max(nameCol, Math.max(emailCol, Math.max(deptCol, rollNoCol))))) {
+            // Extract Name
+            Integer nameCol = headerMap.get("full_name");
+            if (nameCol == null) nameCol = headerMap.get("fullname");
+            if (nameCol == null) nameCol = headerMap.get("name");
+
+            Integer emailCol = headerMap.get("email");
+            Integer deptCol = headerMap.get("department");
+            Integer roleCol = headerMap.get("role");
+            Integer pwCol = headerMap.get("password");
+            Integer userCodeCol = headerMap.get("usercode");
+            if (userCodeCol == null) userCodeCol = headerMap.get("user_code");
+            Integer rollNoCol = headerMap.get("rollno");
+            if (rollNoCol == null) rollNoCol = headerMap.get("roll_no");
+
+            if (nameCol == null || emailCol == null || deptCol == null) {
                 errors.add(String.format("Line %d: Insufficient columns for required fields.", lineNum));
                 continue;
             }
 
-            String userCode = clean(cols[userCodeCol]);
+            int maxIndex = Math.max(nameCol, Math.max(emailCol, deptCol));
+            if (roleCol != null) maxIndex = Math.max(maxIndex, roleCol);
+            if (pwCol != null) maxIndex = Math.max(maxIndex, pwCol);
+
+            if (cols.length <= maxIndex) {
+                errors.add(String.format("Line %d: Insufficient columns for required fields.", lineNum));
+                continue;
+            }
+
             String name = clean(cols[nameCol]);
             String email = clean(cols[emailCol]).toLowerCase();
             String department = clean(cols[deptCol]);
-            String rollNo = clean(cols[rollNoCol]);
 
-            if (userCode.isEmpty() || name.isEmpty() || email.isEmpty() || department.isEmpty()) {
-                errors.add(String.format("Line %d: Empty values detected in required fields (userCode, name, email, or department).", lineNum));
+            if (name.isEmpty() || email.isEmpty() || department.isEmpty()) {
+                errors.add(String.format("Line %d: Empty values detected in required fields (name, email, or department).", lineNum));
                 continue;
             }
 
             if (!email.contains("@") || !email.contains(".")) {
                 errors.add(String.format("Line %d: Invalid email format for '%s'.", lineNum, email));
                 continue;
-            }
-
-            // Check duplicate userCode
-            if (seenUserCodes.containsKey(userCode.toLowerCase())) {
-                int prevLine = seenUserCodes.get(userCode.toLowerCase());
-                errors.add(String.format("Line %d: Duplicate userCode '%s' (first appeared on Line %d).", lineNum, userCode, prevLine));
-                continue;
-            } else {
-                seenUserCodes.put(userCode.toLowerCase(), lineNum);
             }
 
             // Check duplicate email
@@ -138,26 +177,75 @@ public class CsvUserValidator {
                 seenEmails.put(email, lineNum);
             }
 
-            Role role = Role.STUDENT;
-            if (headerMap.containsKey("role") && cols.length > headerMap.get("role")) {
-                String rStr = clean(cols[headerMap.get("role")]).toUpperCase();
+            // Extract & Validate Role
+            String rStr = roleCol != null && cols.length > roleCol ? clean(cols[roleCol]).toUpperCase() : "";
+            Role role;
+            if (rStr.isEmpty()) {
+                role = isStaffFormat ? null : Role.STUDENT;
+            } else {
                 try {
                     role = Role.valueOf(rStr);
-                } catch (IllegalArgumentException ignored) {
-                    role = Role.STUDENT;
+                } catch (IllegalArgumentException ex) {
+                    errors.add(String.format("Line %d: Invalid role '%s'. Only HOD, FACULTY, and MENTOR can be imported.", lineNum, rStr));
+                    continue;
                 }
             }
 
-            if (role == Role.ADMIN) {
-                errors.add(String.format("Line %d: Creating ADMIN role via CSV import is strictly prohibited.", lineNum));
-                continue;
+            // Role Rejections
+            if (isStaffFormat) {
+                if (role == Role.STUDENT || "STUDENT".equalsIgnoreCase(rStr)) {
+                    errors.add(String.format("Line %d: Students register themselves on the Student portal.", lineNum));
+                    continue;
+                }
+                if (role == Role.PRINCIPAL || "ADMIN".equalsIgnoreCase(rStr) || "PRINCIPAL".equalsIgnoreCase(rStr)) {
+                    errors.add(String.format("Line %d: Principal cannot be imported. Creating PRINCIPAL role via CSV import is strictly prohibited.", lineNum));
+                    continue;
+                }
+                if (role != Role.HOD && role != Role.FACULTY && role != Role.MENTOR) {
+                    errors.add(String.format("Line %d: Invalid role '%s'. Only HOD, FACULTY, and MENTOR can be imported.", lineNum, rStr));
+                    continue;
+                }
+            } else {
+                if (role == Role.PRINCIPAL || "ADMIN".equalsIgnoreCase(rStr) || "PRINCIPAL".equalsIgnoreCase(rStr)) {
+                    errors.add(String.format("Line %d: Principal cannot be imported. Creating PRINCIPAL role via CSV import is strictly prohibited.", lineNum));
+                    continue;
+                }
             }
 
-            String division = "Div A";
-            if (headerMap.containsKey("division") && cols.length > headerMap.get("division")) {
-                String dStr = clean(cols[headerMap.get("division")]);
-                if (!dStr.isEmpty()) division = dStr;
+            // Extract & Validate Password
+            String rawPassword = pwCol != null && cols.length > pwCol ? clean(cols[pwCol]) : "";
+            if (isStaffFormat) {
+                if (rawPassword.isEmpty()) {
+                    errors.add(String.format("Line %d: Password is required for staff accounts.", lineNum));
+                    continue;
+                }
+                if (rawPassword.length() < 8 ||
+                        !rawPassword.matches(".*[A-Z].*") ||
+                        !rawPassword.matches(".*[a-z].*") ||
+                        !rawPassword.matches(".*[0-9].*") ||
+                        !rawPassword.matches(".*[!@#$%^&*()_+\\-=\\[\\]{};':\"\\\\|,.<>\\/?].*")) {
+                    errors.add(String.format("Line %d: Password for '%s' does not meet complexity requirements (min 8 chars, uppercase, lowercase, number, special char).", lineNum, email));
+                    continue;
+                }
             }
+
+            // Extract or Auto-Generate User Code
+            String userCode = userCodeCol != null && cols.length > userCodeCol ? clean(cols[userCodeCol]) : "";
+            if (userCode.isEmpty()) {
+                String deptAbbr = department.length() <= 4 ? department.toUpperCase().replaceAll("\\s+", "") : department.substring(0, 3).toUpperCase();
+                userCode = String.format("%s-%d-%03d", deptAbbr, currentYear, autoSeq++);
+            }
+
+            // Check duplicate userCode
+            if (seenUserCodes.containsKey(userCode.toLowerCase())) {
+                int prevLine = seenUserCodes.get(userCode.toLowerCase());
+                errors.add(String.format("Line %d: Duplicate userCode '%s' (first appeared on Line %d).", lineNum, userCode, prevLine));
+                continue;
+            } else {
+                seenUserCodes.put(userCode.toLowerCase(), lineNum);
+            }
+
+            String rollNo = rollNoCol != null && cols.length > rollNoCol ? clean(cols[rollNoCol]) : "";
 
             CreateUserRequestDto dto = new CreateUserRequestDto();
             dto.setUserCode(userCode);
@@ -165,8 +253,8 @@ public class CsvUserValidator {
             dto.setEmail(email);
             dto.setRole(role);
             dto.setDepartment(department);
-            dto.setRollNo(rollNo);
-            dto.setDivision(division);
+            dto.setRawPassword(rawPassword.isEmpty() ? null : rawPassword);
+            dto.setRollNo(rollNo.isEmpty() ? null : rollNo);
             validRows.add(dto);
         }
 

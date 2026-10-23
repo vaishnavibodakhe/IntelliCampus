@@ -30,17 +30,21 @@ public class UserService {
     private final DepartmentRepository departmentRepository;
     private final DivisionRepository divisionRepository;
     private final CsvUserValidator csvUserValidator;
+    private final org.springframework.security.crypto.password.PasswordEncoder passwordEncoder;
 
     public UserService(UserRepository userRepository,
                        StudentProfileRepository studentProfileRepository,
                        DepartmentRepository departmentRepository,
                        DivisionRepository divisionRepository,
-                       CsvUserValidator csvUserValidator) {
+                       CsvUserValidator csvUserValidator,
+                       @org.springframework.beans.factory.annotation.Autowired(required = false)
+                       org.springframework.security.crypto.password.PasswordEncoder passwordEncoder) {
         this.userRepository = userRepository;
         this.studentProfileRepository = studentProfileRepository;
         this.departmentRepository = departmentRepository;
         this.divisionRepository = divisionRepository;
         this.csvUserValidator = csvUserValidator;
+        this.passwordEncoder = passwordEncoder != null ? passwordEncoder : new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder(12);
     }
 
     @Transactional(readOnly = true)
@@ -65,8 +69,8 @@ public class UserService {
     }
 
     public UserResponseDto createUser(CreateUserRequestDto req) {
-        if (req.getRole() == Role.ADMIN) {
-            throw new IllegalArgumentException("Registration or creation of ADMIN accounts via API is strictly prohibited.");
+        if (req.getRole() == Role.PRINCIPAL) {
+            throw new IllegalArgumentException("Registration or creation of PRINCIPAL accounts via API is strictly prohibited.");
         }
         if (userRepository.existsByUserCode(req.getUserCode())) {
             throw new IllegalArgumentException("User code already in use: " + req.getUserCode());
@@ -81,23 +85,13 @@ public class UserService {
                     .orElseGet(() -> departmentRepository.save(new Department(req.getDepartment().toUpperCase().replace(" ", "_"), req.getDepartment())));
         }
 
-        String rawPw = req.getRawPassword() != null ? req.getRawPassword() : "Welcome2026!";
-        // Mock hash prefix for demonstrative simplicity or BCrypt standard format
-        String pwHash = "$2a$10$e8f92a105c3b4e78912345678abcdef0123456789abcdef012345678";
+        String rawPw = req.getRawPassword() != null && !req.getRawPassword().trim().isEmpty() ? req.getRawPassword() : "Welcome2026!";
+        String pwHash = passwordEncoder.encode(rawPw);
 
         User user = new User(req.getUserCode(), req.getRole(), req.getName(), req.getEmail(), pwHash, dept);
+        user.setStatus(com.intellicampus.user.model.UserStatus.ACTIVE);
+        user.setMustChangePassword(false);
         User savedUser = userRepository.save(user);
-
-        if (req.getRole() == Role.STUDENT && req.getRollNo() != null) {
-            Division div = null;
-            final Department targetDept = dept;
-            if (targetDept != null && req.getDivision() != null) {
-                div = divisionRepository.findByNameAndDepartmentId(req.getDivision(), targetDept.getId())
-                        .orElseGet(() -> divisionRepository.save(new Division(targetDept, 3, req.getDivision())));
-            }
-            StudentProfile profile = new StudentProfile(savedUser, req.getRollNo(), div, null);
-            studentProfileRepository.save(profile);
-        }
 
         return mapToDto(savedUser);
     }
@@ -109,9 +103,9 @@ public class UserService {
         List<String> errors = new ArrayList<>(validation.getErrors());
 
         for (CreateUserRequestDto dto : validation.getValidRows()) {
-            if (dto.getRole() == Role.ADMIN) {
+            if (dto.getRole() == Role.PRINCIPAL) {
                 failed++;
-                errors.add("User '" + dto.getUserCode() + "': Role ADMIN is prohibited in bulk CSV import.");
+                errors.add("User '" + dto.getUserCode() + "': Principal cannot be imported. Role PRINCIPAL is prohibited in bulk CSV import.");
                 continue;
             }
             try {
@@ -131,8 +125,13 @@ public class UserService {
     public void deleteUser(Long id) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
-        if (user.getRole() == Role.ADMIN) {
-            throw new SecurityException("The System Administrator account cannot be deleted.");
+        if (user.getRole() == Role.STUDENT) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Principals cannot modify or delete student accounts. Students manage their own registration and profile.");
+        }
+        if (user.getRole() == Role.PRINCIPAL) {
+            throw new SecurityException("The Principal account cannot be deleted.");
         }
         userRepository.delete(user);
     }
@@ -140,8 +139,13 @@ public class UserService {
     public void updateUserStatus(Long id, com.intellicampus.user.model.UserStatus status) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
-        if (user.getRole() == Role.ADMIN && status != com.intellicampus.user.model.UserStatus.ACTIVE) {
-            throw new SecurityException("The System Administrator account cannot be deactivated or disabled.");
+        if (user.getRole() == Role.STUDENT) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Principals cannot alter student status. Students manage their own profile.");
+        }
+        if (user.getRole() == Role.PRINCIPAL && status != com.intellicampus.user.model.UserStatus.ACTIVE) {
+            throw new SecurityException("The Principal account cannot be deactivated or disabled.");
         }
         user.setStatus(status);
         userRepository.save(user);
@@ -150,13 +154,37 @@ public class UserService {
     public void updateUserRole(Long id, Role newRole) {
         User user = userRepository.findById(id)
                 .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
-        if (user.getRole() == Role.ADMIN && newRole != Role.ADMIN) {
-            throw new SecurityException("The System Administrator role cannot be demoted or changed.");
+        if (user.getRole() == Role.STUDENT) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Principals cannot change student roles.");
         }
-        if (newRole == Role.ADMIN && user.getRole() != Role.ADMIN) {
-            throw new SecurityException("Promoting an account to ADMIN is strictly prohibited.");
+        if (user.getRole() == Role.PRINCIPAL && newRole != Role.PRINCIPAL) {
+            throw new SecurityException("The Principal role cannot be demoted or changed.");
+        }
+        if (newRole == Role.PRINCIPAL && user.getRole() != Role.PRINCIPAL) {
+            throw new SecurityException("Promoting an account to PRINCIPAL is strictly prohibited.");
         }
         user.setRole(newRole);
+        userRepository.save(user);
+    }
+
+    public void resetUserPassword(Long id, String newPassword) {
+        User user = userRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("User not found with id: " + id));
+        if (user.getRole() == Role.STUDENT) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Principals cannot reset student passwords.");
+        }
+        if (user.getRole() == Role.PRINCIPAL) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.FORBIDDEN,
+                    "Cannot reset PRINCIPAL password via this endpoint.");
+        }
+        String pw = (newPassword != null && !newPassword.isBlank()) ? newPassword.trim() : "Welcome2026!";
+        user.setPasswordHash(passwordEncoder.encode(pw));
+        user.setMustChangePassword(false);
         userRepository.save(user);
     }
 

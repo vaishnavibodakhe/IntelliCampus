@@ -42,8 +42,8 @@ export function validateStaffRegisterForm({ name, email, password, confirmPasswo
     errors.email = 'Please enter a valid email address';
   }
 
-  if (!role || (role !== 'HOD' && role !== 'ADMIN' && role !== 'FACULTY')) {
-    errors.role = 'Please select a valid staff role (HOD or Admin)';
+  if (!role || (role !== 'HOD' && role !== 'PRINCIPAL' && role !== 'FACULTY')) {
+    errors.role = 'Please select a valid staff role (HOD or Faculty)';
   }
 
   if (role === 'HOD' && (!department || !department.trim())) {
@@ -161,7 +161,10 @@ export function validateChangePasswordForm({ currentPassword, newPassword, confi
  * API Call: Register Staff (Admin / HOD)
  */
 export async function registerStaffApi({ name, email, password, role, department, employeeCode }) {
-  const endpoint = role === 'ADMIN' ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
+  if (role === 'PRINCIPAL' || role === 'ADMIN') {
+    throw new Error('Principal accounts cannot be self-registered. The Principal account is seeded securely.');
+  }
+  const endpoint = role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/register`;
 
   const response = await fetch(url, {
@@ -171,7 +174,7 @@ export async function registerStaffApi({ name, email, password, role, department
       name: name.trim(),
       email: email.trim().toLowerCase(),
       password,
-      role: role || (endpoint === 'admin' ? 'ADMIN' : 'HOD'),
+      role: role || 'HOD',
       department: department ? department.trim() : null,
       employeeCode: employeeCode ? employeeCode.trim() : null
     })
@@ -186,10 +189,10 @@ export async function registerStaffApi({ name, email, password, role, department
 }
 
 /**
- * API Call: Login Staff (Admin / HOD)
+ * API Call: Login Staff (Principal / HOD)
  */
 export async function loginStaffApi({ email, password, role }) {
-  const endpoint = role === 'ADMIN' ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/login`;
 
   const response = await fetch(url, {
@@ -205,6 +208,125 @@ export async function loginStaffApi({ email, password, role }) {
   if (!response.ok) {
     const errorMsg = data.message || data.error || `Login failed (${response.status})`;
     throw new Error(errorMsg);
+  }
+  return data;
+}
+
+/**
+ * Dedicated helper to login as Principal
+ */
+export async function loginPrincipalApi({ email, password }) {
+  return loginStaffApi({ email, password, role: 'PRINCIPAL' });
+}
+
+/**
+ * Validates Principal registration form
+ */
+export function validatePrincipalRegisterForm({ name, email, password, confirmPassword }) {
+  const errors = {};
+
+  if (!name || !name.trim()) {
+    errors.name = 'Full name is required';
+  } else if (name.trim().length < 2) {
+    errors.name = 'Full name must be at least 2 characters';
+  }
+
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!email || !email.trim()) {
+    errors.email = 'Email address is required';
+  } else if (!emailRegex.test(email.trim())) {
+    errors.email = 'Please enter a valid institutional email address';
+  }
+
+  if (!password) {
+    errors.password = 'Password is required';
+  } else if (!isValidStrongPassword(password)) {
+    errors.password = 'Password must be at least 8 characters and include uppercase, lowercase, number, and special character';
+  }
+
+  if (!confirmPassword) {
+    errors.confirmPassword = 'Confirm password is required';
+  } else if (password !== confirmPassword) {
+    errors.confirmPassword = 'Passwords do not match';
+  }
+
+  return {
+    isValid: Object.keys(errors).length === 0,
+    errors
+  };
+}
+
+/**
+ * API Call: Query Principal Setup Status
+ * Returns { setupRequired: boolean }
+ */
+export async function getPrincipalSetupStatusApi() {
+  const url = `${API_BASE}/api/auth/principal/setup-status`;
+  try {
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { 'Accept': 'application/json' }
+    });
+    if (!response.ok) {
+      return { setupRequired: false };
+    }
+    const data = await response.json();
+    return { setupRequired: Boolean(data.setupRequired) };
+  } catch (err) {
+    console.warn('Failed to query Principal setup status:', err);
+    return { setupRequired: false };
+  }
+}
+
+/**
+ * API Call: First-Run Principal Self-Registration
+ */
+export async function registerPrincipalApi({ name, email, password, confirmPassword, setupToken }) {
+  const url = `${API_BASE}/api/auth/principal/register`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      password,
+      confirmPassword,
+      setupToken: setupToken ? setupToken.trim() : null
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || (data.validationErrors ? Object.values(data.validationErrors)[0] : null) || `Registration failed (${response.status})`;
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
+  }
+  return data;
+}
+
+/**
+ * API Call: Verify Principal Registration / 2FA OTP
+ */
+export async function verifyPrincipalOtpApi({ email, otp }) {
+  const url = `${API_BASE}/api/auth/principal/verify-otp`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+    body: JSON.stringify({
+      email: email.trim().toLowerCase(),
+      otp: otp.trim()
+    })
+  });
+
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const errorMsg = data.message || data.error || `OTP verification failed (${response.status})`;
+    const err = new Error(errorMsg);
+    err.status = response.status;
+    throw err;
   }
   return data;
 }
@@ -257,7 +379,7 @@ export async function forgotPasswordApi(param) {
     email = String(param || '');
   }
 
-  const endpoint = role === 'ADMIN' ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/forgot-password`;
 
   const response = await fetch(url, {
@@ -281,7 +403,7 @@ export async function forgotPasswordApi(param) {
  * API Call: Reset Password with OTP
  */
 export async function resetPasswordApi({ email, otp, token, newPassword, confirmPassword, role }) {
-  const endpoint = role === 'ADMIN' ? 'admin' : role === 'HOD' ? 'hod' : 'staff';
+  const endpoint = (role === 'PRINCIPAL' || role === 'ADMIN') ? 'principal' : role === 'HOD' ? 'hod' : 'staff';
   const url = `${API_BASE}/api/auth/${endpoint}/reset-password`;
 
   const response = await fetch(url, {
@@ -329,7 +451,7 @@ export async function changePasswordApi({ currentPassword, newPassword }, access
 }
 
 /**
- * API Call: Pending Approvals (ADMIN only)
+ * API Call: Pending Approvals (PRINCIPAL only)
  */
 export async function getPendingApprovalsApi(accessToken) {
   const url = `${API_BASE}/api/auth/staff/pending`;
@@ -350,7 +472,7 @@ export async function getPendingApprovalsApi(accessToken) {
 }
 
 /**
- * API Call: Approve Staff (ADMIN only)
+ * API Call: Approve Staff (PRINCIPAL only)
  */
 export async function approveStaffApi(staffId, accessToken) {
   const url = `${API_BASE}/api/auth/staff/${staffId}/approve`;
@@ -371,7 +493,7 @@ export async function approveStaffApi(staffId, accessToken) {
 }
 
 /**
- * API Call: Reject Staff (ADMIN only)
+ * API Call: Reject Staff (PRINCIPAL only)
  */
 export async function rejectStaffApi(staffId, reason, accessToken) {
   const url = `${API_BASE}/api/auth/staff/${staffId}/reject`;
@@ -383,7 +505,7 @@ export async function rejectStaffApi(staffId, reason, accessToken) {
       'Accept': 'application/json',
       ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {})
     },
-    body: JSON.stringify({ reason: reason || 'Rejected by Administrator' })
+    body: JSON.stringify({ reason: reason || 'Rejected by Principal' })
   });
 
   const data = await response.json().catch(() => ({}));

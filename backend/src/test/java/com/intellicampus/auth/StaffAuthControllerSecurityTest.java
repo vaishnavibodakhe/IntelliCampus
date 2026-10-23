@@ -79,8 +79,8 @@ class StaffAuthControllerSecurityTest {
     }
 
     @Test
-    @WithMockUser(username = "admin@intellicampus.edu", roles = {"ADMIN"})
-    @DisplayName("Admin request to /pending returns 200 OK")
+    @WithMockUser(username = "principal@college.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Principal request to /pending returns 200 OK")
     void testPendingAdminReturns200() throws Exception {
         when(staffAuthService.getPendingApprovals()).thenReturn(List.of(
                 new PendingStaffApprovalDto(1L, "HOD-01", "Dr. Turing", "turing@intellicampus.edu", Role.HOD, "CS", UserStatus.PENDING_APPROVAL, LocalDateTime.now())
@@ -109,8 +109,8 @@ class StaffAuthControllerSecurityTest {
     }
 
     @Test
-    @WithMockUser(username = "admin@intellicampus.edu", roles = {"ADMIN"})
-    @DisplayName("Admin request to approve staff returns 200 OK")
+    @WithMockUser(username = "principal@college.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Principal request to approve staff returns 200 OK")
     void testApproveAdminReturns200() throws Exception {
         doNothing().when(staffAuthService).approveStaff(eq(10L), any());
 
@@ -137,8 +137,8 @@ class StaffAuthControllerSecurityTest {
     }
 
     @Test
-    @WithMockUser(username = "admin@intellicampus.edu", roles = {"ADMIN"})
-    @DisplayName("Admin request to reject staff returns 200 OK")
+    @WithMockUser(username = "principal@college.edu", roles = {"PRINCIPAL"})
+    @DisplayName("Principal request to reject staff returns 200 OK")
     void testRejectAdminReturns200() throws Exception {
         doNothing().when(staffAuthService).rejectStaff(eq(10L), any(), any());
 

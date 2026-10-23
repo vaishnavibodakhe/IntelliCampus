@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 public class FlywayMigrationRealDbTest {
 
-    private static final String JDBC_URL = "jdbc:mysql://localhost:3307/intellicampus_db?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true";
+    private static final String JDBC_URL = "jdbc:mysql://localhost:3307/intellicampus?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true&createDatabaseIfNotExist=true";
     private static final String DB_USER = "campus_admin";
     private static final String DB_PASS = System.getenv("DB_PASSWORD");
 
@@ -57,7 +57,7 @@ public class FlywayMigrationRealDbTest {
                  ResultSet rs = stmt.executeQuery(
                          "SELECT COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH, COLUMN_DEFAULT " +
                          "FROM information_schema.COLUMNS " +
-                         "WHERE TABLE_SCHEMA = 'intellicampus_db' AND TABLE_NAME = 'users' AND COLUMN_NAME = 'status'")) {
+                         "WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users' AND COLUMN_NAME = 'status'")) {
                 assertTrue(rs.next(), "Column 'status' must exist in table 'users'");
                 String dataType = rs.getString("DATA_TYPE");
                 int maxLen = rs.getInt("CHARACTER_MAXIMUM_LENGTH");

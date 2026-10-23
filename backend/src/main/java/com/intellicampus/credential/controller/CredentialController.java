@@ -21,14 +21,14 @@ public class CredentialController {
     }
 
     @PostMapping("/issue")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
     public ResponseEntity<DocumentResponseDto> issueDocument(@RequestBody IssueDocumentRequestDto req) {
         DocumentResponseDto issued = credentialService.issueDocument(req);
         return ResponseEntity.status(HttpStatus.CREATED).body(issued);
     }
 
     @PutMapping("/{code}/revoke")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN')")
     public ResponseEntity<DocumentResponseDto> revokeDocument(
             @PathVariable String code,
             @RequestBody RevokeDocumentRequestDto req) {
@@ -42,13 +42,13 @@ public class CredentialController {
     }
 
     @GetMapping
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOD')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD')")
     public ResponseEntity<List<DocumentResponseDto>> getAllDocuments() {
         return ResponseEntity.ok(credentialService.getAllDocuments());
     }
 
     @GetMapping("/student/{studentId}")
-    @PreAuthorize("hasAnyRole('ADMIN', 'HOD', 'FACULTY', 'MENTOR', 'STUDENT')")
+    @PreAuthorize("hasAnyRole('PRINCIPAL', 'ADMIN', 'HOD', 'FACULTY', 'MENTOR', 'STUDENT')")
     public ResponseEntity<List<DocumentResponseDto>> getStudentDocuments(@PathVariable Long studentId) {
         return ResponseEntity.ok(credentialService.getDocumentsForStudent(studentId));
     }

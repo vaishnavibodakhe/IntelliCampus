@@ -171,7 +171,7 @@ public class MarksService {
         User hodUser = null;
         if (securityUtils != null && securityUtils.getCurrentUser().isPresent()) {
             User current = securityUtils.getCurrentUser().get();
-            if (current.getRole() == com.intellicampus.user.model.Role.HOD || current.getRole() == com.intellicampus.user.model.Role.ADMIN) {
+            if (current.getRole() == com.intellicampus.user.model.Role.HOD || current.getRole() == com.intellicampus.user.model.Role.PRINCIPAL) {
                 if (current.getRole() == com.intellicampus.user.model.Role.HOD && current.getDepartment() != null
                         && correction.getMarkEntry() != null
                         && correction.getMarkEntry().getSubject() != null

@@ -144,8 +144,8 @@ public class ComprehensiveSecurityVerificationTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@campus.edu", roles = {"ADMIN"})
-        @DisplayName("Criterion 2d: ADMIN can access /api/admin/** and manage endpoints")
+        @WithMockUser(username = "principal@campus.edu", roles = {"PRINCIPAL"})
+        @DisplayName("Criterion 2d: PRINCIPAL can access /api/admin/** and manage endpoints")
         void testAdminCanAccessAdminEndpoints() throws Exception {
             mockMvc.perform(get("/api/admin/staff"))
                     .andExpect(status().isOk());
@@ -204,10 +204,10 @@ public class ComprehensiveSecurityVerificationTest {
             adminReq.setName("Impostor Admin");
             adminReq.setEmail("impostor@campus.edu");
             adminReq.setEmployeeCode("ADM-999");
-            adminReq.setRole(Role.ADMIN);
+            adminReq.setRole(Role.PRINCIPAL);
             adminReq.setDepartment("Computer Science");
 
-            User currentAdmin = new User("ADM-01", Role.ADMIN, "System Admin", "admin@campus.edu", "hash", null);
+            User currentAdmin = new User("ADM-01", Role.PRINCIPAL, "System Admin", "admin@campus.edu", "hash", null);
             currentAdmin.setId(1L);
 
             ResponseStatusException ex = assertThrows(ResponseStatusException.class,
@@ -235,7 +235,7 @@ public class ComprehensiveSecurityVerificationTest {
                 return u;
             });
 
-            User currentAdmin = new User("ADM-01", Role.ADMIN, "System Admin", "admin@campus.edu", "hash", null);
+            User currentAdmin = new User("ADM-01", Role.PRINCIPAL, "System Admin", "admin@campus.edu", "hash", null);
             currentAdmin.setId(1L);
 
             AdminStaffResponseDto response = adminStaffService.createStaff(req, currentAdmin);

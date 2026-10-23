@@ -1,13 +1,6 @@
 import React from 'react';
-import RoleAuthView from './RoleAuthView';
+import PrincipalAuthView from './PrincipalAuthView';
 
-export default function AdminAuthView({ onAuthSuccess, noticeMessage = '', onSwitchRole }) {
-  return (
-    <RoleAuthView 
-      role="ADMIN"
-      onAuthSuccess={onAuthSuccess}
-      noticeMessage={noticeMessage}
-      onSwitchRole={onSwitchRole}
-    />
-  );
+export default function AdminAuthView(props) {
+  return <PrincipalAuthView {...props} />;
 }

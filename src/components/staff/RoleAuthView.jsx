@@ -32,12 +32,12 @@ import {
 import './StaffAuth.css';
 
 export default function RoleAuthView({ 
-  role = 'ADMIN', 
+  role = 'PRINCIPAL', 
   onAuthSuccess, 
   noticeMessage = '',
   onSwitchRole 
 }) {
-  const isAdmin = role === 'ADMIN';
+  const isPrincipal = role === 'PRINCIPAL' || role === 'ADMIN';
   const [activeTab, setActiveTab] = useState('login'); // 'login' | 'register' | 'forgot'
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -55,8 +55,8 @@ export default function RoleAuthView({
   const [registerForm, setRegisterForm] = useState({
     name: '',
     email: '',
-    role: isAdmin ? 'ADMIN' : 'HOD',
-    department: isAdmin ? '' : 'Computer Science',
+    role: isPrincipal ? 'PRINCIPAL' : 'HOD',
+    department: isPrincipal ? '' : 'Computer Science',
     password: '',
     confirmPassword: '',
     phone: '',
@@ -126,11 +126,13 @@ export default function RoleAuthView({
       const data = await loginStaffApi({ ...loginForm, role });
       
       // Strict role check: Do not save or overwrite session on mismatch
-      if (data.user?.role !== role) {
+      const expectedRole = isPrincipal ? 'PRINCIPAL' : role;
+      if (data.user?.role !== expectedRole && data.user?.role !== role) {
+        const roleLabel = role === 'HOD' ? 'an HOD' : (role === 'FACULTY' ? 'a Faculty' : (role === 'MENTOR' ? 'a Mentor' : `a ${role}`));
         setApiError(
-          isAdmin 
-            ? 'This account is not an Admin account' 
-            : 'This account is not an HOD account'
+          isPrincipal 
+            ? 'This account is not a Principal account' 
+            : `This account is not ${roleLabel} account`
         );
         return;
       }
@@ -275,8 +277,8 @@ export default function RoleAuthView({
     }
   };
 
-  const accentColor = isAdmin ? '#6366f1' : '#8b5cf6';
-  const roleName = isAdmin ? 'Admin' : 'HOD';
+  const accentColor = isPrincipal ? '#6366f1' : '#8b5cf6';
+  const roleName = isPrincipal ? 'Principal' : 'HOD';
 
   return (
     <div className="staff-auth-wrapper staff-auth-container">
@@ -291,12 +293,12 @@ export default function RoleAuthView({
               color: accentColor
             }}
           >
-            {isAdmin ? <ShieldCheck size={32} /> : <BookOpen size={32} />}
+            {isPrincipal ? <ShieldCheck size={32} /> : <BookOpen size={32} />}
           </div>
           <h2 className="staff-auth-title">{roleName} Portal</h2>
           <p className="staff-auth-subtitle">
-            {isAdmin 
-              ? 'Centralized system administration & operations governance' 
+            {isPrincipal 
+              ? 'Institutional operations governance & academic administration' 
               : 'Head of Department academic & faculty management'}
           </p>
         </div>
@@ -414,7 +416,7 @@ export default function RoleAuthView({
                     setLoginForm(prev => ({ ...prev, email: e.target.value }));
                     if (errors.email) setErrors(prev => ({ ...prev, email: '' }));
                   }}
-                  placeholder={isAdmin ? 'admin@intellicampus.edu' : 'hod.cs@intellicampus.edu'}
+                  placeholder={isPrincipal ? 'principal@college.edu' : 'hod.cs@intellicampus.edu'}
                   className={`staff-input ${errors.email ? 'has-error' : ''}`}
                   autoComplete="email"
                 />
@@ -649,15 +651,15 @@ export default function RoleAuthView({
             <button 
               type="button" 
               className="staff-link"
-              onClick={() => onSwitchRole(isAdmin ? 'HOD' : 'ADMIN')}
+              onClick={() => onSwitchRole(isPrincipal ? 'HOD' : 'PRINCIPAL')}
             >
-              Switch to {isAdmin ? 'HOD' : 'Admin'} Portal &rarr;
+              Switch to {isPrincipal ? 'HOD' : 'Principal'} Portal &rarr;
             </button>
           </div>
         )}
 
         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid rgba(255,255,255,0.08)', textAlign: 'center', fontSize: '0.8rem', color: '#94a3b8' }}>
-          <span>{isAdmin ? 'System Administrator account is seeded via server environment.' : 'HOD accounts are provisioned exclusively by System Administrators.'}</span>
+          <span>{isPrincipal ? 'Principal account credentials are configured via secure institutional environment.' : 'HOD accounts are provisioned exclusively by the Principal.'}</span>
         </div>
       </div>
     </div>

@@ -161,7 +161,7 @@ async function handleResponse(response) {
     err.status = response.status;
     throw err;
   }
-  const contentType = response.headers.get('content-type');
+  const contentType = response.headers?.get ? response.headers.get('content-type') : (response.headers?.['content-type'] || 'application/json');
   if (contentType && contentType.includes('application/json')) {
     return await response.json();
   }
@@ -459,6 +459,319 @@ export const api = {
     });
     return handleResponse(res);
   },
+
+  // User Management
+  async getUsers(params = {}) {
+    const q = new URLSearchParams();
+    if (params.role && params.role !== 'ALL') q.append('role', params.role);
+    if (params.department && params.department !== 'ALL') q.append('department', params.department);
+    const qs = q.toString() ? `?${q.toString()}` : '';
+    const res = await fetch(`/api/users${qs}`, {
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async createStaff(staffData) {
+    const res = await fetch('/api/principal/staff', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(staffData)
+    });
+    return handleResponse(res);
+  },
+
+  async createUser(userData) {
+    const res = await fetch('/api/principal/staff', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(userData)
+    });
+    return handleResponse(res);
+  },
+
+  async updateUserStatus(id, status) {
+    const res = await fetch(`/api/principal/staff/${id}/status`, {
+      method: 'PATCH',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ status })
+    });
+    return handleResponse(res);
+  },
+
+  async updateUserRole(id, role) {
+    const res = await fetch(`/api/principal/staff/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ role })
+    });
+    return handleResponse(res);
+  },
+
+  async resetUserPassword(id, newPassword) {
+    const res = await fetch(`/api/principal/staff/${id}/reset-password`, {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(newPassword ? { newPassword } : {})
+    });
+    return handleResponse(res);
+  },
+
+  async deleteUser(id) {
+    const res = await fetch(`/api/principal/staff/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async importUsersCsv(csvLines) {
+    const res = await fetch('/api/users/csv-import', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(csvLines)
+    });
+    return handleResponse(res);
+  },
+
+  // Academic Setup
+  async getDepartments() {
+    const res = await fetch('/api/academic/departments', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async createDepartment(data) {
+    const res = await fetch('/api/academic/departments', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async updateDepartment(id, data) {
+    const res = await fetch(`/api/academic/departments/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async deleteDepartment(id) {
+    const res = await fetch(`/api/academic/departments/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getDivisions() {
+    const res = await fetch('/api/academic/divisions', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async createDivision(data) {
+    const res = await fetch('/api/academic/divisions', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async updateDivision(id, data) {
+    const res = await fetch(`/api/academic/divisions/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async deleteDivision(id) {
+    const res = await fetch(`/api/academic/divisions/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getSubjects() {
+    const res = await fetch('/api/academic/subjects', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async createSubject(data) {
+    const res = await fetch('/api/academic/subjects', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async updateSubject(id, data) {
+    const res = await fetch(`/api/academic/subjects/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async deleteSubject(id) {
+    const res = await fetch(`/api/academic/subjects/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  async getRooms() {
+    const res = await fetch('/api/academic/rooms', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async createRoom(data) {
+    const res = await fetch('/api/academic/rooms', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async updateRoom(id, data) {
+    const res = await fetch(`/api/academic/rooms/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async deleteRoom(id) {
+    const res = await fetch(`/api/academic/rooms/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Targeted Notices
+  async getNotices() {
+    const res = await fetch('/api/notices', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async createNotice(noticeData) {
+    const res = await fetch('/api/notices', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(noticeData)
+    });
+    return handleResponse(res);
+  },
+
+  async updateNotice(id, noticeData) {
+    const res = await fetch(`/api/notices/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(noticeData)
+    });
+    return handleResponse(res);
+  },
+
+  async deleteNotice(id) {
+    const res = await fetch(`/api/notices/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Verifiable Documents & Credentials
+  async getCredentials() {
+    const res = await fetch('/api/credentials', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async issueCredential(data) {
+    const res = await fetch('/api/credentials/issue', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async verifyCredential(code) {
+    const res = await fetch(`/api/credentials/verify/${code}`);
+    return handleResponse(res);
+  },
+
+  async revokeCredential(code, reason = 'Revoked by Principal') {
+    const res = await fetch(`/api/credentials/${code}/revoke?reason=${encodeURIComponent(reason)}`, {
+      method: 'PUT',
+      headers: getAuthHeaders()
+    });
+    return handleResponse(res);
+  },
+
+  // Principal Live Data Assistant
+  async queryPrincipalAssistant(question) {
+    const res = await fetch('/api/principal/assistant/query', {
+      method: 'POST',
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
+      body: JSON.stringify({ question })
+    });
+    return handleResponse(res);
+  },
+
+  // Legacy knowledge query fallback for non-principal roles (safe refusal)
+  async queryKnowledge(query, limit = 3) {
+    return {
+      answer: "The institutional knowledge base has been upgraded to the live Principal Assistant. Document-based search is no longer active.",
+      citations: [],
+      confidenceScore: 0.0
+    };
+  },
+
+  // Principal Setup & Registration
+  async getPrincipalSetupStatus() {
+    const res = await fetch('/api/auth/principal/setup-status');
+    return handleResponse(res);
+  },
+
+  async registerPrincipal(data) {
+    const res = await fetch('/api/auth/principal/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  async verifyPrincipalOtp(data) {
+    const res = await fetch('/api/auth/principal/verify-otp', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+    return handleResponse(res);
+  },
+
+  // Cryptographic Audit Chain
+  async getAuditChain() {
+    const res = await fetch('/api/audit/chain', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  },
+
+  async verifyAuditChain() {
+    const res = await fetch('/api/audit/verify', { headers: getAuthHeaders() });
+    return handleResponse(res);
+  }
 };
 
 export default api;

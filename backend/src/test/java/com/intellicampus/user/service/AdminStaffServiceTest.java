@@ -68,7 +68,7 @@ public class AdminStaffServiceTest {
         csDept = new Department("CSE", "Computer Science");
         csDept.setId(1L);
 
-        adminUser = new User("ADM-001", Role.ADMIN, "System Admin", "admin@campus.edu", "hash", null);
+        adminUser = new User("ADM-001", Role.PRINCIPAL, "System Admin", "admin@campus.edu", "hash", null);
         adminUser.setId(1L);
     }
 
@@ -121,7 +121,7 @@ public class AdminStaffServiceTest {
         @Test
         @DisplayName("Rejects staff creation when role is ADMIN")
         void testCreateStaffWithAdminRoleRejected() {
-            AdminStaffCreateDto req = new AdminStaffCreateDto("Fake Admin", "fake@campus.edu", Role.ADMIN, "CSE", "EMP-999");
+            AdminStaffCreateDto req = new AdminStaffCreateDto("Fake Admin", "fake@campus.edu", Role.PRINCIPAL, "CSE", "EMP-999");
 
             ResponseStatusException ex = assertThrows(ResponseStatusException.class, () ->
                     adminStaffService.createStaff(req, adminUser));
@@ -217,7 +217,7 @@ public class AdminStaffServiceTest {
         @Test
         @DisplayName("Cannot modify status of ADMIN account via staff API")
         void testCannotAlterAdminStatus() {
-            User admin = new User("ADM-01", Role.ADMIN, "Super Admin", "super@campus.edu", "hash", null);
+            User admin = new User("ADM-01", Role.PRINCIPAL, "Super Admin", "super@campus.edu", "hash", null);
             admin.setId(1L);
 
             when(userRepository.findById(1L)).thenReturn(Optional.of(admin));
@@ -296,7 +296,7 @@ public class AdminStaffServiceTest {
         @Test
         @DisplayName("Cannot reset password of ADMIN account via staff API")
         void testCannotResetAdminPassword() {
-            User admin = new User("ADM-01", Role.ADMIN, "Super Admin", "super@campus.edu", "hash", null);
+            User admin = new User("ADM-01", Role.PRINCIPAL, "Super Admin", "super@campus.edu", "hash", null);
             admin.setId(1L);
 
             when(userRepository.findById(1L)).thenReturn(Optional.of(admin));

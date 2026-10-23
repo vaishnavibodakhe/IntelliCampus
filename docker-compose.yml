@@ -39,8 +39,7 @@ services:
       - SMTP_PORT=${SMTP_PORT:-${MAIL_PORT:-587}}
       - SMTP_USERNAME=${SMTP_USERNAME:-${MAIL_USERNAME:-}}
       - SMTP_PASSWORD=${SMTP_PASSWORD:-${MAIL_PASSWORD:-}}
-      - ADMIN_EMAIL=${ADMIN_EMAIL:-admin@intellicampus.edu}
-      - SUPERADMIN_PASSWORD=${SUPERADMIN_PASSWORD}
+      - SETUP_TOKEN=${SETUP_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy
@@ -114,5 +113,4 @@ networks:
 
 volumes:
   mysql_data:
-    external: true
-    name: intellicampus-data
+    driver: local

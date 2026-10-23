@@ -72,4 +72,10 @@ public class DocumentResponseDto {
 
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("verificationCode")
+    public String getVerificationCode() { return code; }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("documentHash")
+    public String getDocumentHash() { return fileHash; }
 }

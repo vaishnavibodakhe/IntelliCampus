@@ -14,6 +14,8 @@ import {
   Languages
 } from 'lucide-react';
 
+import { api } from '../api/client';
+
 export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
   const [messages, setMessages] = useState([
     {
@@ -31,8 +33,8 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
 
   if (!isOpen) return null;
 
-  // RAG Question Handling
-  const handleSendMessage = (e) => {
+  // RAG Question Handling using real backend knowledge retrieval
+  const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!inputQuestion.trim()) return;
 
@@ -50,63 +52,36 @@ export default function ChatbotDrawer({ isOpen, onClose, knowledgeDocs = [] }) {
     setInputQuestion('');
     setIsTyping(true);
 
-    // Simulate RAG vector cosine similarity lookup
-    setTimeout(() => {
-      let botResponse = {};
-      const lower = query.toLowerCase();
+    try {
+      const res = await api.queryKnowledge(query);
+      const isRefusal = !res.citations || res.citations.length === 0 || res.confidenceScore < 0.15;
+      const formattedCitations = (res.citations || []).map(cit => ({
+        docName: cit,
+        similarity: res.confidenceScore || 0.85
+      }));
 
-      if (lower.includes('backlog') || lower.includes('exam form') || lower.includes('last date') || lower.includes('deadline')) {
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: language === 'Hindi' 
-            ? "बैकलॉग परीक्षा फॉर्म जमा करने की अंतिम तिथि 15 नवंबर 2026 है। 75% से कम उपस्थिति वाले छात्रों को प्रवेश पत्र जारी नहीं किए जाएंगे।"
-            : "According to the official circular, the final deadline for submitting backlog examination forms is November 15, 2026. Hall tickets will only be issued to candidates maintaining at least 75% attendance.",
-          citations: [
-            { docName: 'Exam_Rules_Circular_2026.pdf', page: 3, similarity: 0.94 }
-          ],
-          isRefusal: false,
-          rated: null
-        };
-      } else if (lower.includes('attendance') || lower.includes('detention') || lower.includes('defaulter') || lower.includes('minimum')) {
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: language === 'Hindi'
-            ? "विश्वविद्यालय अध्यादेश के अनुसार अंतिम सेमेस्टर परीक्षा में बैठने के लिए न्यूनतम 75% उपस्थिति अनिवार्य है। मेडिकल अवकाश के आधार पर 15% तक की छूट दी जा सकती है।"
-            : "As per the Academic Regulation Handbook, students must maintain a minimum of 75% attendance per course. An exemption of up to 15% is admissible exclusively on certified medical grounds approved by the HOD.",
-          citations: [
-            { docName: 'Attendance_Detention_Policy.pdf', page: 2, similarity: 0.91 }
-          ],
-          isRefusal: false,
-          rated: null
-        };
-      } else if (lower.includes('fee') || lower.includes('fine') || lower.includes('scholarship') || lower.includes('tuition')) {
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: "The tuition fee installment is due by October 25, 2026. A late fine of $50 per calendar day is applied beyond this date. Merit scholarships require maintaining a cumulative CGPA of 8.5+ with zero active backlogs.",
-          citations: [
-            { docName: 'Fee_Structure_and_Scholarships.pdf', page: 5, similarity: 0.88 }
-          ],
-          isRefusal: false,
-          rated: null
-        };
-      } else {
-        // Safe Refusal (BOT-04)
-        botResponse = {
-          id: Date.now() + 1,
-          sender: 'bot',
-          text: "I could not locate an answer for this question in the official college circulars, ordinances, or handbooks. As per academic integrity policies, I do not generate unverified answers. Please consult the Academic Administration Office directly.",
-          citations: [],
-          isRefusal: true,
-          rated: null
-        };
-      }
-
+      const botResponse = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: res.answer || "I could not locate an answer for this question in the official college circulars, ordinances, or handbooks.",
+        citations: formattedCitations,
+        isRefusal,
+        rated: null
+      };
       setMessages(prev => [...prev, botResponse]);
+    } catch {
+      const fallbackResponse = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: "I am unable to reach the knowledge vector index at this moment. Please ensure the backend server is reachable.",
+        citations: [],
+        isRefusal: true,
+        rated: null
+      };
+      setMessages(prev => [...prev, fallbackResponse]);
+    } finally {
       setIsTyping(false);
-    }, 800);
+    }
   };
 
   const handleRate = (msgId, isHelpful) => {

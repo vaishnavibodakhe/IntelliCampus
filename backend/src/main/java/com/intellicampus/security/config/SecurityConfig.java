@@ -118,6 +118,11 @@ public class SecurityConfig {
 
                 // 1. PUBLIC AUTH & VERIFICATION ENDPOINTS
                 auth.requestMatchers(
+                    "/api/auth/principal/setup-status",
+                    "/api/auth/principal/login",
+                    "/api/auth/principal/verify-otp",
+                    "/api/auth/principal/register",
+                    "/api/auth/admin/setup-status",
                     "/api/auth/admin/login",
                     "/api/auth/admin/verify-otp",
                     "/api/auth/admin/register",
@@ -170,8 +175,9 @@ public class SecurityConfig {
                     "/api/students/{studentId}/face-enroll"
                 ).permitAll();
 
-                // 2. ADMIN ONLY ENDPOINTS
+                // 2. PRINCIPAL ONLY ENDPOINTS
                 auth.requestMatchers(
+                    "/api/principal/**",
                     "/api/admin/**",
                     "/api/users/**",
                     "/api/audit/**",
@@ -181,7 +187,7 @@ public class SecurityConfig {
                     "/api/auth/staff/*/reject",
                     "/api/auth/staff/{id}/approve",
                     "/api/auth/staff/{id}/reject"
-                ).hasRole("ADMIN");
+                ).hasRole("PRINCIPAL");
 
                 auth.requestMatchers(
                     HttpMethod.POST,
@@ -189,16 +195,33 @@ public class SecurityConfig {
                     "/api/academic/rooms/**",
                     "/api/academic/subjects",
                     "/api/academic/subjects/**",
+                    "/api/academic/departments",
+                    "/api/academic/departments/**",
+                    "/api/academic/divisions",
+                    "/api/academic/divisions/**",
                     "/api/credentials/issue"
-                ).hasRole("ADMIN");
+                ).hasRole("PRINCIPAL");
 
                 auth.requestMatchers(
                     HttpMethod.PUT,
+                    "/api/academic/rooms/**",
+                    "/api/academic/subjects/**",
+                    "/api/academic/departments/**",
+                    "/api/academic/divisions/**",
                     "/api/credentials/*/revoke",
                     "/api/credentials/{code}/revoke"
-                ).hasRole("ADMIN");
+                ).hasRole("PRINCIPAL");
 
-                // 3. ADMIN + HOD ENDPOINTS
+                auth.requestMatchers(
+                    HttpMethod.DELETE,
+                    "/api/academic/rooms/**",
+                    "/api/academic/subjects/**",
+                    "/api/academic/departments/**",
+                    "/api/academic/divisions/**",
+                    "/api/notices/**"
+                ).hasRole("PRINCIPAL");
+
+                // 3. PRINCIPAL + HOD ENDPOINTS
                 auth.requestMatchers(
                     "/api/marks/corrections/*/decision",
                     "/api/marks/corrections/{id}/decision",
@@ -207,18 +230,18 @@ public class SecurityConfig {
                     "/api/leaves/{id}/hod",
                     "/api/leaves/hod/pending",
                     "/api/credentials"
-                ).hasAnyRole("ADMIN", "HOD");
+                ).hasAnyRole("PRINCIPAL", "HOD");
 
-                // 4. ADMIN + HOD + MENTOR ENDPOINTS
+                // 4. PRINCIPAL + HOD + MENTOR ENDPOINTS
                 auth.requestMatchers(
                     "/api/leaves/*/mentor",
                     "/api/leaves/{id}/mentor",
                     "/api/leaves/mentor/*/pending",
                     "/api/leaves/mentor/{mentorId}/pending",
                     "/api/mentor/**"
-                ).hasAnyRole("ADMIN", "HOD", "MENTOR");
+                ).hasAnyRole("PRINCIPAL", "HOD", "MENTOR");
 
-                // 5. ADMIN + HOD + FACULTY ENDPOINTS
+                // 5. PRINCIPAL + HOD + FACULTY ENDPOINTS
                 auth.requestMatchers(
                     "/api/faculty/**",
                     "/api/attendance/sessions",
@@ -226,24 +249,35 @@ public class SecurityConfig {
                     "/api/marks",
                     "/api/marks/corrections",
                     "/api/marks/subject/**"
-                ).hasAnyRole("ADMIN", "HOD", "FACULTY");
+                ).hasAnyRole("PRINCIPAL", "HOD", "FACULTY");
 
-                // 6. STAFF ROLES (ADMIN, HOD, FACULTY, MENTOR)
+                // 6. STAFF ROLES (PRINCIPAL, HOD, FACULTY, MENTOR)
                 auth.requestMatchers(
                     "/api/students/division/**",
                     "/api/students/division/{divisionId}",
+                    "/api/academic/rooms",
                     "/api/academic/rooms/**",
+                    "/api/academic/subjects",
                     "/api/academic/subjects/**",
+                    "/api/academic/departments",
+                    "/api/academic/departments/**",
+                    "/api/academic/divisions",
+                    "/api/academic/divisions/**",
                     "/api/ai/risk/high",
                     "/api/ai/risk/evaluate",
                     "/api/ai/risk/student/**",
                     "/api/leaves"
-                ).hasAnyRole("ADMIN", "HOD", "FACULTY", "MENTOR");
+                ).hasAnyRole("PRINCIPAL", "HOD", "FACULTY", "MENTOR");
 
                 auth.requestMatchers(
                     HttpMethod.POST,
                     "/api/notices"
-                ).hasAnyRole("ADMIN", "HOD", "FACULTY");
+                ).hasAnyRole("PRINCIPAL", "HOD", "FACULTY");
+
+                auth.requestMatchers(
+                    HttpMethod.PUT,
+                    "/api/notices/**"
+                ).hasAnyRole("PRINCIPAL", "HOD", "FACULTY");
 
                 // 7. ALL AUTHENTICATED ROLES (Specific verified endpoints)
                 auth.requestMatchers(

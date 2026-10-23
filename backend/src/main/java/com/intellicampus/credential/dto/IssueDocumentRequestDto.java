@@ -1,8 +1,10 @@
 package com.intellicampus.credential.dto;
 
+import com.fasterxml.jackson.annotation.JsonAlias;
 import java.time.LocalDate;
 
 public class IssueDocumentRequestDto {
+    @JsonAlias({"credentialType", "documentType"})
     private String type; // e.g. "TRANSCRIPT", "BONAFIDE", "DEGREE", "FEE_RECEIPT"
     private Long studentId;
     private String studentName;
@@ -10,6 +12,7 @@ public class IssueDocumentRequestDto {
     private String department;
     private LocalDate issueDate;
     private String fileHash;
+    @JsonAlias({"gradeOrCgpa", "cgpa"})
     private String gpa;
     private String amountPaid;
     private String authorizedSignatory;

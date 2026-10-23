@@ -168,35 +168,43 @@ Full Guide: [**docs/SETUP.md**](docs/SETUP.md)
 - **MySQL Server 8.0+**
 
 ### 2. MySQL Setup
-Run in MySQL:
+1. Create the empty database with utf8mb4 charset and collation (ensuring full support for Marathi, Hindi, and Indian names):
 ```sql
-CREATE DATABASE IF NOT EXISTS intellicampus_db CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER IF NOT EXISTS 'campus_admin'@'localhost' IDENTIFIED BY 'your_db_password_here';
-GRANT ALL PRIVILEGES ON intellicampus_db.* TO 'campus_admin'@'localhost';
-FLUSH PRIVILEGES;
+CREATE DATABASE intellicampus CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### 3. Environment Variables (.env)
-Copy the example file:
-```bash
-# Windows
-copy .env.example .env
-# macOS / Linux
-cp .env.example .env
+2. Configure connection and Principal credentials in `.env` (copied from `.env.example`):
+```env
+DATABASE_URL=mysql://campus_admin:your_password@localhost:3306/intellicampus
+DB_HOST=localhost
+DB_PORT=3306
+DB_NAME=intellicampus
+DB_USER=campus_admin
+DB_PASSWORD=your_password
+PRINCIPAL_EMAIL=principal@intellicampus.edu
+PRINCIPAL_PASSWORD=YourStrongPassword123!
 ```
-Fill in your Gmail credentials in `.env`:
-- `MAIL_USERNAME=your-email@gmail.com`
-- `MAIL_PASSWORD=your16charpassword` *(Generate at Google Account > Security > 2-Step Verification > App passwords; remove spaces)*.
 
-### 4. Start Backend
+### 3. Run Migrations with One Command
+Execute Flyway migrations directly to provision all InnoDB tables, indexes, foreign keys, and constraints:
 ```bash
 cd backend
-.\mvnw.cmd spring-boot:run   # Windows
-# or ./mvnw spring-boot:run  # macOS / Linux
+./mvnw flyway:migrate
+# or on Windows: .\mvnw.cmd flyway:migrate
+```
+
+### 4. Start Backend & Create the First Principal Account
+Starting the backend automatically seeds the first institutional Principal account from `PRINCIPAL_EMAIL` and `PRINCIPAL_PASSWORD` with BCrypt hashing (no demo or fake data inserted):
+```bash
+cd backend
+./mvnw spring-boot:run
+# or on Windows: .\mvnw.cmd spring-boot:run
 ```
 *Expected log lines:*
-- `[DOTENV] Successfully loaded 5 properties from .env`
-- `SMTP auth check: OK`
+- `[DATABASE_URL] Configured HikariDataSource from DATABASE_URL`
+- `Successfully validated 17 migrations`
+- `Current version of schema: 17`
+- `[PRINCIPAL SEEDER] Seeded Principal account for: principal@intellicampus.edu`
 - `Tomcat started on port 8080 (http)`
 
 ### 5. Start Frontend
@@ -207,15 +215,36 @@ npm run dev
 ```
 Open [http://localhost:5173](http://localhost:5173).
 
-### 6. Testing Admin/HOD Register, Login & Forgot-Password OTP
-1. On `http://localhost:5173`, select **Admin** or **HOD** and register using a real email inbox.
-2. Log in with your new account.
-3. Test **Forgot Password**: request a 6-digit OTP, check your inbox (and Spam folder), enter the OTP, and set a new password.
+### 6. Principal Setup & Operations Console
+The **Principal** is the institutional chief executive and system authority for IntelliCampus.
+
+1. **Environment Setup**:
+   Configure `PRINCIPAL_EMAIL` and `PRINCIPAL_PASSWORD` in your `.env` file (see `.env.example`):
+   ```env
+   PRINCIPAL_EMAIL=principal@intellicampus.edu
+   PRINCIPAL_PASSWORD=YourStrongPassword123!
+   ```
+2. **Database Migration**:
+   Flyway migration `V16__rename_admin_to_principal.sql` automatically migrates database roles from `ADMIN` to `PRINCIPAL` and updates notice publisher roles. Flyway migration `V18__drop_knowledge_documents.sql` purges legacy document knowledge tables.
+3. **One-Time Seeding**:
+   On backend startup, `PrincipalSeeder` initializes the institutional Principal account using BCrypt hashing with `ROLE_PRINCIPAL`. No shared or hardcoded credentials are used.
+4. **Principal Login**:
+   - Access the dedicated portal at [http://localhost:5173/principal/login](http://localhost:5173/principal/login).
+   - Sign in with the configured work email and password.
+   - Self-registration is strictly disallowed for the Principal role to prevent privilege escalation.
+5. **Console Features**:
+   - **User Management**: View real DB users, filter by role/department, add users, deactivate/activate, reset password, bulk CSV upload with downloadable template.
+   - **Academic Setup & Rooms**: Real CRUD for departments, class divisions, subjects, and rooms with GPS geofencing.
+   - **Targeted Notices**: Publish real campus notices targeted by role/department/division, edit, and delete.
+   - **Verifiable Documents**: Issue cryptographic credentials with SHA-256 hashes and QR verification codes; verify on the Public Verifier.
+   - **Ask AI Principal Assistant**: Ask questions about live institutional data (staffing, pending approvals, academic setup, notices, credentials, attendance summaries) powered by read-only server data integration.
+   - **Staff Approvals**: Review and approve/reject pending staff registrations with custom justifications.
+   - **Cryptographic Audit Chain**: Inspect the SHA-256 chained event blocks and run real-time integrity verification.
 
 ### 7. Troubleshooting
-- **502 Bad Gateway (`Failed to request OTP (502)`)**: Backend is not running on port 8080. Start backend via `.\mvnw.cmd spring-boot:run`.
+- **502 Bad Gateway (`Failed to request OTP (502)`)**: Backend is not running on port 8080. Start backend via `.\mvnw.cmd spring-boot:run` or `docker compose up -d`.
 - **535 Authentication Failed (`SMTP auth check: FAILED (535)`)**: Incorrect 16-letter Gmail App Password or 2-Step Verification disabled.
-- **"Success message, but no email arrived"**: Email not registered under that specific role (`ADMIN` vs `HOD`), or the message went into the **Spam** folder.
+- **403 Forbidden on Principal APIs**: Ensure the request includes a valid JWT token with authority `ROLE_PRINCIPAL`. Other roles receive HTTP 403 Forbidden.
 
 
 ---
@@ -238,10 +267,21 @@ npm run build
 
 The Faculty and Mentor portals operate on completely separated, dedicated routes and role-guarded pipelines backed by Spring Boot 3 & MySQL 8.
 
+### 🏛️ First-Run Principal Self-Registration & Security
+
+IntelliCampus features an atomic, first-run self-registration flow for the institution's Principal:
+- **Zero Hardcoded Credentials**: No default or seeded Principal accounts exist in code, configuration, or environment files.
+- **Initial Setup Detection**: When no active Principal exists in the database, `GET /api/auth/principal/setup-status` reports `{"setupRequired": true}` and `/principal/login` displays the **First-Time Setup** tab.
+- **Strong Password & BCrypt**: Requires a strong password (minimum 8 characters, uppercase, lowercase, number, special character) hashed with BCrypt (strength factor 12).
+- **Mandatory Email Verification via OTP**: A 6-digit OTP is sent to the Principal's email. The account remains in `PENDING_APPROVAL` status and cannot log in until OTP verification is completed. (If SMTP is not configured, OTP is logged to server console in dev mode). Unverified pending attempts expire after 15 minutes.
+- **Single Institutional Principal Guarantee**: A database-level unique constraint (`uq_users_principal_singleton`) guarantees that exactly one Principal can ever exist. Once registered, all subsequent registration attempts return `403 Forbidden` and the setup tab is automatically hidden.
+- **Optional Setup Protection**: If `SETUP_TOKEN` is set in `.env`, the registration request must supply this token, protecting initial setup in public deployments.
+
 ### Route Breakdown
 
 | Portal | Login | Registration | Forgot Password | Reset Password | Dashboard (Protected) |
 | :--- | :--- | :--- | :--- | :--- | :--- |
+| **Principal** | `/principal/login` | `/principal/login` *(First-time only)* | `/principal/login` *(Forgot tab)* | `/principal/login` | `/` *(Principal Console)* |
 | **Faculty** | `/faculty/login` | `/faculty/register` | `/faculty/forgot-password` | `/faculty/reset-password/:token` | `/faculty/dashboard` |
 | **Mentor** | `/mentor/login` | `/mentor/register` | `/mentor/forgot-password` | `/mentor/reset-password/:token` | `/mentor/dashboard` |
 
@@ -261,13 +301,27 @@ DB_NAME=intellicampus
 DB_USER=campus_admin
 DB_PASSWORD=your_mysql_password_here
 
-# Spring Mail (SMTP) Configuration for Password Reset OTP
+# Optional Setup Protection (Protects First-Time Principal Registration)
+# If set, Principal must provide this token during initial registration. Leave empty for open first-run.
+SETUP_TOKEN=
+
+# Spring Mail (SMTP) Configuration for OTP and Password Reset
+# If SMTP credentials are omitted, OTPs and reset tokens are securely logged to the backend console in dev mode.
 MAIL_HOST=smtp.gmail.com
 MAIL_PORT=587
 MAIL_USERNAME=your_email@gmail.com
 MAIL_PASSWORD=your_gmail_16_digit_app_password
 MAIL_FROM=noreply@intellicampus.edu
 ```
+
+#### First-Run Principal Self-Registration
+IntelliCampus does **not** ship with hardcoded Principal credentials or seeders:
+1. When starting with a fresh database, visit `http://localhost:5173/principal/login`.
+2. The UI checks `GET /api/auth/principal/setup-status` and automatically exposes the **First-Time Setup** registration tab.
+3. Provide your name, institutional email, strong password, and optional `SETUP_TOKEN` (if defined in `.env`).
+4. Enter the 6-digit OTP sent to your email (or printed to backend console in dev mode).
+5. Upon verification, the Principal account is activated and logged in.
+6. The singleton DB constraint and setup-status guard permanently disable the registration flow (returns HTTP 403 Forbidden on any future registration attempts).
 
 #### How to Generate a Gmail App Password
 1. Navigate to your Google Account Security settings (`myaccount.google.com/security`).

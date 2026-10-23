@@ -143,7 +143,7 @@ public class AdminStaffManagementSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
         @DisplayName("ADMIN role gets 200 OK on GET /api/admin/staff")
         void testAdminGets200() throws Exception {
             when(adminStaffService.getAllStaff(any(), any(), any(), any())).thenReturn(List.of());
@@ -158,20 +158,20 @@ public class AdminStaffManagementSecurityTest {
     class AdminStaffControllerGuardTests {
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
-        @DisplayName("Creating staff with role ADMIN is rejected with 400 Bad Request")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
+        @DisplayName("Creating staff with role PRINCIPAL is rejected with 400 Bad Request")
         void testCreateAdminRejected() throws Exception {
             when(adminStaffService.createStaff(any(), any()))
                     .thenThrow(new ResponseStatusException(HttpStatus.BAD_REQUEST, "Role must be HOD, FACULTY, or MENTOR."));
 
             mockMvc.perform(post("/api/admin/staff")
                     .contentType(MediaType.APPLICATION_JSON)
-                    .content("{\"name\":\"Fake Admin\",\"email\":\"hacked@campus.edu\",\"role\":\"ADMIN\",\"department\":\"CSE\",\"employeeCode\":\"EMP-001\"}"))
+                    .content("{\"name\":\"Fake Principal\",\"email\":\"hacked@campus.edu\",\"role\":\"PRINCIPAL\",\"department\":\"CSE\",\"employeeCode\":\"EMP-001\"}"))
                     .andExpect(status().isBadRequest());
         }
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
         @DisplayName("Creating valid staff (HOD) returns 201 Created with temporary password")
         void testCreateValidStaffReturns201() throws Exception {
             AdminStaffResponseDto created = new AdminStaffResponseDto(
@@ -193,7 +193,7 @@ public class AdminStaffManagementSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
         @DisplayName("Resetting staff password returns new temporary password")
         void testResetStaffPasswordReturnsNewTempPassword() throws Exception {
             AdminStaffResponseDto result = new AdminStaffResponseDto(
@@ -211,7 +211,7 @@ public class AdminStaffManagementSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
         @DisplayName("Updating staff status to DISABLED returns updated status")
         void testUpdateStaffStatus() throws Exception {
             AdminStaffResponseDto updated = new AdminStaffResponseDto(
@@ -230,7 +230,7 @@ public class AdminStaffManagementSecurityTest {
         }
 
         @Test
-        @WithMockUser(username = "admin@test.com", roles = "ADMIN")
+        @WithMockUser(username = "admin@test.com", roles = "PRINCIPAL")
         @DisplayName("Soft-deleting staff returns 200 OK")
         void testSoftDeleteStaff() throws Exception {
             doNothing().when(adminStaffService).deleteStaff(eq(10L), any());

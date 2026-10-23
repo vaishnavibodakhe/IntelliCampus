@@ -3,7 +3,7 @@ package com.intellicampus.security;
 import com.intellicampus.academic.model.Department;
 import com.intellicampus.academic.repository.DepartmentRepository;
 import com.intellicampus.audit.service.AuditChainService;
-import com.intellicampus.auth.controller.AdminAuthController;
+import com.intellicampus.auth.controller.PrincipalAuthController;
 import com.intellicampus.auth.dto.*;
 import com.intellicampus.auth.model.RefreshToken;
 import com.intellicampus.auth.repository.PasswordResetRateLimitRepository;
@@ -219,7 +219,7 @@ public class AuthenticationHardeningSecurityTest {
         @Test
         @DisplayName("Admin 2FA OTP flow: triggers OTP dispatch when admin-otp-enabled is true")
         void testAdmin2FaOtpTriggered() {
-            User admin = new User("ADM-01", Role.ADMIN, "System Admin", "admin@campus.edu", "admin_hash", null);
+            User admin = new User("ADM-01", Role.PRINCIPAL, "System Admin", "admin@campus.edu", "admin_hash", null);
             admin.setId(1L);
 
             when(userRepository.findByEmail("admin@campus.edu")).thenReturn(Optional.of(admin));
@@ -241,7 +241,7 @@ public class AuthenticationHardeningSecurityTest {
         @Test
         @DisplayName("Admin 2FA OTP verification: verifies OTP, issues tokens, and logs LOGIN_SUCCESS")
         void testAdmin2FaOtpVerifySuccess() {
-            User admin = new User("ADM-01", Role.ADMIN, "System Admin", "admin@campus.edu", "admin_hash", null);
+            User admin = new User("ADM-01", Role.PRINCIPAL, "System Admin", "admin@campus.edu", "admin_hash", null);
             admin.setId(1L);
 
             String validOtp = "123456";
@@ -264,7 +264,7 @@ public class AuthenticationHardeningSecurityTest {
             verify(auditChainService).recordEntry(
                     eq(1L),
                     eq("System Admin"),
-                    eq("ADMIN_LOGIN_SUCCESS"),
+                    eq("PRINCIPAL_LOGIN_SUCCESS"),
                     eq("USER"),
                     eq("1"),
                     anyString(),
@@ -275,7 +275,7 @@ public class AuthenticationHardeningSecurityTest {
     }
 
     @Nested
-    @WebMvcTest(controllers = AdminAuthController.class)
+    @WebMvcTest(controllers = PrincipalAuthController.class)
     @Import({SecurityConfig.class, JwtAuthenticationFilter.class})
     @DisplayName("3. HTTP Security Headers and Web MVC Integration")
     class HttpSecurityHeadersTests {
@@ -293,7 +293,7 @@ public class AuthenticationHardeningSecurityTest {
         @Test
         @DisplayName("Security headers (HSTS, Content-Type-Options, Frame-Options, CSP) are present on responses")
         void testSecurityHeadersPresent() throws Exception {
-            when(staffAuthService.loginAdmin(any())).thenReturn(new AuthResponseDto());
+            when(staffAuthService.loginPrincipal(any())).thenReturn(new AuthResponseDto());
 
             mockMvc.perform(post("/api/auth/admin/login")
                     .contentType(MediaType.APPLICATION_JSON)
@@ -306,7 +306,7 @@ public class AuthenticationHardeningSecurityTest {
         @Test
         @DisplayName("POST /api/auth/admin/verify-otp is publicly accessible")
         void testAdminVerifyOtpPublicEndpoint() throws Exception {
-            when(staffAuthService.verifyAdminOtp(any())).thenReturn(new AuthResponseDto("access.token", "refresh.token", 900L, null));
+            when(staffAuthService.verifyPrincipalOtp(any())).thenReturn(new AuthResponseDto("access.token", "refresh.token", 900L, null));
 
             mockMvc.perform(post("/api/auth/admin/verify-otp")
                     .contentType(MediaType.APPLICATION_JSON)

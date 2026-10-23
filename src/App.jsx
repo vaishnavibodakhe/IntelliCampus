@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import './App.css';
 import Navbar from './components/Navbar';
-import AdminView from './components/AdminView';
+import PrincipalView from './components/PrincipalView';
 import HodView from './components/HodView';
 import FacultyView from './components/FacultyView';
 import MentorView from './components/MentorView';
@@ -10,6 +10,7 @@ import StudentAuthView from './components/StudentAuthView';
 import PublicVerifierView from './components/PublicVerifierView';
 import AuditChainModal from './components/AuditChainModal';
 import ChatbotDrawer from './components/ChatbotDrawer';
+import PrincipalAssistantDrawer from './components/PrincipalAssistantDrawer';
 
 import LoginPage from './components/auth/LoginPage';
 import RegisterPage from './components/auth/RegisterPage';
@@ -20,37 +21,28 @@ import UnauthorizedPage from './components/auth/UnauthorizedPage';
 import PortalSelectionCards from './components/PortalSelectionCards';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
-import AdminAuthView from './components/staff/AdminAuthView';
+import PrincipalAuthView from './components/staff/PrincipalAuthView';
 import HodAuthView from './components/staff/HodAuthView';
 import StaffResetPasswordView from './components/staff/StaffResetPasswordView';
 import StaffChangePasswordView from './components/staff/StaffChangePasswordView';
 import { getStoredStaffSession, clearStaffSession, logoutStaffApi } from './utils/staffAuthService';
 
-import {
-  INITIAL_USERS,
-  INITIAL_ROOMS,
-  INITIAL_SUBJECTS,
-  INITIAL_SESSIONS,
-  INITIAL_MARKS,
-  INITIAL_MARK_CORRECTIONS,
-  INITIAL_LEAVE_REQUESTS,
-  INITIAL_NOTICES,
-  INITIAL_VERIFIABLE_DOCUMENTS,
-  INITIAL_AUDIT_LOGS,
-  INITIAL_KNOWLEDGE_DOCS,
-  INITIAL_RISK_STUDENTS
-} from './data/mockData';
 import { computeAuditEntryHash } from './utils/cryptoAndGeo';
 import { api, getStoredUser, clearAuthSession } from './api/client';
 
 function MainAppContent() {
   const { currentUser, isAuthenticated, isAuthLoading, logout, navigate, currentPath } = useAuth();
 
-  // If user is logged in, default to their dashboard role; otherwise default to STUDENT (public tab)
+  // Determine current active workflow strictly based on authenticated session
   const [currentRole, setCurrentRole] = useState(() => {
     if (currentUser?.role === 'FACULTY') return 'FACULTY';
     if (currentUser?.role === 'MENTOR') return 'MENTOR';
-    return 'STUDENT';
+    const staff = getStoredStaffSession();
+    if (staff?.user?.role === 'PRINCIPAL' || staff?.user?.role === 'ADMIN') return 'PRINCIPAL';
+    if (staff?.user?.role === 'HOD') return 'HOD';
+    const user = getStoredUser();
+    if (user?.role === 'STUDENT') return 'STUDENT';
+    return 'PUBLIC';
   });
   const [theme, setTheme] = useState('dark');
 
@@ -64,19 +56,27 @@ function MainAppContent() {
   });
   const [authNotification, setAuthNotification] = useState(null);
 
-  // Application Data Stores
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const [rooms, setRooms] = useState(INITIAL_ROOMS);
-  const [subjects, setSubjects] = useState(INITIAL_SUBJECTS);
-  const [sessions, setSessions] = useState(INITIAL_SESSIONS);
-  const [marks, setMarks] = useState(INITIAL_MARKS);
-  const [markCorrections, setMarkCorrections] = useState(INITIAL_MARK_CORRECTIONS);
-  const [leaveRequests, setLeaveRequests] = useState(INITIAL_LEAVE_REQUESTS);
-  const [notices, setNotices] = useState(INITIAL_NOTICES);
-  const [issuedDocuments, setIssuedDocuments] = useState(INITIAL_VERIFIABLE_DOCUMENTS);
-  const [auditLogs, setAuditLogs] = useState(INITIAL_AUDIT_LOGS);
-  const [knowledgeDocs, setKnowledgeDocs] = useState(INITIAL_KNOWLEDGE_DOCS);
-  const [riskStudents, setRiskStudents] = useState(INITIAL_RISK_STUDENTS);
+  // Application Data Stores (all populated from real backend API calls)
+  const [users, setUsers] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [subjects, setSubjects] = useState([]);
+  const [sessions, setSessions] = useState([]);
+  const [marks, setMarks] = useState([]);
+  const [markCorrections, setMarkCorrections] = useState([]);
+  const [leaveRequests, setLeaveRequests] = useState([]);
+  const [notices, setNotices] = useState([]);
+  const [issuedDocuments, setIssuedDocuments] = useState([]);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [knowledgeDocs, setKnowledgeDocs] = useState([]);
+  const [riskStudents, setRiskStudents] = useState([]);
+
+  // Load real institutional notices, audit logs, and knowledge docs
+  useEffect(() => {
+    api.getNotices().then(data => setNotices(Array.isArray(data) ? data : [])).catch(() => {});
+    api.getAuditChain().then(data => setAuditLogs(Array.isArray(data) ? data : [])).catch(() => {});
+    api.getKnowledgeDocs().then(data => setKnowledgeDocs(Array.isArray(data) ? data : [])).catch(() => {});
+    api.getCredentials().then(data => setIssuedDocuments(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
 
   // Modals & Drawers
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
@@ -324,23 +324,23 @@ function MainAppContent() {
   const pathname = (currentPath || window.location.pathname).split('?')[0];
 
   // =========================================================================
-  // DEDICATED ADMIN AUTHENTICATION ROUTE (No register link)
+  // DEDICATED PRINCIPAL AUTHENTICATION ROUTE (No register link)
   // =========================================================================
-  if (pathname === '/admin/login') {
-    if (staffSession?.user?.role === 'ADMIN') {
-      setCurrentRole('ADMIN');
+  if (pathname === '/principal/login' || pathname === '/admin/login') {
+    if (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN') {
+      setCurrentRole('PRINCIPAL');
       navigate('/');
       return null;
     }
     return (
       <div className="auth-viewport" style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <AdminAuthView 
+        <PrincipalAuthView 
           onAuthSuccess={(session) => {
             setStaffSession(session);
-            setCurrentRole('ADMIN');
+            setCurrentRole('PRINCIPAL');
             navigate('/');
           }}
-          noticeMessage={staffSession ? "Admin access required" : ""}
+          noticeMessage={staffSession ? "Principal access required" : ""}
           onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
         />
       </div>
@@ -611,31 +611,21 @@ function MainAppContent() {
               <PortalSelectionCards />
             )}
 
-            {currentRole === 'ADMIN' && (
-              staffSession?.user?.role === 'ADMIN' ? (
-                <AdminView 
-                  users={users}
-                  setUsers={setUsers}
-                  rooms={rooms}
-                  setRooms={setRooms}
-                  subjects={subjects}
-                  setSubjects={setSubjects}
-                  notices={notices}
-                  setNotices={setNotices}
-                  issuedDocuments={issuedDocuments}
-                  setIssuedDocuments={setIssuedDocuments}
-                  knowledgeDocs={knowledgeDocs}
-                  setKnowledgeDocs={setKnowledgeDocs}
-                  onAddAuditLog={handleAddAuditLog}
+            {(currentRole === 'PRINCIPAL' || currentRole === 'ADMIN') && (
+              (staffSession?.user?.role === 'PRINCIPAL' || staffSession?.user?.role === 'ADMIN') ? (
+                <PrincipalView 
                   staffSession={staffSession}
                   onLogout={handleStaffLogout}
+                  onOpenAuditModal={() => setIsAuditModalOpen(true)}
+                  onOpenChatbot={() => setIsChatbotOpen(true)}
                 />
               ) : (
-                <AdminAuthView 
+                <PrincipalAuthView 
                   onAuthSuccess={(session) => {
                     setStaffSession(session);
+                    setCurrentRole('PRINCIPAL');
                   }}
-                  noticeMessage={staffSession ? "Admin access required" : ""}
+                  noticeMessage={staffSession ? "Principal access required" : ""}
                   onSwitchRole={(targetRole) => setCurrentRole(targetRole)}
                 />
               )
@@ -742,12 +732,22 @@ function MainAppContent() {
         />
       )}
 
-      {/* Document-Grounded RAG Knowledge Chatbot Drawer */}
-      <ChatbotDrawer 
-        isOpen={isChatbotOpen}
-        onClose={() => setIsChatbotOpen(false)}
-        knowledgeDocs={knowledgeDocs}
-      />
+      {/* Principal Live Institutional Data Assistant */}
+      {(currentRole === 'PRINCIPAL' || currentRole === 'ADMIN') && (
+        <PrincipalAssistantDrawer 
+          isOpen={isChatbotOpen}
+          onClose={() => setIsChatbotOpen(false)}
+        />
+      )}
+
+      {/* Document-Grounded RAG Knowledge Chatbot Drawer (Other roles) */}
+      {currentRole !== 'PRINCIPAL' && currentRole !== 'ADMIN' && (
+        <ChatbotDrawer 
+          isOpen={isChatbotOpen}
+          onClose={() => setIsChatbotOpen(false)}
+          knowledgeDocs={knowledgeDocs}
+        />
+      )}
     </div>
   );
 }

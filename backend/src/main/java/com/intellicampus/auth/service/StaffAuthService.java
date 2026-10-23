@@ -47,6 +47,13 @@ public class StaffAuthService {
     @Value("${app.security.admin-otp-enabled:false}")
     private boolean adminOtpEnabled = false;
 
+    @Value("${SETUP_TOKEN:${setup.token:}}")
+    private String setupToken = "";
+
+    public void setSetupToken(String setupToken) {
+        this.setupToken = setupToken;
+    }
+
     public void setAdminOtpEnabled(boolean adminOtpEnabled) {
         this.adminOtpEnabled = adminOtpEnabled;
     }
@@ -60,6 +67,7 @@ public class StaffAuthService {
     private final PasswordResetRateLimitRepository rateLimitRepository;
     private final AuditChainService auditChainService;
     private final EmailService emailService;
+    private final AuthRateLimiter authRateLimiter;
 
     public StaffAuthService(
             UserRepository userRepository,
@@ -71,6 +79,23 @@ public class StaffAuthService {
             PasswordResetRateLimitRepository rateLimitRepository,
             AuditChainService auditChainService,
             EmailService emailService) {
+        this(userRepository, departmentRepository, passwordEncoder, jwtTokenProvider,
+                passwordResetTokenRepository, refreshTokenRepository, rateLimitRepository,
+                auditChainService, emailService, new AuthRateLimiter());
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public StaffAuthService(
+            UserRepository userRepository,
+            DepartmentRepository departmentRepository,
+            PasswordEncoder passwordEncoder,
+            JwtTokenProvider jwtTokenProvider,
+            PasswordResetTokenRepository passwordResetTokenRepository,
+            RefreshTokenRepository refreshTokenRepository,
+            PasswordResetRateLimitRepository rateLimitRepository,
+            AuditChainService auditChainService,
+            EmailService emailService,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) AuthRateLimiter authRateLimiter) {
         this.userRepository = userRepository;
         this.departmentRepository = departmentRepository;
         this.passwordEncoder = passwordEncoder;
@@ -80,6 +105,7 @@ public class StaffAuthService {
         this.rateLimitRepository = rateLimitRepository;
         this.auditChainService = auditChainService;
         this.emailService = emailService;
+        this.authRateLimiter = authRateLimiter != null ? authRateLimiter : new AuthRateLimiter();
     }
 
     public PendingStaffApprovalDto registerStaff(StaffRegisterRequestDto req) {
@@ -90,8 +116,8 @@ public class StaffAuthService {
         }
 
         Role role = req.getRole();
-        if (role == Role.ADMIN) {
-            throw new IllegalArgumentException("Registration of ADMIN accounts is strictly prohibited.");
+        if (role == Role.PRINCIPAL) {
+            throw new IllegalArgumentException("Registration of PRINCIPAL accounts is strictly prohibited.");
         }
         if (role == Role.STUDENT || role == Role.PUBLIC) {
             throw new IllegalArgumentException("Staff registration only supports administrative and academic roles.");
@@ -107,7 +133,7 @@ public class StaffAuthService {
                     )));
         }
 
-        String baseCode = (role == Role.ADMIN ? "ADM-" : role == Role.HOD ? "HOD-" : "FAC-")
+        String baseCode = (role == Role.PRINCIPAL ? "PRIN-" : role == Role.HOD ? "HOD-" : "FAC-")
                 + (req.getEmployeeCode() != null && !req.getEmployeeCode().trim().isEmpty() 
                    ? req.getEmployeeCode().trim().toUpperCase().replaceAll("[^A-Z0-9]", "-")
                    : Math.abs(email.hashCode() % 10000));
@@ -268,68 +294,72 @@ public class StaffAuthService {
         return new AuthResponseDto(accessToken, rawRefreshToken, jwtTokenProvider.getAccessExpirationSeconds(), userSummary);
     }
 
-    public AuthResponseDto loginAdmin(LoginRequestDto req) {
+    public AuthResponseDto loginPrincipal(LoginRequestDto req) {
         String email = req.getEmail() != null ? req.getEmail().trim().toLowerCase() : "";
 
         Optional<User> userOpt = userRepository.findByEmail(email);
 
-        // Constant-time check: If user not found OR user is NOT an ADMIN, run dummy BCrypt to prevent timing attacks,
+        // Constant-time check: If user not found OR user is NOT a PRINCIPAL, run dummy BCrypt to prevent timing attacks,
         // and return the exact same generic BadCredentialsException so other roles get the identical 401.
-        if (userOpt.isEmpty() || userOpt.get().getRole() != Role.ADMIN) {
+        if (userOpt.isEmpty() || userOpt.get().getRole() != Role.PRINCIPAL) {
             passwordEncoder.matches(req.getPassword() != null ? req.getPassword() : "", DUMMY_BCRYPT_HASH);
             throw new BadCredentialsException("Invalid email or password");
         }
 
-        User admin = userOpt.get();
+        User principal = userOpt.get();
 
         // Check Account Lockout
-        if (admin.getLockedUntil() != null) {
-            if (admin.getLockedUntil().isAfter(LocalDateTime.now())) {
+        if (principal.getLockedUntil() != null) {
+            if (principal.getLockedUntil().isAfter(LocalDateTime.now())) {
                 throw new LockedException("Account is temporarily locked due to consecutive failed attempts. Try again later.");
             } else {
-                admin.setLockedUntil(null);
-                admin.setFailedAttempts(0);
-                if (admin.getStatus() == UserStatus.LOCKED) {
-                    admin.setStatus(UserStatus.ACTIVE);
+                principal.setLockedUntil(null);
+                principal.setFailedAttempts(0);
+                if (principal.getStatus() == UserStatus.LOCKED) {
+                    principal.setStatus(UserStatus.ACTIVE);
                 }
             }
         }
 
-        if (admin.getStatus() == UserStatus.DISABLED || admin.getStatus() == UserStatus.INACTIVE || admin.getStatus() == UserStatus.SUSPENDED) {
+        if (principal.getStatus() == UserStatus.DISABLED || principal.getStatus() == UserStatus.INACTIVE || principal.getStatus() == UserStatus.SUSPENDED) {
             throw new DisabledException("Account is disabled or suspended. Please contact system governance.");
         }
 
+        if (principal.getStatus() == UserStatus.PENDING_APPROVAL || principal.getStatus() == UserStatus.PENDING) {
+            throw new DisabledException("Principal account is pending email verification. Please verify your OTP to activate the account.");
+        }
+
         // Verify BCrypt password
-        if (!passwordEncoder.matches(req.getPassword(), admin.getPasswordHash())) {
-            int attempts = (admin.getFailedAttempts() != null ? admin.getFailedAttempts() : 0) + 1;
-            admin.setFailedAttempts(attempts);
+        if (!passwordEncoder.matches(req.getPassword(), principal.getPasswordHash())) {
+            int attempts = (principal.getFailedAttempts() != null ? principal.getFailedAttempts() : 0) + 1;
+            principal.setFailedAttempts(attempts);
 
             if (attempts >= 5) {
-                admin.setStatus(UserStatus.LOCKED);
-                admin.setLockedUntil(LocalDateTime.now().plusMinutes(15));
-                userRepository.save(admin);
+                principal.setStatus(UserStatus.LOCKED);
+                principal.setLockedUntil(LocalDateTime.now().plusMinutes(15));
+                userRepository.save(principal);
 
                 auditChainService.recordEntry(
-                        admin.getId(),
-                        admin.getName(),
-                        "ADMIN_ACCOUNT_LOCKED",
+                        principal.getId(),
+                        principal.getName(),
+                        "PRINCIPAL_ACCOUNT_LOCKED",
                         "USER",
-                        admin.getId().toString(),
+                        principal.getId().toString(),
                         "{\"failedAttempts\":5}",
                         "{\"status\":\"LOCKED\"}",
-                        "Admin account locked for 15 minutes due to 5 consecutive failed attempts"
+                        "Principal account locked for 15 minutes due to 5 consecutive failed attempts"
                 );
             } else {
-                userRepository.save(admin);
+                userRepository.save(principal);
                 auditChainService.recordEntry(
-                        admin.getId(),
-                        admin.getName(),
-                        "ADMIN_LOGIN_FAILURE",
+                        principal.getId(),
+                        principal.getName(),
+                        "PRINCIPAL_LOGIN_FAILURE",
                         "USER",
-                        admin.getId().toString(),
+                        principal.getId().toString(),
                         "{}",
-                        "{\"email\":\"" + admin.getEmail() + "\",\"attempts\":" + attempts + "}",
-                        "Failed admin login attempt"
+                        "{\"email\":\"" + principal.getEmail() + "\",\"attempts\":" + attempts + "}",
+                        "Failed principal login attempt"
                 );
             }
 
@@ -337,49 +367,49 @@ public class StaffAuthService {
         }
 
         // Reset failed attempts on success
-        admin.setFailedAttempts(0);
-        admin.setLockedUntil(null);
-        userRepository.save(admin);
+        principal.setFailedAttempts(0);
+        principal.setLockedUntil(null);
+        userRepository.save(principal);
 
         if (adminOtpEnabled) {
             String otp = String.format("%06d", secureRandom.nextInt(1_000_000));
             String tokenHash = DigestUtils.sha256Hex(otp);
-            PasswordResetToken otpToken = new PasswordResetToken(admin, tokenHash, LocalDateTime.now().plusMinutes(5));
+            PasswordResetToken otpToken = new PasswordResetToken(principal, tokenHash, LocalDateTime.now().plusMinutes(5));
             passwordResetTokenRepository.save(otpToken);
             if (emailService != null && emailService.isMailConfigured()) {
-                emailService.sendPasswordResetOtp(admin.getEmail(), otp);
+                emailService.sendPasswordResetOtp(principal.getEmail(), otp);
             }
             return new AuthResponseDto(true, "A 6-digit one-time password has been sent to your administrator email address.");
         }
 
         // Generate tokens
-        String accessToken = jwtTokenProvider.generateAccessToken(admin, null);
+        String accessToken = jwtTokenProvider.generateAccessToken(principal, null);
         String rawRefreshToken = generateSecureRandomToken();
         String hashedRefreshToken = DigestUtils.sha256Hex(rawRefreshToken);
-        refreshTokenRepository.revokeAllForUser(admin);
+        refreshTokenRepository.revokeAllForUser(principal);
         LocalDateTime expDate = LocalDateTime.now().plusDays(7);
-        refreshTokenRepository.save(new RefreshToken(admin, hashedRefreshToken, expDate));
+        refreshTokenRepository.save(new RefreshToken(principal, hashedRefreshToken, expDate));
 
         // Audit Event: Login Success
         auditChainService.recordEntry(
-                admin.getId(),
-                admin.getName(),
-                "ADMIN_LOGIN_SUCCESS",
+                principal.getId(),
+                principal.getName(),
+                "PRINCIPAL_LOGIN_SUCCESS",
                 "USER",
-                admin.getId().toString(),
+                principal.getId().toString(),
                 "{}",
-                "{\"email\":\"" + admin.getEmail() + "\",\"role\":\"ADMIN\"}",
-                "Administrator successfully logged in"
+                "{\"email\":\"" + principal.getEmail() + "\",\"role\":\"PRINCIPAL\"}",
+                "Principal successfully logged in"
         );
 
         UserSummaryDto userSummary = new UserSummaryDto(
-                admin.getId(),
-                admin.getUserCode(),
-                admin.getName(),
-                admin.getEmail(),
-                admin.getRole(),
+                principal.getId(),
+                principal.getUserCode(),
+                principal.getName(),
+                principal.getEmail(),
+                principal.getRole(),
                 null,
-                "Central Administration",
+                "Principal Administration",
                 null,
                 null
         );
@@ -387,25 +417,151 @@ public class StaffAuthService {
         return new AuthResponseDto(accessToken, rawRefreshToken, jwtTokenProvider.getAccessExpirationSeconds(), userSummary);
     }
 
-    public AuthResponseDto verifyAdminOtp(com.intellicampus.auth.dto.AdminOtpVerifyDto req) {
+    public AuthResponseDto loginAdmin(LoginRequestDto req) {
+        return loginPrincipal(req);
+    }
+
+    public PrincipalSetupStatusDto getPrincipalSetupStatus() {
+        boolean activeExists = userRepository.existsByRoleAndStatus(Role.PRINCIPAL, UserStatus.ACTIVE);
+        return new PrincipalSetupStatusDto(!activeExists);
+    }
+
+    public java.util.Map<String, Object> registerPrincipal(PrincipalRegisterRequestDto req, String clientIp) {
+        String ip = (clientIp != null && !clientIp.isBlank()) ? clientIp.trim() : "UNKNOWN";
+        if (!authRateLimiter.isAllowed("principal_reg_" + ip, 5, 900)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many registration attempts. Please try again in 15 minutes.");
+        }
+
+        // Enforce optional SETUP_TOKEN protection
+        if (setupToken != null && !setupToken.trim().isEmpty()) {
+            if (req.getSetupToken() == null || !setupToken.trim().equals(req.getSetupToken().trim())) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "Invalid setup token. Setup token is required to initialize the Principal account.");
+            }
+        }
+
+        // Check if an active Principal already exists
+        Optional<User> existingPrincipalOpt = userRepository.findFirstByRole(Role.PRINCIPAL);
+        if (existingPrincipalOpt.isPresent()) {
+            User existing = existingPrincipalOpt.get();
+            if (existing.getStatus() == UserStatus.ACTIVE) {
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                        "A Principal account already exists. Self-registration is strictly disabled.");
+            }
+
+            // Unverified pending registrations expire after 15 minutes and must not block a fresh attempt
+            if (existing.getStatus() == UserStatus.PENDING_APPROVAL || existing.getStatus() == UserStatus.PENDING) {
+                if (existing.getCreatedAt() != null && existing.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(15))) {
+                    passwordResetTokenRepository.deleteByUser(existing);
+                    userRepository.delete(existing);
+                    userRepository.flush();
+                } else if (!existing.getEmail().equalsIgnoreCase(req.getEmail().trim())) {
+                    throw new ResponseStatusException(HttpStatus.CONFLICT,
+                            "A Principal registration is currently pending verification for: " + existing.getEmail()
+                                    + ". Please verify the OTP or wait 15 minutes for it to expire.");
+                }
+            }
+        }
+
+        String email = req.getEmail().trim().toLowerCase();
+        Optional<User> existingUserWithEmail = userRepository.findByEmailIgnoreCase(email);
+        if (existingUserWithEmail.isPresent() && existingUserWithEmail.get().getRole() != Role.PRINCIPAL) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Email address is already in use by another user.");
+        }
+
+        if (!req.getPassword().equals(req.getConfirmPassword())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Passwords do not match.");
+        }
+
+        validatePrincipalPassword(req.getPassword(), email, req.getName());
+
+        User principalUser;
+        Optional<User> pendingOpt = userRepository.findFirstByRole(Role.PRINCIPAL);
+        if (pendingOpt.isPresent() && pendingOpt.get().getEmail().equalsIgnoreCase(email)) {
+            principalUser = pendingOpt.get();
+            principalUser.setName(req.getName().trim());
+            principalUser.setPasswordHash(passwordEncoder.encode(req.getPassword()));
+            principalUser.setCreatedAt(LocalDateTime.now());
+            principalUser.setStatus(UserStatus.PENDING_APPROVAL);
+        } else {
+            principalUser = new User("PRIN-001", Role.PRINCIPAL, req.getName().trim(), email, passwordEncoder.encode(req.getPassword()), null);
+            principalUser.setStatus(UserStatus.PENDING_APPROVAL);
+            principalUser.setMustChangePassword(false);
+            principalUser.setFailedAttempts(0);
+        }
+
+        try {
+            principalUser = userRepository.saveAndFlush(principalUser);
+        } catch (Exception ex) {
+            logger.error("DB singleton guard prevented concurrent duplicate Principal: {}", ex.getMessage());
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "A Principal account already exists. Self-registration is strictly disabled.");
+        }
+
+        String otp = String.format("%06d", secureRandom.nextInt(1_000_000));
+        String tokenHash = DigestUtils.sha256Hex(otp);
+        passwordResetTokenRepository.invalidateAllForUser(principalUser);
+        PasswordResetToken otpToken = new PasswordResetToken(principalUser, tokenHash, LocalDateTime.now().plusMinutes(15));
+        passwordResetTokenRepository.save(otpToken);
+
+        emailService.sendPrincipalRegistrationOtp(principalUser.getEmail(), otp);
+
+        auditChainService.recordEntry(
+                principalUser.getId(),
+                principalUser.getName(),
+                "PRINCIPAL_REGISTRATION_INITIATED",
+                "USER",
+                principalUser.getId() != null ? principalUser.getId().toString() : "PENDING",
+                "{}",
+                "{\"email\":\"" + principalUser.getEmail() + "\",\"status\":\"PENDING_APPROVAL\"}",
+                "Principal self-registration initiated; OTP dispatched"
+        );
+
+        return java.util.Map.of(
+                "message", "Registration initiated. A 6-digit OTP has been sent to " + principalUser.getEmail() + ". Please verify within 15 minutes.",
+                "email", principalUser.getEmail(),
+                "pendingVerification", true
+        );
+    }
+
+    public AuthResponseDto verifyPrincipalOtp(com.intellicampus.auth.dto.AdminOtpVerifyDto req) {
+        return verifyPrincipalOtp(req, "UNKNOWN");
+    }
+
+    public AuthResponseDto verifyPrincipalOtp(com.intellicampus.auth.dto.AdminOtpVerifyDto req, String clientIp) {
+        String ip = (clientIp != null && !clientIp.isBlank()) ? clientIp.trim() : "UNKNOWN";
         String email = req.getEmail() != null ? req.getEmail().trim().toLowerCase() : "";
         String enteredOtp = req.getOtp() != null ? req.getOtp().trim() : "";
 
-        User admin = userRepository.findByEmail(email)
+        String rateLimitKey = (!"UNKNOWN".equals(ip)) ? ("principal_otp_" + ip + "_" + email) : ("principal_otp_" + email);
+        if (!authRateLimiter.isAllowed(rateLimitKey, 5, 900)) {
+            throw new ResponseStatusException(HttpStatus.TOO_MANY_REQUESTS,
+                    "Too many OTP attempts. Please try again in 15 minutes.");
+        }
+
+        User principal = userRepository.findByEmail(email)
                 .orElseThrow(() -> new BadCredentialsException("Invalid or expired OTP."));
 
-        if (admin.getRole() != Role.ADMIN) {
+        if (principal.getRole() != Role.PRINCIPAL) {
             throw new BadCredentialsException("Invalid or expired OTP.");
         }
 
+        // Expired pending registration check (> 15 min)
+        if (principal.getStatus() == UserStatus.PENDING_APPROVAL || principal.getStatus() == UserStatus.PENDING) {
+            if (principal.getCreatedAt() != null && principal.getCreatedAt().isBefore(LocalDateTime.now().minusMinutes(15))) {
+                throw new BadCredentialsException("Registration OTP has expired (15 minutes). Please register again.");
+            }
+        }
+
         PasswordResetToken otpToken = passwordResetTokenRepository
-                .findFirstByUserAndUsedFalseOrderByCreatedAtDesc(admin)
+                .findFirstByUserAndUsedFalseOrderByCreatedAtDesc(principal)
                 .orElseThrow(() -> new BadCredentialsException("Invalid or expired OTP."));
 
         if (otpToken.isExpired() || otpToken.getAttempts() >= 5) {
             otpToken.setUsed(true);
             passwordResetTokenRepository.save(otpToken);
-            throw new BadCredentialsException("OTP has expired. Please log in again.");
+            throw new BadCredentialsException("OTP has expired. Please log in or register again.");
         }
 
         String enteredHash = DigestUtils.sha256Hex(enteredOtp);
@@ -418,41 +574,62 @@ public class StaffAuthService {
         otpToken.setUsed(true);
         passwordResetTokenRepository.save(otpToken);
 
-        admin.setFailedAttempts(0);
-        admin.setLockedUntil(null);
-        userRepository.save(admin);
+        principal.setFailedAttempts(0);
+        principal.setLockedUntil(null);
+        boolean wasPending = (principal.getStatus() == UserStatus.PENDING_APPROVAL || principal.getStatus() == UserStatus.PENDING);
+        if (wasPending) {
+            principal.setStatus(UserStatus.ACTIVE);
+        }
+        userRepository.save(principal);
 
-        String accessToken = jwtTokenProvider.generateAccessToken(admin, null);
+        String accessToken = jwtTokenProvider.generateAccessToken(principal, null);
         String rawRefreshToken = generateSecureRandomToken();
         String hashedRefreshToken = DigestUtils.sha256Hex(rawRefreshToken);
-        refreshTokenRepository.revokeAllForUser(admin);
+        refreshTokenRepository.revokeAllForUser(principal);
         LocalDateTime expDate = LocalDateTime.now().plusDays(7);
-        refreshTokenRepository.save(new RefreshToken(admin, hashedRefreshToken, expDate));
+        refreshTokenRepository.save(new RefreshToken(principal, hashedRefreshToken, expDate));
 
-        auditChainService.recordEntry(
-                admin.getId(),
-                admin.getName(),
-                "ADMIN_LOGIN_SUCCESS",
-                "USER",
-                admin.getId().toString(),
-                "{}",
-                "{\"email\":\"" + admin.getEmail() + "\",\"role\":\"ADMIN\",\"2fa\":true}",
-                "Administrator successfully logged in via 2FA OTP"
-        );
+        if (wasPending) {
+            auditChainService.recordEntry(
+                    principal.getId(),
+                    principal.getName(),
+                    "PRINCIPAL_REGISTRATION_ACTIVATED",
+                    "USER",
+                    principal.getId().toString(),
+                    "{}",
+                    "{\"email\":\"" + principal.getEmail() + "\",\"role\":\"PRINCIPAL\",\"status\":\"ACTIVE\"}",
+                    "Principal account verified and activated successfully"
+            );
+        } else {
+            auditChainService.recordEntry(
+                    principal.getId(),
+                    principal.getName(),
+                    "PRINCIPAL_LOGIN_SUCCESS",
+                    "USER",
+                    principal.getId().toString(),
+                    "{}",
+                    "{\"email\":\"" + principal.getEmail() + "\",\"role\":\"PRINCIPAL\",\"2fa\":true}",
+                    "Principal successfully logged in via 2FA OTP"
+            );
+        }
 
         UserSummaryDto userSummary = new UserSummaryDto(
-                admin.getId(),
-                admin.getUserCode(),
-                admin.getName(),
-                admin.getEmail(),
-                admin.getRole(),
+                principal.getId(),
+                principal.getUserCode(),
+                principal.getName(),
+                principal.getEmail(),
+                principal.getRole(),
                 null,
-                "Central Administration",
+                "Principal Administration",
                 null,
                 null
         );
 
         return new AuthResponseDto(accessToken, rawRefreshToken, jwtTokenProvider.getAccessExpirationSeconds(), userSummary);
+    }
+
+    public AuthResponseDto verifyAdminOtp(com.intellicampus.auth.dto.AdminOtpVerifyDto req) {
+        return verifyPrincipalOtp(req);
     }
 
     public AuthResponseDto refreshAccessToken(String rawRefreshToken) {
@@ -745,13 +922,21 @@ public class StaffAuthService {
         );
     }
 
+    private void validatePrincipalPassword(String password, String email, String name) {
+        validateStrongPasswordWithMinLength(password, email, name, 8);
+    }
+
     private void validateStrongPassword(String password) {
         validateStrongPassword(password, null, null);
     }
 
     private void validateStrongPassword(String password, String email, String name) {
-        if (password == null || password.length() < 10) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least 10 characters long.");
+        validateStrongPasswordWithMinLength(password, email, name, 10);
+    }
+
+    private void validateStrongPasswordWithMinLength(String password, String email, String name, int minLength) {
+        if (password == null || password.length() < minLength) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Password must be at least " + minLength + " characters long.");
         }
         boolean hasUpper = password.chars().anyMatch(Character::isUpperCase);
         boolean hasLower = password.chars().anyMatch(Character::isLowerCase);
@@ -842,8 +1027,8 @@ public class StaffAuthService {
         User staff = userRepository.findById(staffUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Staff user not found: " + staffUserId));
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new SecurityException("Modifying or approving the System Administrator is prohibited.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new SecurityException("Modifying or approving the Principal is prohibited.");
         }
 
         if (staff.getStatus() != UserStatus.PENDING_APPROVAL) {
@@ -862,7 +1047,7 @@ public class StaffAuthService {
                 staff.getId().toString(),
                 "{\"status\":\"PENDING_APPROVAL\"}",
                 "{\"status\":\"ACTIVE\"}",
-                "Staff approved by Admin " + adminUser.getName()
+                "Staff approved by Principal " + adminUser.getName()
         );
     }
 
@@ -870,8 +1055,8 @@ public class StaffAuthService {
         User staff = userRepository.findById(staffUserId)
                 .orElseThrow(() -> new IllegalArgumentException("Staff user not found: " + staffUserId));
 
-        if (staff.getRole() == Role.ADMIN) {
-            throw new SecurityException("The System Administrator account cannot be rejected or modified.");
+        if (staff.getRole() == Role.PRINCIPAL) {
+            throw new SecurityException("The Principal account cannot be rejected or modified.");
         }
 
         staff.setStatus(UserStatus.REJECTED);

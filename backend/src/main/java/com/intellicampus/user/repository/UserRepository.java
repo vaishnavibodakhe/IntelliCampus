@@ -23,4 +23,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmailIgnoreCase(String email);
     List<User> findByRoleIn(List<Role> roles);
     List<User> findByDepartmentAndRoleAndStatus(com.intellicampus.academic.model.Department department, Role role, com.intellicampus.user.model.UserStatus status);
+    boolean existsByRoleAndStatus(Role role, com.intellicampus.user.model.UserStatus status);
+    Optional<User> findFirstByRole(Role role);
+    Optional<User> findFirstByRoleAndStatus(Role role, com.intellicampus.user.model.UserStatus status);
 }

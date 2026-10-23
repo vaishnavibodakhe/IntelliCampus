@@ -131,6 +131,34 @@ public class NoticeService {
         return mapToDto(saved);
     }
 
+    public NoticeDto updateNotice(Long id, CreateNoticeRequestDto req) {
+        Notice notice = noticeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Notice not found with id: " + id));
+
+        notice.setTitle(req.getTitle());
+        notice.setBody(req.getBody());
+        notice.setTargetDepartment(req.getTargetDepartment());
+        notice.setTargetYear(req.getTargetYear());
+        notice.setTargetDivision(req.getTargetDivision());
+        if (req.getDeadline() != null) {
+            notice.setDeadline(req.getDeadline());
+        }
+        if (req.getHasAttachment() != null) {
+            notice.setHasAttachment(req.getHasAttachment());
+            notice.setFileName(req.getFileName());
+            notice.setAttachmentUrl(req.getAttachmentUrl());
+        }
+
+        Notice saved = noticeRepository.save(notice);
+        return mapToDto(saved);
+    }
+
+    public void deleteNotice(Long id) {
+        Notice notice = noticeRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Notice not found with id: " + id));
+        noticeRepository.delete(notice);
+    }
+
     public boolean markAsRead(Long noticeId, Long userId) {
         if (userId == null && securityUtils != null) {
             userId = securityUtils.getCurrentUserId();
