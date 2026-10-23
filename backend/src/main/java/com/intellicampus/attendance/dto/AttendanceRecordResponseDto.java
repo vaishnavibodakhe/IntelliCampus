@@ -1,6 +1,7 @@
 package com.intellicampus.attendance.dto;
 
 import com.intellicampus.attendance.model.AttendanceStatus;
+import com.intellicampus.attendance.model.SessionStatus;
 import java.time.LocalDateTime;
 
 public class AttendanceRecordResponseDto {
@@ -14,6 +15,13 @@ public class AttendanceRecordResponseDto {
     private LocalDateTime confirmedAt;
     private AttendanceStatus finalStatus;
     private String statusReason;
+    private Long sessionId;
+    private SessionStatus sessionStatus;
+    private LocalDateTime sessionDate;
+    private Long subjectId;
+    private String subjectCode;
+    private String subjectName;
+    private LocalDateTime createdAt;
 
     public AttendanceRecordResponseDto() {}
 
@@ -46,4 +54,26 @@ public class AttendanceRecordResponseDto {
 
     public String getStatusReason() { return statusReason; }
     public void setStatusReason(String statusReason) { this.statusReason = statusReason; }
+
+    public Long getSessionId() { return sessionId; }
+    public void setSessionId(Long sessionId) { this.sessionId = sessionId; }
+
+    public SessionStatus getSessionStatus() { return sessionStatus; }
+    public void setSessionStatus(SessionStatus sessionStatus) { this.sessionStatus = sessionStatus; }
+
+    public LocalDateTime getSessionDate() { return sessionDate; }
+    public void setSessionDate(LocalDateTime sessionDate) { this.sessionDate = sessionDate; }
+
+    public Long getSubjectId() { return subjectId; }
+    public void setSubjectId(Long subjectId) { this.subjectId = subjectId; }
+
+    public String getSubjectCode() { return subjectCode; }
+    public void setSubjectCode(String subjectCode) { this.subjectCode = subjectCode; }
+
+    public String getSubjectName() { return subjectName; }
+    public void setSubjectName(String subjectName) { this.subjectName = subjectName; }
+
+    public LocalDateTime getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }
+

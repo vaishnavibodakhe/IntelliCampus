@@ -1,31 +1,32 @@
-import React, { useState } from 'react';
-import {
-  CheckCircle2,
-  Clock,
-  MapPin,
-  FileText,
-  MessageSquare,
-  AlertTriangle,
-  Calendar,
-  Send,
-  Download,
-  ShieldCheck,
-  Sparkles,
-  ExternalLink,
-  ChevronRight,
-  RefreshCw,
+import React, { useState, useEffect } from 'react';
+import { 
+  CheckCircle2, 
+  Clock, 
+  MapPin, 
+  FileText, 
+  MessageSquare, 
+  AlertTriangle, 
+  Calendar, 
+  Send, 
+  Download, 
+  ShieldCheck, 
+  Sparkles, 
+  ExternalLink, 
+  ChevronRight, 
+  RefreshCw, 
   Bell,
   LogOut,
   Check
 } from 'lucide-react';
 import { calculateHaversineDistance, validateGeofence } from '../utils/cryptoAndGeo';
-import api from '../api/client';
+import { api } from '../api/client';
 
 export default function StudentView({
   currentUser,
   activeSession,
   sessions,
   setSessions,
+  subjects = [],
   marks,
   leaveRequests,
   setLeaveRequests,
@@ -52,9 +53,77 @@ export default function StudentView({
   const [disputeComment, setDisputeComment] = useState('');
 
   // Find attendance record for current student in active session
-  const studentSessionRecord = activeSession?.attendanceRecords?.find(
-    r => r.studentId === currentUser.id
+  const studentSessionRecord = (activeSession?.records || activeSession?.attendanceRecords)?.find(
+    r => r.studentId === currentUser?.id || r.rollNo === currentUser?.rollNo
   );
+
+  // Student persisted attendance records state
+  const [attendanceRecords, setAttendanceRecords] = useState([]);
+  const [isLoadingAttendance, setIsLoadingAttendance] = useState(true);
+  const [attendanceError, setAttendanceError] = useState(null);
+
+  // Fetch actual persisted attendance records for this student
+  const fetchAttendance = async () => {
+    if (!currentUser?.id) {
+      setIsLoadingAttendance(false);
+      return;
+    }
+    setIsLoadingAttendance(true);
+    setAttendanceError(null);
+    try {
+      const records = await api.getStudentAttendanceRecords(currentUser.id);
+      setAttendanceRecords(Array.isArray(records) ? records : []);
+    } catch (err) {
+      console.error('Failed to fetch student attendance records:', err);
+      setAttendanceError(err.message || 'Unable to load attendance records from server.');
+      setAttendanceRecords([]);
+    } finally {
+      setIsLoadingAttendance(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendance();
+  }, [currentUser?.id, activeSession?.status]);
+
+  // Dynamic calculations from actual persisted attendance records
+  const totalEligible = attendanceRecords.length;
+  const attendedSessions = attendanceRecords.filter(r => r.finalStatus === 'PRESENT').length;
+  const absentSessions = attendanceRecords.filter(r => r.finalStatus === 'ABSENT').length;
+  const reviewSessions = attendanceRecords.filter(r => r.finalStatus === 'REVIEW').length;
+  const pendingSessions = attendanceRecords.filter(r => r.finalStatus === 'PENDING').length;
+
+  const overallPercentage = totalEligible > 0
+    ? ((attendedSessions / totalEligible) * 100).toFixed(1)
+    : '0.0';
+
+  // Group attendance records by subject
+  const subjectMap = {};
+  attendanceRecords.forEach(r => {
+    const code = r.subjectCode || (r.subjectId ? `SUB-${r.subjectId}` : 'General');
+    if (!subjectMap[code]) {
+      subjectMap[code] = {
+        code,
+        name: r.subjectName || code,
+        attended: 0,
+        total: 0,
+        records: []
+      };
+    }
+    subjectMap[code].total += 1;
+    if (r.finalStatus === 'PRESENT') {
+      subjectMap[code].attended += 1;
+    }
+    subjectMap[code].records.push(r);
+  });
+
+  const subjectStats = Object.values(subjectMap).map(sub => {
+    const pct = sub.total > 0 ? ((sub.attended / sub.total) * 100).toFixed(1) : '0.0';
+    return {
+      ...sub,
+      percentage: pct
+    };
+  });
 
   // Student Device GPS and Geofence distance state
   const [deviceGps, setDeviceGps] = useState({ lat: 18.52044, lng: 73.85675, accuracy: 12, isLive: false });
@@ -257,7 +326,7 @@ export default function StudentView({
           onClick={() => setActiveTab('dashboard')}
           className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
         >
-          <CheckCircle2 size={16} /> Overview &amp; Attendance ({currentUser.attendanceRate !== undefined ? currentUser.attendanceRate : 0}%)
+          <CheckCircle2 size={16} /> Overview &amp; Attendance ({overallPercentage}%)
         </button>
         <button
           onClick={() => setActiveTab('marks')}
@@ -357,17 +426,32 @@ export default function StudentView({
       {activeTab === 'dashboard' && (
         <div className="tab-pane animate-fade-in">
           <div className="grid-summary-kpis">
-            <div className={`kpi-card ${(currentUser.attendanceRate || 0) < 75 ? 'warning' : 'success'}`}>
-              <span className="kpi-label">Overall Attendance Percentage</span>
-              <span className="kpi-val">{currentUser.attendanceRate != null ? currentUser.attendanceRate : 0}%</span>
+            <div className={`kpi-card ${Number(overallPercentage) < 75 && totalEligible > 0 ? 'warning' : 'success'}`}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span className="kpi-label">Overall Attendance Percentage</span>
+                <button 
+                  onClick={fetchAttendance} 
+                  title="Refresh attendance records" 
+                  className="btn-ghost btn-xs text-muted"
+                  style={{ padding: '2px 6px', background: 'transparent', border: 'none', cursor: 'pointer' }}
+                  aria-label="Refresh attendance"
+                >
+                  <RefreshCw size={13} className={isLoadingAttendance ? 'animate-spin' : ''} />
+                </button>
+              </div>
+              <span className="kpi-val">{totalEligible > 0 ? `${overallPercentage}%` : (currentUser.attendanceRate != null ? `${currentUser.attendanceRate}%` : '0%')}</span>
               <span className="kpi-sub">
-                {(currentUser.attendanceRate || 0) < 75 ? '⚠️ Defaulter risk - Below 75% minimum' : '✓ Compliant with university norms'}
+                {totalEligible === 0 
+                  ? (currentUser.attendanceRate != null ? `Based on enrolled record (${currentUser.attendanceRate}%)` : 'No recorded sessions yet')
+                  : Number(overallPercentage) < 75 
+                    ? `⚠️ Defaulter risk - Below 75% minimum (${attendedSessions}/${totalEligible} sessions)` 
+                    : `✓ Compliant with university norms (${attendedSessions}/${totalEligible} sessions)`}
               </span>
             </div>
 
             <div className="kpi-card">
               <span className="kpi-label">Assigned Faculty Mentor</span>
-              <span className="kpi-val text-sm">{currentUser.mentorName || 'Faculty Advisor'}</span>
+              <span className="kpi-val text-sm">{currentUser.mentorName || 'Faculty Mentor'}</span>
               <span className="kpi-sub">Advisory &amp; Leave Counselor</span>
             </div>
 
@@ -391,32 +475,48 @@ export default function StudentView({
                 <h3>Subject-Wise Attendance</h3>
                 <span className="badge-pill info">{currentUser.semester || 'Current Semester'}</span>
               </div>
-
-              <div className="subject-progress-list">
-                {subjectEntries.length === 0 ? (
-                  <div className="empty-state-box" style={{ padding: '1.5rem', textAlign: 'center', color: 'var(--text-muted, #94a3b8)' }}>
-                    <p style={{ margin: 0, fontSize: '0.88rem' }}>No individual class session records recorded yet.</p>
+              
+              {isLoadingAttendance ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>
+                  <RefreshCw className="animate-spin inline mr-2" size={16} /> Loading attendance records from server...
+                </div>
+              ) : attendanceError ? (
+                <div style={{ padding: '24px 16px', textAlign: 'center', color: '#f87171' }}>
+                  <AlertTriangle size={18} style={{ display: 'inline', marginRight: '6px' }} />
+                  <span>{attendanceError}</span>
+                  <div style={{ marginTop: '12px' }}>
+                    <button onClick={fetchAttendance} className="btn-secondary btn-xs">
+                      <RefreshCw size={12} style={{ display: 'inline', marginRight: '4px' }} /> Retry
+                    </button>
                   </div>
-                ) : (
-                  subjectEntries.map(([subName, stats]) => {
-                    const pct = stats.total > 0 ? ((stats.attended / stats.total) * 100).toFixed(1) : '0.0';
-                    const isWarning = Number(pct) < 75;
+                </div>
+              ) : subjectStats.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: '#94a3b8' }}>
+                  No attendance records found for this student. Recorded sessions will appear here once finalized by faculty.
+                </div>
+              ) : (
+                <div className="subject-progress-list">
+                  {subjectStats.map(sub => {
+                    const isCompliant = Number(sub.percentage) >= 75;
                     return (
-                      <div key={subName} className="subject-progress-item">
+                      <div key={sub.code} className="subject-progress-item">
                         <div className="subject-header">
-                          <span>{subName}</span>
-                          <strong className={isWarning ? 'text-warning font-mono' : 'text-success font-mono'}>
-                            {pct}% ({stats.attended}/{stats.total}) {isWarning ? '⚠️' : ''}
+                          <span>{sub.code} {sub.name}</span>
+                          <strong className={`${isCompliant ? 'text-success' : 'text-warning'} font-mono`}>
+                            {sub.percentage}% ({sub.attended}/{sub.total}){!isCompliant && sub.total > 0 && ' ⚠️'}
                           </strong>
                         </div>
                         <div className="progress-bar-bg">
-                          <div className={`progress-bar-fill ${isWarning ? 'bg-warning' : ''}`} style={{ width: `${Math.min(100, Number(pct))}%` }} />
+                          <div 
+                            className={`progress-bar-fill ${!isCompliant ? 'bg-warning' : ''}`} 
+                            style={{ width: `${Math.min(100, Math.max(0, Number(sub.percentage)))}%` }} 
+                          />
                         </div>
                       </div>
                     );
-                  })
-                )}
-              </div>
+                  })}
+                </div>
+              )}
             </div>
 
             {/* Quick AI Assistant Card */}
@@ -442,6 +542,76 @@ export default function StudentView({
               </button>
             </div>
           </div>
+          {/* Detailed Attendance Records Table */}
+          {attendanceRecords.length > 0 && (
+            <div className="table-card mt-6">
+              <div className="card-header-flex">
+                <div>
+                  <h3 style={{ margin: 0 }}>Attendance Log &amp; Verification History</h3>
+                  <p className="card-desc">Session-by-session biometric face recognition records and status updates.</p>
+                </div>
+                <span className="badge-pill info font-mono">{attendedSessions} PRESENT / {totalEligible} TOTAL</span>
+              </div>
+              <div className="table-responsive">
+                <table className="custom-table">
+                  <thead>
+                    <tr>
+                      <th>Subject</th>
+                      <th>Session ID</th>
+                      <th>Date / Time</th>
+                      <th>Status</th>
+                      <th>Face Match Score</th>
+                      <th>Status Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceRecords.map(rec => (
+                      <tr key={rec.id || `${rec.sessionId}-${rec.studentId}`}>
+                        <td>
+                          <strong>{rec.subjectCode || 'General'}</strong>
+                          {rec.subjectName && <span className="text-muted block text-xs" style={{ display: 'block' }}>{rec.subjectName}</span>}
+                        </td>
+                        <td className="font-mono">#{rec.sessionId || '—'}</td>
+                        <td className="text-sm">
+                          {rec.sessionDate || rec.createdAt
+                            ? new Date(rec.sessionDate || rec.createdAt).toLocaleString(undefined, {
+                                month: 'short',
+                                day: 'numeric',
+                                hour: '2-digit',
+                                minute: '2-digit'
+                              })
+                            : '—'}
+                        </td>
+                        <td>
+                          <span className={`badge-pill ${
+                            rec.finalStatus === 'PRESENT' ? 'success' :
+                            rec.finalStatus === 'REVIEW' ? 'warning' :
+                            rec.finalStatus === 'ABSENT' ? 'danger' : 'muted'
+                          }`}>
+                            {rec.finalStatus === 'PRESENT' ? '✓ PRESENT' :
+                             rec.finalStatus === 'REVIEW' ? '⚠️ REVIEW' :
+                             rec.finalStatus === 'ABSENT' ? '✗ ABSENT' : rec.finalStatus}
+                          </span>
+                        </td>
+                        <td className="font-mono">
+                          {rec.faceScore != null ? (
+                            <span className={rec.faceScore >= 0.50 ? 'text-success font-bold' : rec.faceScore >= 0.20 ? 'text-warning font-bold' : 'text-muted'}>
+                              {Math.round(rec.faceScore * 100)}%
+                            </span>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
+                        <td className="text-xs text-muted" style={{ maxWidth: '300px' }}>
+                          {rec.statusReason || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -6,9 +6,26 @@
 const TOKEN_STORAGE_KEY = 'intellicampus_auth_token';
 const USER_STORAGE_KEY = 'intellicampus_auth_user';
 
-export function getStoredToken() {
+export function getStoredToken(roleContext = 'staff') {
   try {
-    return localStorage.getItem(TOKEN_STORAGE_KEY);
+    const staffSessionRaw = localStorage.getItem('intellicampus_staff_session');
+    const studentToken = localStorage.getItem(TOKEN_STORAGE_KEY);
+
+    if (roleContext === 'student') {
+      if (studentToken) return studentToken;
+      if (staffSessionRaw) {
+        const parsed = JSON.parse(staffSessionRaw);
+        return parsed.accessToken || parsed.token || null;
+      }
+    } else {
+      if (staffSessionRaw) {
+        const parsed = JSON.parse(staffSessionRaw);
+        const staffToken = parsed.accessToken || parsed.token;
+        if (staffToken) return staffToken;
+      }
+      if (studentToken) return studentToken;
+    }
+    return null;
   } catch {
     return null;
   }
@@ -47,8 +64,8 @@ export function clearAuthSession() {
   } catch {}
 }
 
-function getAuthHeaders(extraHeaders = {}) {
-  const token = getStoredToken();
+function getAuthHeaders(extraHeaders = {}, roleContext = 'staff') {
+  const token = getStoredToken(roleContext);
   const headers = { ...extraHeaders };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
@@ -107,7 +124,7 @@ export const api = {
     try {
       const res = await fetch('/api/auth/student/logout', {
         method: 'POST',
-        headers: getAuthHeaders(),
+        headers: getAuthHeaders({}, 'student'),
       });
       await handleResponse(res);
     } finally {
@@ -119,7 +136,7 @@ export const api = {
   async getCurrentUser() {
     const res = await fetch('/api/auth/student/me', {
       method: 'GET',
-      headers: getAuthHeaders(),
+      headers: getAuthHeaders({}, 'student'),
     });
     return handleResponse(res);
   },
@@ -127,7 +144,7 @@ export const api = {
   async startSession({ facultyId = 3, subjectId, divisionId = 1, roomId, challengeCode, photoWindowMinutes = 10 }) {
     const res = await fetch('/api/attendance/sessions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({
         facultyId,
         subjectId,
@@ -141,19 +158,24 @@ export const api = {
   },
 
   async getSession(sessionId) {
-    const res = await fetch(`/api/attendance/sessions/${sessionId}`);
+    const res = await fetch(`/api/attendance/sessions/${sessionId}`, {
+      headers: getAuthHeaders(),
+    });
     return handleResponse(res);
   },
 
-  async uploadClassroomPhoto(sessionId, fileOrBlob, latitude = 18.52043, longitude = 73.85674, accuracyM = 10) {
+  async uploadClassroomPhoto(sessionId, fileOrBlob, latitude = 18.52043, longitude = 73.85674, accuracyM = 10, sessionToken = null) {
     const formData = new FormData();
     formData.append('photo', fileOrBlob, 'classroom_capture.jpg');
     if (latitude != null) formData.append('latitude', latitude);
     if (longitude != null) formData.append('longitude', longitude);
     if (accuracyM != null) formData.append('accuracyM', accuracyM);
 
+    const headers = getAuthHeaders(sessionToken ? { 'X-Session-Token': sessionToken } : {});
+
     const res = await fetch(`/api/attendance/sessions/${sessionId}/photo`, {
       method: 'POST',
+      headers,
       body: formData,
     });
     return handleResponse(res);
@@ -162,6 +184,7 @@ export const api = {
   async updateSessionStatus(sessionId, status) {
     const res = await fetch(`/api/attendance/sessions/${sessionId}/status?status=${encodeURIComponent(status)}`, {
       method: 'PUT',
+      headers: getAuthHeaders(),
     });
     return handleResponse(res);
   },
@@ -173,20 +196,24 @@ export const api = {
   async overrideAttendanceRecord(sessionId, studentId, status, reason) {
     const res = await fetch(`/api/attendance/sessions/${sessionId}/records/${studentId}/override`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: getAuthHeaders({ 'Content-Type': 'application/json' }),
       body: JSON.stringify({ status, reason }),
     });
     return handleResponse(res);
   },
 
   async getActiveSession(divisionId) {
-    const res = await fetch(`/api/attendance/sessions/active?divisionId=${divisionId}`);
+    const res = await fetch(`/api/attendance/sessions/active?divisionId=${divisionId}`, {
+      headers: getAuthHeaders(),
+    });
     if (res.status === 204) return null;
     return handleResponse(res);
   },
 
   async getStudentAttendanceRecords(studentId) {
-    const res = await fetch(`/api/attendance/sessions/records/student/${studentId}`);
+    const res = await fetch(`/api/attendance/sessions/records/student/${studentId}`, {
+      headers: getAuthHeaders({}, 'student'),
+    });
     return handleResponse(res);
   },
 
